@@ -13,4 +13,9 @@ Struktur Folder:
 Tech:
 Go 1.27
 GoFiber V3
-Gorm 
+Gorm
+Postgres
+Golang Migrate
+Validator
+JWT
+
