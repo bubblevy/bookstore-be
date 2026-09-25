@@ -18,4 +18,5 @@ Postgres
 Golang Migrate
 Validator
 JWT
+Godotenv
 
