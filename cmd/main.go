@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/bubblevy/bookstore/internal/delivery/http/handler"
+	"github.com/bubblevy/bookstore/internal/delivery/http/middleware"
 	"github.com/bubblevy/bookstore/internal/infrastructure/pgsql"
 	"github.com/bubblevy/bookstore/internal/usecase"
 	"github.com/bubblevy/bookstore/pkg/jwt"
@@ -15,8 +16,7 @@ import (
 )
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
+	if err := godotenv.Load(); err != nil {
 		log.Println("Environment variable failed to load or .env file not found")
 	}
 
@@ -35,10 +35,12 @@ func main() {
 
 	jwtService := jwt.NewJWTService(jwtSecret)
 	validate := validator.NewValidator()
+	authMiddleware := middleware.AuthMiddleware(jwtService)
 
 	userRepo := pgsql.NewUserRepository(pgdb)
-	authUsecase := usecase.NewAuthUsecase(userRepo, jwtService)
-	handler.NewAuthHandler(api, authUsecase, validate)
+	sessionRepo := pgsql.NewSessionRepository(pgdb)
+	authUsecase := usecase.NewAuthUsecase(userRepo, sessionRepo, jwtService)
+	handler.NewAuthHandler(api, authUsecase, validate, authMiddleware)
 
 	log.Println("Server berjalan di http://localhost:3000")
 	log.Fatal(app.Listen(":3000"))

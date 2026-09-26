@@ -34,3 +34,12 @@ func (r *userRepository) Create(ctx context.Context, user *entity.User) (*entity
 	}
 	return user, nil
 }
+
+func (r *userRepository) FindByID(ctx context.Context, id uint) (*entity.User, error) {
+	var user entity.User
+	err := r.db.WithContext(ctx).First(&user, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
