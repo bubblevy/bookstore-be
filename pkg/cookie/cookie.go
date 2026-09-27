@@ -27,7 +27,7 @@ func SetAccessToken(c fiber.Ctx, token string) {
 		Expires:  time.Now().Add(AccessTokenExpiry),
 		HTTPOnly: true,
 		Secure:   isProduction(),
-		SameSite: "Lax",
+		SameSite: fiber.CookieSameSiteLaxMode,
 		Path:     RootPath,
 	})
 }
@@ -39,7 +39,7 @@ func SetRefreshToken(c fiber.Ctx, token string) {
 		Expires:  time.Now().Add(RefreshTokenExpiry),
 		HTTPOnly: true,
 		Secure:   isProduction(),
-		SameSite: "Lax",
+		SameSite: fiber.CookieSameSiteLaxMode,
 		Path:     RefreshPath,
 	})
 }

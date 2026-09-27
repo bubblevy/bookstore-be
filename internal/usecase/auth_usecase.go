@@ -57,15 +57,15 @@ func generateRandomToken() (string, error) {
 func (u *authUsecase) Login(ctx context.Context, email, password string) (*entity.AuthResponse, error) {
 	user, err := u.userRepo.FindByEmail(ctx, email)
 	if err != nil {
-		return nil, fmt.Errorf("Invalid credentials")
+		return nil, entity.ErrInvalidCredentials
 	}
 
 	if err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
-		return nil, fmt.Errorf("Invalid credentials")
+		return nil, entity.ErrInvalidCredentials
 	}
 
 	if !user.IsActive {
-		return nil, fmt.Errorf("Account is inactive")
+		return nil, entity.ErrAccountInactive
 	}
 
 	accessToken, err := u.jwtService.GenerateToken(user.ID, user.Email, string(user.Role))
@@ -85,7 +85,7 @@ func (u *authUsecase) Login(ctx context.Context, email, password string) (*entit
 	}
 
 	if err := u.sessionRepo.Create(ctx, session); err != nil {
-		return nil, fmt.Errorf("Failed to create session: %w", err)
+		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
 
 	return &entity.AuthResponse{
@@ -100,18 +100,18 @@ func (u *authUsecase) Register(ctx context.Context, name, email, password string
 		return entity.ErrEmailAlreadyRegistered
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return fmt.Errorf("Failed to check email: %w", err)
+		return fmt.Errorf("failed to check email: %w", err)
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return fmt.Errorf("Failed to hash password")
+		return entity.ErrFailedHashPassword
 	}
 
 	// generate activation token
 	activationToken, err := generateRandomToken()
 	if err != nil {
-		return fmt.Errorf("Failed to generate activation token")
+		return entity.ErrFailedGenerateToken
 	}
 	expiresAt := time.Now().Add(24 * time.Hour)
 
@@ -125,7 +125,7 @@ func (u *authUsecase) Register(ctx context.Context, name, email, password string
 	}
 
 	if err := u.userRepo.Create(ctx, user); err != nil {
-		return fmt.Errorf("Failed to create user: %w", err)
+		return fmt.Errorf("failed to create user: %w", err)
 	}
 
 	// send email activation account
@@ -134,7 +134,7 @@ func (u *authUsecase) Register(ctx context.Context, name, email, password string
 	go func(bgCtx context.Context) {
 		defer cancel()
 		if err := u.emailSender.SendActivationEmail(bgCtx, user.Email, user.Name, activationToken); err != nil {
-			log.Printf("Failed to send activation email: %v", err)
+			log.Printf("failed to send activation email: %v", err)
 		}
 	}(timeoutCtx)
 
@@ -144,42 +144,42 @@ func (u *authUsecase) Register(ctx context.Context, name, email, password string
 func (u *authUsecase) RefreshToken(ctx context.Context, refreshToken string) (*entity.AuthResponse, error) {
 	token, err := u.jwtService.ValidateRefreshToken(refreshToken)
 	if err != nil {
-		return nil, fmt.Errorf("Invalid refresh token")
+		return nil, entity.ErrInvalidRefreshToken
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return nil, fmt.Errorf("Invalid refresh token claims")
+		return nil, entity.ErrInvalidRefreshToken
 	}
 
 	userIDFloat, ok := claims["user_id"].(float64)
 	if !ok {
-		return nil, fmt.Errorf("Invalid user id")
+		return nil, entity.ErrInvalidUserId
 	}
 
 	userID := uint(userIDFloat)
 
 	session, err := u.sessionRepo.FindActiveByTokenHash(ctx, hash.SHA256(refreshToken))
 	if err != nil {
-		return nil, fmt.Errorf("Invalid or expired refresh token")
+		return nil, entity.ErrInvalidRefreshToken
 	}
 
 	if session.UserID != userID {
-		return nil, fmt.Errorf("Invalid or expired refresh token")
+		return nil, entity.ErrInvalidRefreshToken
 	}
 
 	user, err := u.userRepo.FindByID(ctx, userID)
 	if err != nil || user == nil {
-		return nil, fmt.Errorf("User not found")
+		return nil, entity.ErrUserNotFound
 	}
 
 	if !user.IsActive {
-		return nil, fmt.Errorf("Account is inactive")
+		return nil, entity.ErrAccountInactive
 	}
 
 	// revoke the old refresh token
 	if err := u.sessionRepo.Revoke(ctx, session.ID); err != nil {
-		return nil, fmt.Errorf("Failed to revoke session: %w", err)
+		return nil, fmt.Errorf("failed to revoke session: %w", err)
 	}
 
 	accessToken, err := u.jwtService.GenerateToken(user.ID, user.Email, string(user.Role))
@@ -201,7 +201,7 @@ func (u *authUsecase) RefreshToken(ctx context.Context, refreshToken string) (*e
 
 	// insert new session into database
 	if err := u.sessionRepo.Create(ctx, newSession); err != nil {
-		return nil, fmt.Errorf("Failed to create new session: %w", err)
+		return nil, fmt.Errorf("failed to create new session: %w", err)
 	}
 
 	return &entity.AuthResponse{
@@ -213,7 +213,7 @@ func (u *authUsecase) RefreshToken(ctx context.Context, refreshToken string) (*e
 func (u *authUsecase) GetProfile(ctx context.Context, id uint) (*entity.UserResponse, error) {
 	user, err := u.userRepo.FindByID(ctx, id)
 	if err != nil || user == nil {
-		return nil, fmt.Errorf("User not found")
+		return nil, entity.ErrUserNotFound
 	}
 
 	return &entity.UserResponse{
@@ -230,7 +230,7 @@ func (u *authUsecase) ResendActivation(ctx context.Context, email string) error 
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil
 		}
-		return fmt.Errorf("Failed to fetch user: %w", err)
+		return fmt.Errorf("failed to fetch user: %w", err)
 	}
 
 	if user == nil || user.IsActive {
@@ -239,7 +239,7 @@ func (u *authUsecase) ResendActivation(ctx context.Context, email string) error 
 
 	newToken, err := generateRandomToken()
 	if err != nil {
-		return fmt.Errorf("Failed to generate activation token: %w", err)
+		return fmt.Errorf("failed to generate activation token: %w", err)
 	}
 	expiresAt := time.Now().Add(24 * time.Hour)
 
@@ -247,7 +247,7 @@ func (u *authUsecase) ResendActivation(ctx context.Context, email string) error 
 	user.ActivationExpiresAt = &expiresAt
 
 	if err := u.userRepo.Update(ctx, user); err != nil {
-		return fmt.Errorf("Failed to update activation token: %w", err)
+		return fmt.Errorf("failed to update activation token: %w", err)
 	}
 
 	// resend email activation account
@@ -256,7 +256,7 @@ func (u *authUsecase) ResendActivation(ctx context.Context, email string) error 
 	go func(bgCtx context.Context) {
 		defer cancel()
 		if err := u.emailSender.SendActivationEmail(bgCtx, user.Email, user.Name, newToken); err != nil {
-			log.Printf("Failed to send activation email: %v", err)
+			log.Printf("failed to send activation email: %v", err)
 		}
 	}(timeoutCtx)
 
@@ -265,16 +265,16 @@ func (u *authUsecase) ResendActivation(ctx context.Context, email string) error 
 
 func (u *authUsecase) ActivateAccount(ctx context.Context, token string) error {
 	if token == "" {
-		return fmt.Errorf("Activation token is required")
+		return entity.ErrActivationTokenRequired
 	}
 
 	user, err := u.userRepo.FindByActivationToken(ctx, token)
 	if err != nil || user == nil {
-		return fmt.Errorf("Invalid activation token")
+		return entity.ErrInvalidActivationToken
 	}
 
 	if user.ActivationExpiresAt != nil && time.Now().After(*user.ActivationExpiresAt) {
-		return fmt.Errorf("Activation token has expired")
+		return entity.ErrActivationTokenExpired
 	}
 
 	user.IsActive = true
@@ -282,7 +282,7 @@ func (u *authUsecase) ActivateAccount(ctx context.Context, token string) error {
 	user.ActivationExpiresAt = nil
 
 	if err := u.userRepo.Update(ctx, user); err != nil {
-		return fmt.Errorf("Failed to activate account: %w", err)
+		return fmt.Errorf("failed to activate account: %w", err)
 	}
 
 	return nil

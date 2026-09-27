@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -39,7 +40,7 @@ func (s *jwtService) GenerateToken(userID uint, email string, role string) (stri
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signedToken, err := token.SignedString(s.secretKey)
 	if err != nil {
-		return "", fmt.Errorf("Failed to sign token: %w", err)
+		return "", fmt.Errorf("failed to sign token: %w", err)
 	}
 
 	return signedToken, nil
@@ -57,7 +58,7 @@ func (s *jwtService) GenerateRefreshToken(userID uint) (string, error) {
 
 	signedToken, err := token.SignedString(s.secretKey)
 	if err != nil {
-		return "", fmt.Errorf("Failed to sign refresh token: %w", err)
+		return "", fmt.Errorf("failed to sign refresh token: %w", err)
 	}
 
 	return signedToken, nil
@@ -88,20 +89,20 @@ func (s *jwtService) validate(tokenString string, tokenType string) (*jwt.Token,
 	}
 
 	if !token.Valid {
-		return nil, fmt.Errorf("Invalid token")
+		return nil, entity.ErrInvalidToken
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return nil, fmt.Errorf("Invalid token claims")
+		return nil, entity.ErrInvalidTokenClaims
 	}
 
 	if claims["type"] != tokenType {
-		return nil, fmt.Errorf("Invalid token type")
+		return nil, entity.ErrInvalidTokenType
 	}
 
 	if claims["iss"] != s.issuer {
-		return nil, fmt.Errorf("Invalid token issuer")
+		return nil, entity.ErrInvalidTokenIssuer
 	}
 
 	return token, nil

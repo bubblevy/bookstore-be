@@ -94,10 +94,10 @@ func (s *smtpEmailSender) send(ctx context.Context, toEmail, recipientName strin
 
 	select {
 	case <-ctx.Done():
-		return fmt.Errorf("Email sending canceled: %w", ctx.Err())
+		return fmt.Errorf("email sending canceled: %w", ctx.Err())
 	case err := <-errCh:
 		if err != nil {
-			return fmt.Errorf("Failed to send email: %w", err)
+			return fmt.Errorf("failed to send email: %w", err)
 		}
 		return nil
 	}
