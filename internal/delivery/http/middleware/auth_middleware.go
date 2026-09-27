@@ -11,17 +11,22 @@ import (
 
 func AuthMiddleware(jwtService j.JWTService) fiber.Handler {
 	return func(c fiber.Ctx) error {
+		var tokenString string
 		authHeader := c.Get("Authorization")
-		if authHeader == "" {
-			return response.Error(c, fiber.StatusUnauthorized, "Authorization header is missing", nil)
+		if authHeader != "" {
+			parts := strings.Split(authHeader, " ")
+			if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+				tokenString = parts[1]
+			}
 		}
 
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			return response.Error(c, fiber.StatusUnauthorized, "Invalid authorization format", nil)
+		if tokenString == "" {
+			tokenString = c.Cookies("access_token")
 		}
 
-		tokenString := parts[1]
+		if tokenString == "" {
+			return response.Error(c, fiber.StatusUnauthorized, "Missing authorization token", nil)
+		}
 
 		token, err := jwtService.ValidateToken(tokenString)
 		if err != nil || !token.Valid {

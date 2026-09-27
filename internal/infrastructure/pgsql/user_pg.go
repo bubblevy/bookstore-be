@@ -27,12 +27,12 @@ func (r *userRepository) FindByEmail(ctx context.Context, email string) (*entity
 	return &user, nil
 }
 
-func (r *userRepository) Create(ctx context.Context, user *entity.User) (*entity.User, error) {
+func (r *userRepository) Create(ctx context.Context, user *entity.User) error {
 	err := r.db.WithContext(ctx).Create(user).Error
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return user, nil
+	return nil
 }
 
 func (r *userRepository) FindByID(ctx context.Context, id uint) (*entity.User, error) {
@@ -42,4 +42,17 @@ func (r *userRepository) FindByID(ctx context.Context, id uint) (*entity.User, e
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (r *userRepository) FindByActivationToken(ctx context.Context, token string) (*entity.User, error) {
+	var user entity.User
+	err := r.db.WithContext(ctx).Where("activation_token = ?", token).First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *userRepository) Update(ctx context.Context, user *entity.User) error {
+	return r.db.WithContext(ctx).Save(user).Error
 }

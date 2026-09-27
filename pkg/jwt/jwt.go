@@ -49,7 +49,7 @@ func (s *jwtService) GenerateRefreshToken(userID uint) (string, error) {
 	claims := jwt.MapClaims{
 		"user_id": userID,
 		"type":    "refresh",
-		"exp":     time.Now().Add(30 * 24 * time.Hour).Unix(),
+		"exp":     time.Now().Add(7 * 24 * time.Hour).Unix(),
 		"iss":     s.issuer,
 	}
 
