@@ -25,17 +25,17 @@ func AuthMiddleware(jwtService j.JWTService) fiber.Handler {
 		}
 
 		if tokenString == "" {
-			return response.Error(c, fiber.StatusUnauthorized, "Missing authorization token", nil)
+			return response.Error(c, fiber.StatusUnauthorized, "missing authorization token", nil)
 		}
 
 		token, err := jwtService.ValidateToken(tokenString)
 		if err != nil || !token.Valid {
-			return response.Error(c, fiber.StatusUnauthorized, "Invalid or expired token", nil)
+			return response.Error(c, fiber.StatusUnauthorized, "invalid or expired token", nil)
 		}
 
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
-			return response.Error(c, fiber.StatusUnauthorized, "Failed to parse token claims", nil)
+			return response.Error(c, fiber.StatusUnauthorized, "failed to parse token claims", nil)
 		}
 
 		var userID uint
@@ -48,12 +48,12 @@ func AuthMiddleware(jwtService j.JWTService) fiber.Handler {
 		email, _ := claims["email"].(string)
 
 		if userID == 0 || email == "" {
-			return response.Error(c, fiber.StatusUnauthorized, "Incomplete token payload", nil)
+			return response.Error(c, fiber.StatusUnauthorized, "incomplete token payload", nil)
 		}
 
 		role, ok := claims["role"].(string)
 		if !ok || role == "" {
-			return response.Error(c, fiber.StatusUnauthorized, "Incomplete token payload", nil)
+			return response.Error(c, fiber.StatusUnauthorized, "incomplete token payload", nil)
 		}
 
 		c.Locals("user_id", userID)

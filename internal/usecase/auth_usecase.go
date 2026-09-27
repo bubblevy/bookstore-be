@@ -27,6 +27,7 @@ type AuthUsecase interface {
 	RefreshToken(ctx context.Context, refreshToken string) (*entity.AuthResponse, error)
 	ResendActivation(ctx context.Context, email string) error
 	ActivateAccount(ctx context.Context, token string) error
+	Logout(ctx context.Context, refreshToken string) error
 }
 
 type authUsecase struct {
@@ -114,13 +115,14 @@ func (u *authUsecase) Register(ctx context.Context, name, email, password string
 		return entity.ErrFailedGenerateToken
 	}
 	expiresAt := time.Now().Add(24 * time.Hour)
+	hashedActivationToken := hash.SHA256(activationToken)
 
 	user := &entity.User{
 		Name:                name,
 		Email:               email,
 		Role:                entity.RoleUser,
 		Password:            string(hashedPassword),
-		ActivationToken:     &activationToken,
+		ActivationToken:     &hashedActivationToken,
 		ActivationExpiresAt: &expiresAt,
 	}
 
@@ -129,8 +131,7 @@ func (u *authUsecase) Register(ctx context.Context, name, email, password string
 	}
 
 	// send email activation account
-	asyncCtx := context.WithoutCancel(ctx)
-	timeoutCtx, cancel := context.WithTimeout(asyncCtx, 10*time.Second)
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	go func(bgCtx context.Context) {
 		defer cancel()
 		if err := u.emailSender.SendActivationEmail(bgCtx, user.Email, user.Name, activationToken); err != nil {
@@ -238,12 +239,13 @@ func (u *authUsecase) ResendActivation(ctx context.Context, email string) error 
 	}
 
 	newToken, err := generateRandomToken()
+	hashedActivationToken := hash.SHA256(newToken)
 	if err != nil {
 		return fmt.Errorf("failed to generate activation token: %w", err)
 	}
 	expiresAt := time.Now().Add(24 * time.Hour)
 
-	user.ActivationToken = &newToken
+	user.ActivationToken = &hashedActivationToken
 	user.ActivationExpiresAt = &expiresAt
 
 	if err := u.userRepo.Update(ctx, user); err != nil {
@@ -251,8 +253,7 @@ func (u *authUsecase) ResendActivation(ctx context.Context, email string) error 
 	}
 
 	// resend email activation account
-	asyncCtx := context.WithoutCancel(ctx)
-	timeoutCtx, cancel := context.WithTimeout(asyncCtx, 10*time.Second)
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	go func(bgCtx context.Context) {
 		defer cancel()
 		if err := u.emailSender.SendActivationEmail(bgCtx, user.Email, user.Name, newToken); err != nil {
@@ -268,6 +269,7 @@ func (u *authUsecase) ActivateAccount(ctx context.Context, token string) error {
 		return entity.ErrActivationTokenRequired
 	}
 
+	token = hash.SHA256(token)
 	user, err := u.userRepo.FindByActivationToken(ctx, token)
 	if err != nil || user == nil {
 		return entity.ErrInvalidActivationToken
@@ -286,4 +288,18 @@ func (u *authUsecase) ActivateAccount(ctx context.Context, token string) error {
 	}
 
 	return nil
+}
+
+func (u *authUsecase) Logout(ctx context.Context, refreshToken string) error {
+	if refreshToken == "" {
+		return nil
+	}
+
+	tokenHash := hash.SHA256(refreshToken)
+	session, err := u.sessionRepo.FindActiveByTokenHash(ctx, tokenHash)
+	if err != nil {
+		return nil
+	}
+
+	return u.sessionRepo.Revoke(ctx, session.ID)
 }

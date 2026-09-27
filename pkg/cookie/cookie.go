@@ -12,7 +12,7 @@ const (
 	RefreshTokenName   = "refresh_token"
 	AccessTokenExpiry  = 15 * time.Minute
 	RefreshTokenExpiry = 7 * 24 * time.Hour
-	RefreshPath        = "/api/v1/auth/refresh-token"
+	RefreshPath        = "/api/v1/auth"
 	RootPath           = "/"
 )
 

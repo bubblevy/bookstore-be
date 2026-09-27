@@ -40,15 +40,15 @@ func FormatValidationErrors(err error) map[string]string {
 			var msg string
 			switch e.Tag() {
 			case "required":
-				msg = fmt.Sprintf("Field '%s' is required", e.Field())
+				msg = fmt.Sprintf("field '%s' is required", e.Field())
 			case "email":
-				msg = fmt.Sprintf("Field '%s' must be a valid email address", e.Field())
+				msg = fmt.Sprintf("field '%s' must be a valid email address", e.Field())
 			case "min":
-				msg = fmt.Sprintf("Field '%s' must be at least %s characters", e.Field(), e.Param())
+				msg = fmt.Sprintf("field '%s' must be at least %s characters", e.Field(), e.Param())
 			case "strong_password":
-				msg = fmt.Sprintf("Field '%s' must be at least 8 characters long and include uppercase, lowercase, number, and special character", e.Field())
+				msg = fmt.Sprintf("field '%s' must be at least 8 characters long and include uppercase, lowercase, number, and special character", e.Field())
 			default:
-				msg = fmt.Sprintf("Field '%s' is invalid (%s)", e.Field(), e.Tag())
+				msg = fmt.Sprintf("field '%s' is invalid (%s)", e.Field(), e.Tag())
 			}
 
 			errorsMap[e.Field()] = msg
