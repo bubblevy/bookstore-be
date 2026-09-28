@@ -23,18 +23,14 @@ func NewAuthHandler(r fiber.Router, u usecase.AuthUsecase, validate *validator.V
 	}
 
 	// routes
-	r.Get("/me", h.authMiddleware, h.GetProfile)
-
-	auth := r.Group("/auth")
-	auth.Post("/register", h.Register)
-	auth.Post("/login", h.Login)
-	auth.Post("/refresh-token", h.RefreshToken)
-	// auth.Post("/reset-password", h.ResetPassword)
-	// auth.Post("/change-password", h.ChangePassword)
-	auth.Delete("/logout", h.Logout)
-	// auth.Put("/update-profile", h.UpdateProfile)
-	auth.Post("/resend-activation", h.ResendActivation)
-	auth.Get("/activate-account", h.ActivateAccount)
+	r.Post("/register", h.Register)
+	r.Post("/login", h.Login)
+	r.Post("/refresh-token", h.RefreshToken)
+	// r.Post("/reset-password", h.ResetPassword)
+	// r.Post("/change-password", h.ChangePassword)
+	r.Delete("/logout", h.Logout)
+	r.Post("/resend-activation", h.ResendActivation)
+	r.Get("/activate-account", h.ActivateAccount)
 }
 
 func (h *AuthHandler) Register(c fiber.Ctx) error {
@@ -131,20 +127,6 @@ func (h *AuthHandler) RefreshToken(c fiber.Ctx) error {
 	// set cookie
 	cookie.SetAuthCookies(c, token.AccessToken, token.RefreshToken)
 	return response.Success(c, fiber.StatusOK, "token refreshed successfully", nil)
-}
-
-func (h *AuthHandler) GetProfile(c fiber.Ctx) error {
-	userID, ok := c.Locals("user_id").(uint)
-	if !ok {
-		return response.Error(c, fiber.StatusUnauthorized, "unauthorized access", nil)
-	}
-
-	user, err := h.u.GetProfile(c.Context(), userID)
-	if err != nil {
-		return response.Error(c, fiber.StatusNotFound, err.Error(), nil)
-	}
-
-	return response.Success(c, fiber.StatusOK, "profile retrieved successfully", user)
 }
 
 func (h *AuthHandler) Logout(c fiber.Ctx) error {

@@ -11,4 +11,5 @@ type SessionRepository interface {
 	FindActiveByTokenHash(ctx context.Context, tokenHash string) (*entity.UserSession, error)
 	Revoke(ctx context.Context, id uint) error
 	RevokeAllByUserID(ctx context.Context, userID uint) error
+	DeleteExpired(ctx context.Context) (int64, error)
 }

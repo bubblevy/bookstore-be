@@ -3,9 +3,12 @@ package email
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"html/template"
+	"net"
 	"net/smtp"
+	"net/url"
 	"time"
 )
 
@@ -24,6 +27,7 @@ type SMTPConfig struct {
 	LogoURL     string
 	FrontendURL string
 	AppName     string
+	UseTLS      bool
 }
 
 type smtpEmailSender struct {
@@ -57,7 +61,7 @@ func NewSMTPEmailSender(cfg SMTPConfig) EmailSender {
 }
 
 func (s *smtpEmailSender) SendActivationEmail(ctx context.Context, toEmail, recipientName, activationToken string) error {
-	activationLink := fmt.Sprintf("%s/activate-account?token=%s", s.config.FrontendURL, activationToken)
+	activationLink := fmt.Sprintf("%s/activate-account?token=%s", s.config.FrontendURL, url.QueryEscape(activationToken))
 	safeAppName := template.HTMLEscapeString(s.config.AppName)
 
 	payload := emailPayload{
@@ -73,7 +77,7 @@ func (s *smtpEmailSender) SendActivationEmail(ctx context.Context, toEmail, reci
 }
 
 func (s *smtpEmailSender) SendResetPasswordEmail(ctx context.Context, toEmail, recipientName, resetToken string) error {
-	resetLink := fmt.Sprintf("%s/reset-password?token=%s", s.config.FrontendURL, resetToken)
+	resetLink := fmt.Sprintf("%s/reset-password?token=%s", s.config.FrontendURL, url.QueryEscape(resetToken))
 	safeAppName := template.HTMLEscapeString(s.config.AppName)
 
 	payload := emailPayload{
@@ -100,12 +104,16 @@ func (s *smtpEmailSender) send(ctx context.Context, toEmail, recipientName strin
 	mimeHeader := "MIME-Version: 1.0\r\nContent-Type: text/html; charset=\"UTF-8\"\r\n\r\n"
 
 	msg := []byte(fromHeader + toHeader + subjectHeader + mimeHeader + body)
-	auth := smtp.PlainAuth("", s.config.AuthUser, s.config.AuthPass, s.config.Host)
 	addr := fmt.Sprintf("%s:%s", s.config.Host, s.config.Port)
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- smtp.SendMail(addr, auth, s.config.FromEmail, []string{toEmail}, msg)
+		if s.config.UseTLS {
+			errCh <- s.sendWithTLS(addr, toEmail, msg)
+		} else {
+			auth := smtp.PlainAuth("", s.config.AuthUser, s.config.AuthPass, s.config.Host)
+			errCh <- smtp.SendMail(addr, auth, s.config.FromEmail, []string{toEmail}, msg)
+		}
 	}()
 
 	select {
@@ -117,6 +125,58 @@ func (s *smtpEmailSender) send(ctx context.Context, toEmail, recipientName strin
 		}
 		return nil
 	}
+}
+
+func (s *smtpEmailSender) sendWithTLS(addr, toEmail string, msg []byte) error {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("failed to parse SMTP address: %w", err)
+	}
+
+	tlsConfig := &tls.Config{
+		ServerName:         host,
+		InsecureSkipVerify: false,
+		MinVersion:         tls.VersionTLS12,
+	}
+
+	conn, err := tls.Dial("tcp", addr, tlsConfig)
+	if err != nil {
+		return fmt.Errorf("failed to connect to SMTP server with TLS: %w", err)
+	}
+	defer conn.Close()
+
+	client, err := smtp.NewClient(conn, host)
+	if err != nil {
+		return fmt.Errorf("failed to create SMTP client: %w", err)
+	}
+	defer client.Close()
+
+	if err := client.Auth(smtp.PlainAuth("", s.config.AuthUser, s.config.AuthPass, host)); err != nil {
+		return fmt.Errorf("SMTP authentication failed: %w", err)
+	}
+
+	if err := client.Mail(s.config.FromEmail); err != nil {
+		return fmt.Errorf("SMTP MAIL FROM failed: %w", err)
+	}
+
+	if err := client.Rcpt(toEmail); err != nil {
+		return fmt.Errorf("SMTP RCPT TO failed: %w", err)
+	}
+
+	w, err := client.Data()
+	if err != nil {
+		return fmt.Errorf("SMTP DATA failed: %w", err)
+	}
+
+	if _, err := w.Write(msg); err != nil {
+		return fmt.Errorf("failed to write email body: %w", err)
+	}
+
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("failed to close email writer: %w", err)
+	}
+
+	return client.Quit()
 }
 
 func (s *smtpEmailSender) renderBaseTemplate(payload emailPayload) (string, error) {

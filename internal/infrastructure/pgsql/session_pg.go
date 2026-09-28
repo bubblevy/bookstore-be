@@ -54,3 +54,10 @@ func (r *sessionRepository) RevokeAllByUserID(ctx context.Context, userID uint) 
 		Update("revoked_at", now).
 		Error
 }
+
+func (r *sessionRepository) DeleteExpired(ctx context.Context) (int64, error) {
+	result := r.db.WithContext(ctx).
+		Where("expires_at < ?", time.Now()).
+		Delete(&entity.UserSession{})
+	return result.RowsAffected, result.Error
+}
