@@ -20,29 +20,62 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+type RegisterInput struct {
+	Name     string
+	Email    string
+	Password string
+}
+
+type LoginInput struct {
+	Email    string
+	Password string
+}
+
+type ResetPasswordInput struct {
+	Token           string
+	NewPassword     string
+	ConfirmPassword string
+}
+
+type ChangePasswordInput struct {
+	UserID              uint
+	CurrentPassword     string
+	NewPassword         string
+	ConfirmPassword     string
+	CurrentRefreshToken string
+}
+
+type AuthResult struct {
+	AccessToken  string
+	RefreshToken string
+}
+
 type AuthUsecase interface {
-	Login(ctx context.Context, email, password string) (*entity.AuthResponse, error)
-	Register(ctx context.Context, name, email, password string) error
-	RefreshToken(ctx context.Context, refreshToken string) (*entity.AuthResponse, error)
+	Login(ctx context.Context, i LoginInput) (*AuthResult, error)
+	Register(ctx context.Context, i RegisterInput) error
+	RefreshToken(ctx context.Context, refreshToken string) (*AuthResult, error)
 	ResendActivation(ctx context.Context, email string) error
 	ActivateAccount(ctx context.Context, token string) error
 	Logout(ctx context.Context, refreshToken string) error
 	StartSessionCleanup(ctx context.Context, interval time.Duration)
 	ForgotPassword(ctx context.Context, email string) error
-	ResetPassword(ctx context.Context, newPassword string, confirmPassword string, token string) error
+	ResetPassword(ctx context.Context, i ResetPasswordInput) error
+	ChangePassword(ctx context.Context, i ChangePasswordInput) error
 }
 
 type authUsecase struct {
 	userRepo    repository.UserRepository
 	sessionRepo repository.SessionRepository
+	txManager   repository.TransactionManager
 	jwtService  j.JWTService
 	emailSender email.EmailSender
 }
 
-func NewAuthUsecase(userRepo repository.UserRepository, sessionRepo repository.SessionRepository, jwtService j.JWTService, emailSender email.EmailSender) AuthUsecase {
+func NewAuthUsecase(userRepo repository.UserRepository, sessionRepo repository.SessionRepository, txManager repository.TransactionManager, jwtService j.JWTService, emailSender email.EmailSender) AuthUsecase {
 	return &authUsecase{
 		userRepo:    userRepo,
 		sessionRepo: sessionRepo,
+		txManager:   txManager,
 		jwtService:  jwtService,
 		emailSender: emailSender,
 	}
@@ -57,8 +90,63 @@ func generateRandomToken() (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
-func (u *authUsecase) Login(ctx context.Context, email, password string) (*entity.AuthResponse, error) {
-	user, err := u.userRepo.FindByEmail(ctx, email)
+func (u *authUsecase) Register(ctx context.Context, i RegisterInput) error {
+	_, err := u.userRepo.FindByEmail(ctx, i.Email)
+	if err == nil {
+		logger.Warn("register failed - email already exists")
+		return entity.ErrEmailAlreadyRegistered
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		logger.Error("register failed - database error", "error", err)
+		return fmt.Errorf("failed to check email: %w", err)
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(i.Password), bcrypt.DefaultCost)
+	if err != nil {
+		logger.Error("register failed - hash password error", "error", err)
+		return entity.ErrFailedHashPassword
+	}
+
+	activationToken, err := generateRandomToken()
+	if err != nil {
+		logger.Error("register failed - token generation error", "error", err)
+		return entity.ErrFailedGenerateToken
+	}
+	expiresAt := time.Now().Add(24 * time.Hour)
+	hashedActivationToken := hash.SHA256(activationToken)
+
+	user := &entity.User{
+		Name:                i.Name,
+		Email:               i.Email,
+		Role:                entity.RoleUser,
+		Password:            string(hashedPassword),
+		ActivationToken:     &hashedActivationToken,
+		ActivationExpiresAt: &expiresAt,
+	}
+
+	if err := u.userRepo.Create(ctx, user); err != nil {
+		logger.Error("register failed - create user error", "error", err)
+		return fmt.Errorf("failed to create user: %w", err)
+	}
+
+	logger.Info("user registered", "user_id", user.ID)
+
+	// send email
+	go func(name, email, token string, userID uint) {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := u.emailSender.SendActivationEmail(bgCtx, email, name, token); err != nil {
+			logger.Error("failed to send activation email", "user_id", userID, "error", err)
+		} else {
+			logger.Info("activation email sent", "user_id", user.ID)
+		}
+	}(user.Name, user.Email, activationToken, user.ID)
+
+	return nil
+}
+
+func (u *authUsecase) Login(ctx context.Context, i LoginInput) (*AuthResult, error) {
+	user, err := u.userRepo.FindByEmail(ctx, i.Email)
 	if err != nil {
 		logger.Warn("login failed - user not found",
 			"reason", "user_not_found",
@@ -66,7 +154,7 @@ func (u *authUsecase) Login(ctx context.Context, email, password string) (*entit
 		return nil, entity.ErrInvalidCredentials
 	}
 
-	if err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+	if err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(i.Password)); err != nil {
 		logger.Warn("login failed - invalid password",
 			"user_id", user.ID,
 			"reason", "invalid_password",
@@ -106,72 +194,13 @@ func (u *authUsecase) Login(ctx context.Context, email, password string) (*entit
 		"user_id", user.ID,
 	)
 
-	return &entity.AuthResponse{
+	return &AuthResult{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 	}, nil
 }
 
-func (u *authUsecase) Register(ctx context.Context, name, email, password string) error {
-	_, err := u.userRepo.FindByEmail(ctx, email)
-	if err == nil {
-		logger.Warn("register failed - email already exists")
-		return entity.ErrEmailAlreadyRegistered
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		logger.Error("register failed - database error", "error", err)
-		return fmt.Errorf("failed to check email: %w", err)
-	}
-
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		logger.Error("register failed - hash password error", "error", err)
-		return entity.ErrFailedHashPassword
-	}
-
-	activationToken, err := generateRandomToken()
-	if err != nil {
-		logger.Error("register failed - token generation error", "error", err)
-		return entity.ErrFailedGenerateToken
-	}
-	expiresAt := time.Now().Add(24 * time.Hour)
-	hashedActivationToken := hash.SHA256(activationToken)
-
-	user := &entity.User{
-		Name:                name,
-		Email:               email,
-		Role:                entity.RoleUser,
-		Password:            string(hashedPassword),
-		ActivationToken:     &hashedActivationToken,
-		ActivationExpiresAt: &expiresAt,
-	}
-
-	if err := u.userRepo.Create(ctx, user); err != nil {
-		logger.Error("register failed - create user error", "error", err)
-		return fmt.Errorf("failed to create user: %w", err)
-	}
-
-	logger.Info("user registered", "user_id", user.ID)
-
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	go func(bgCtx context.Context) {
-		defer cancel()
-		if err := u.emailSender.SendActivationEmail(bgCtx, user.Email, user.Name, activationToken); err != nil {
-			logger.Error("failed to send activation email",
-				"user_id", user.ID,
-				"error", err,
-			)
-		} else {
-			logger.Info("activation email sent",
-				"user_id", user.ID,
-			)
-		}
-	}(timeoutCtx)
-
-	return nil
-}
-
-func (u *authUsecase) RefreshToken(ctx context.Context, refreshToken string) (*entity.AuthResponse, error) {
+func (u *authUsecase) RefreshToken(ctx context.Context, refreshToken string) (*AuthResult, error) {
 	token, err := u.jwtService.ValidateRefreshToken(refreshToken)
 	if err != nil {
 		logger.Warn("refresh token failed - invalid token", "reason", "invalid_token")
@@ -214,11 +243,6 @@ func (u *authUsecase) RefreshToken(ctx context.Context, refreshToken string) (*e
 		return nil, entity.ErrAccountInactive
 	}
 
-	if err := u.sessionRepo.Revoke(ctx, session.ID); err != nil {
-		logger.Error("refresh token failed - revoke session error", "user_id", userID, "error", err)
-		return nil, fmt.Errorf("failed to revoke session: %w", err)
-	}
-
 	accessToken, err := u.jwtService.GenerateToken(user.ID, user.Email, string(user.Role))
 	if err != nil {
 		logger.Error("refresh token failed - generate access token error", "user_id", userID, "error", err)
@@ -237,14 +261,27 @@ func (u *authUsecase) RefreshToken(ctx context.Context, refreshToken string) (*e
 		ExpiresAt:        time.Now().Add(7 * 24 * time.Hour),
 	}
 
-	if err := u.sessionRepo.Create(ctx, newSession); err != nil {
-		logger.Error("refresh token failed - create session error", "user_id", userID, "error", err)
-		return nil, fmt.Errorf("failed to create new session: %w", err)
+	err = u.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err := u.sessionRepo.Revoke(txCtx, session.ID); err != nil {
+			logger.Error("refresh token failed - revoke refresh token session error", "user_id", userID, "error", err)
+			return fmt.Errorf("failed to revoke refresh token session: %w", err)
+		}
+
+		if err := u.sessionRepo.Create(txCtx, newSession); err != nil {
+			logger.Error("refresh token failed - create refresh token session error", "user_id", userID, "error", err)
+			return fmt.Errorf("failed to create new refresh token session: %w", err)
+		}
+		return nil
+	})
+
+	if err != nil {
+		logger.Error("refresh token failed - transaction error", "user_id", userID, "error", err)
+		return nil, err
 	}
 
 	logger.Info("token refreshed", "user_id", userID)
 
-	return &entity.AuthResponse{
+	return &AuthResult{
 		AccessToken:  accessToken,
 		RefreshToken: newRefreshToken,
 	}, nil
@@ -285,20 +322,21 @@ func (u *authUsecase) ResendActivation(ctx context.Context, email string) error 
 
 	logger.Info("activation token regenerated", "user_id", user.ID)
 
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	go func(bgCtx context.Context) {
+	go func(targetEmail, targetName, token string, userID uint) {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := u.emailSender.SendActivationEmail(bgCtx, user.Email, user.Name, newToken); err != nil {
+
+		if err := u.emailSender.SendActivationEmail(bgCtx, targetEmail, targetName, token); err != nil {
 			logger.Error("resend activation - email send error",
-				"user_id", user.ID,
+				"user_id", userID,
 				"error", err,
 			)
 		} else {
 			logger.Info("activation email resent",
-				"user_id", user.ID,
+				"user_id", userID,
 			)
 		}
-	}(timeoutCtx)
+	}(user.Email, user.Name, newToken, user.ID)
 
 	return nil
 }
@@ -343,12 +381,12 @@ func (u *authUsecase) Logout(ctx context.Context, refreshToken string) error {
 	tokenHash := hash.SHA256(refreshToken)
 	session, err := u.sessionRepo.FindActiveByTokenHash(ctx, tokenHash)
 	if err != nil {
-		logger.Warn("logout - session not found", "reason", "session_not_found")
+		logger.Warn("logout - refresh token session not found", "reason", "session_not_found")
 		return nil
 	}
 
 	if err := u.sessionRepo.Revoke(ctx, session.ID); err != nil {
-		logger.Error("logout - revoke session error", "user_id", session.UserID, "session_id", session.ID, "error", err)
+		logger.Error("logout - revoke refresh token session error", "user_id", session.UserID, "session_id", session.ID, "error", err)
 		return err
 	}
 
@@ -364,14 +402,14 @@ func (u *authUsecase) StartSessionCleanup(ctx context.Context, interval time.Dur
 		for {
 			select {
 			case <-ctx.Done():
-				logger.Info("session cleanup stopped")
+				logger.Info("refresh token session cleanup stopped")
 				return
 			case <-ticker.C:
 				deleted, err := u.sessionRepo.DeleteExpired(ctx)
 				if err != nil {
-					logger.Error("session cleanup error", "error", err)
+					logger.Error("refresh token session cleanup error", "error", err)
 				} else if deleted > 0 {
-					logger.Info("session cleanup completed", "deleted", deleted)
+					logger.Info("refresh token session cleanup completed", "deleted", deleted)
 				}
 			}
 		}
@@ -410,34 +448,33 @@ func (u *authUsecase) ForgotPassword(ctx context.Context, email string) error {
 		return fmt.Errorf("failed to update forgot password token: %w", err)
 	}
 
-	logger.Info("forgot password token regenerated", "user_id", user.ID)
-
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	go func(bgCtx context.Context) {
+	go func(targetEmail, targetName, resetToken string, userID uint) {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := u.emailSender.SendResetPasswordEmail(bgCtx, user.Email, user.Name, token); err != nil {
-			logger.Error("forgot password - email send error",
-				"user_id", user.ID,
-				"error", err,
-			)
+
+		if err := u.emailSender.SendResetPasswordEmail(bgCtx, targetEmail, targetName, resetToken); err != nil {
+			logger.Error("forgot password - email send error", "user_id", userID, "error", err)
 		} else {
-			logger.Info("forgot password email send",
-				"user_id", user.ID,
-			)
+			logger.Info("forgot password email sent", "user_id", userID)
 		}
-	}(timeoutCtx)
+	}(user.Email, user.Name, token, user.ID)
 
 	return nil
 }
 
-func (u *authUsecase) ResetPassword(ctx context.Context, newPassword string, confirmPassword string, token string) error {
-	if token == "" {
+func (u *authUsecase) ResetPassword(ctx context.Context, i ResetPasswordInput) error {
+	if i.Token == "" {
 		logger.Warn("reset password account - token required")
 		return entity.ErrResetPasswordTokenRequired
 	}
 
-	token = hash.SHA256(token)
-	user, err := u.userRepo.FindByResetPasswordToken(ctx, token)
+	if i.NewPassword != i.ConfirmPassword {
+		logger.Warn("reset password account - password confirmation mismatch")
+		return entity.ErrPasswordMismatch
+	}
+
+	hashedToken := hash.SHA256(i.Token)
+	user, err := u.userRepo.FindByResetPasswordToken(ctx, hashedToken)
 	if err != nil || user == nil {
 		logger.Warn("reset password account - invalid token")
 		return entity.ErrInvalidToken
@@ -448,12 +485,7 @@ func (u *authUsecase) ResetPassword(ctx context.Context, newPassword string, con
 		return entity.ErrResetPasswordTokenExpired
 	}
 
-	if newPassword != confirmPassword {
-		logger.Warn("reset password account - password confirmation mismatch")
-		return entity.ErrPasswordMismatch
-	}
-
-	hashedNewPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	hashedNewPassword, err := bcrypt.GenerateFromPassword([]byte(i.NewPassword), bcrypt.DefaultCost)
 	if err != nil {
 		logger.Error("reset password failed - hash password error", "error", err)
 		return entity.ErrFailedHashPassword
@@ -463,12 +495,80 @@ func (u *authUsecase) ResetPassword(ctx context.Context, newPassword string, con
 	user.ResetPasswordToken = nil
 	user.ResetPasswordExpiresAt = nil
 
-	if err := u.userRepo.Update(ctx, user); err != nil {
-		logger.Error("reset password account - update error", "user_id", user.ID, "error", err)
-		return fmt.Errorf("failed to reset password account: %w", err)
+	err = u.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err := u.userRepo.Update(txCtx, user); err != nil {
+			logger.Error("reset password account - update error", "user_id", user.ID, "error", err)
+			return fmt.Errorf("failed to reset password account: %w", err)
+		}
+
+		if err := u.sessionRepo.RevokeAllByUserID(txCtx, user.ID); err != nil {
+			logger.Error("reset password account - failed to revoke refresh token sessions after password reset", "user_id", user.ID, "error", err)
+			return fmt.Errorf("failed to revoke refresh token sessions: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		logger.Error("reset password account - transaction error", "user_id", user.ID, "error", err)
+		return err
 	}
 
-	logger.Info("password changed", "user_id", user.ID)
+	logger.Info("reset password account - password changed and refresh token sessions revoked", "user_id", user.ID)
+	return nil
+}
 
+func (u *authUsecase) ChangePassword(ctx context.Context, i ChangePasswordInput) error {
+	if i.NewPassword != i.ConfirmPassword {
+		logger.Warn("change password account - password confirmation mismatch")
+		return entity.ErrPasswordMismatch
+	}
+
+	user, err := u.userRepo.FindByID(ctx, i.UserID)
+	if err != nil || user == nil {
+		logger.Warn("change password account - user not found")
+		return entity.ErrUserNotFound
+	}
+
+	if err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(i.CurrentPassword)); err != nil {
+		logger.Error("change password account - old password incorrect", "user_id", user.ID)
+		return entity.ErrInvalidCurrentPassword
+	}
+
+	hashedNewPassword, err := bcrypt.GenerateFromPassword([]byte(i.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		logger.Error("change password failed - hash password error", "error", err)
+		return entity.ErrFailedHashPassword
+	}
+
+	user.Password = string(hashedNewPassword)
+
+	err = u.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		if err := u.userRepo.Update(txCtx, user); err != nil {
+			logger.Error("change password account - update error", "user_id", user.ID, "error", err)
+			return fmt.Errorf("failed to change password: %w", err)
+		}
+
+		if i.CurrentRefreshToken != "" {
+			currentTokenHash := hash.SHA256(i.CurrentRefreshToken)
+			if err := u.sessionRepo.RevokeAllByUserIDExcept(txCtx, user.ID, currentTokenHash); err != nil {
+				logger.Error("change password account - revoke all refresh token by user id except error", "user_id", user.ID, "error", err)
+				return fmt.Errorf("failed to revoke other refresh token sessions: %w", err)
+			}
+		} else {
+			if err := u.sessionRepo.RevokeAllByUserID(txCtx, user.ID); err != nil {
+				logger.Error("change password account - revoke all refresh token sessions", "user_id", user.ID, "error", err)
+				return fmt.Errorf("failed to revoke all refresh token sessions: %w", err)
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		logger.Error("change password account - transaction error", "user_id", user.ID, "error", err)
+		return err
+	}
+
+	logger.Info("change password account - password changed", "user_id", user.ID)
 	return nil
 }

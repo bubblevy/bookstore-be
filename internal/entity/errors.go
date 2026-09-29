@@ -23,4 +23,5 @@ var (
 	ErrPasswordMismatch            = errors.New("password confirmation mismatch")
 	ErrResetPasswordTokenRequired  = errors.New("reset password token is required")
 	ErrResetPasswordTokenExpired   = errors.New("reset password token has expired")
+	ErrInvalidCurrentPassword      = errors.New("current password is incorrect")
 )

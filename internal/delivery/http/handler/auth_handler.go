@@ -1,8 +1,8 @@
 package handler
 
 import (
+	"github.com/bubblevy/bookstore/internal/delivery/http/dto"
 	"github.com/bubblevy/bookstore/internal/delivery/http/middleware"
-	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/usecase"
 	"github.com/bubblevy/bookstore/pkg/cookie"
 	"github.com/bubblevy/bookstore/pkg/response"
@@ -29,25 +29,30 @@ func NewAuthHandler(r fiber.Router, u usecase.AuthUsecase, validate *validator.V
 	r.Post("/refresh-token", middleware.RateLimit(middleware.StandardRateLimit), h.RefreshToken)
 	r.Post("/forgot-password", middleware.RateLimit(middleware.StrictRateLimit), h.ForgotPassword)
 	r.Post("/reset-password", middleware.RateLimit(middleware.StrictRateLimit), h.ResetPassword)
-	// r.Post("/change-password", h.ChangePassword)
+	r.Post("/change-password", authMiddleware, middleware.RateLimit(middleware.StrictRateLimit), h.ChangePassword)
 	r.Delete("/logout", middleware.RateLimit(middleware.StandardRateLimit), h.Logout)
 	r.Post("/resend-activation", middleware.RateLimit(middleware.StandardRateLimit), h.ResendActivation)
 	r.Post("/activate-account", middleware.RateLimit(middleware.StandardRateLimit), h.ActivateAccount)
 }
 
 func (h *AuthHandler) Register(c fiber.Ctx) error {
-	var req entity.RegisterRequest
+	var req dto.RegisterRequest
 
 	if err := c.Bind().Body(&req); err != nil {
 		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", nil)
 	}
 
 	if err := h.validate.Struct(req); err != nil {
-		errorsMap := response.FormatValidationErrors(err)
-		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", errorsMap)
+		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", response.FormatValidationErrors(err))
 	}
 
-	if err := h.u.Register(c.Context(), req.Name, req.Email, req.Password); err != nil {
+	i := usecase.RegisterInput{
+		Name:     req.Name,
+		Email:    req.Email,
+		Password: req.Password,
+	}
+
+	if err := h.u.Register(c.Context(), i); err != nil {
 		return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
 	}
 
@@ -55,14 +60,13 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 }
 
 func (h *AuthHandler) ResendActivation(c fiber.Ctx) error {
-	var req entity.ResendActivationRequest
+	var req dto.ResendActivationRequest
 	if err := c.Bind().Body(&req); err != nil {
 		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", nil)
 	}
 
 	if err := h.validate.Struct(req); err != nil {
-		errorsMap := response.FormatValidationErrors(err)
-		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", errorsMap)
+		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", response.FormatValidationErrors(err))
 	}
 
 	if err := h.u.ResendActivation(c.Context(), req.Email); err != nil {
@@ -73,14 +77,13 @@ func (h *AuthHandler) ResendActivation(c fiber.Ctx) error {
 }
 
 func (h *AuthHandler) ActivateAccount(c fiber.Ctx) error {
-	var req entity.ActivateAccountRequest
+	var req dto.ActivateAccountRequest
 	if err := c.Bind().Body(&req); err != nil {
 		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", nil)
 	}
 
 	if err := h.validate.Struct(req); err != nil {
-		errorsMap := response.FormatValidationErrors(err)
-		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", errorsMap)
+		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", response.FormatValidationErrors(err))
 	}
 
 	if err := h.u.ActivateAccount(c.Context(), req.Token); err != nil {
@@ -91,23 +94,27 @@ func (h *AuthHandler) ActivateAccount(c fiber.Ctx) error {
 }
 
 func (h *AuthHandler) Login(c fiber.Ctx) error {
-	var req entity.LoginRequest
+	var req dto.LoginRequest
 	if err := c.Bind().Body(&req); err != nil {
 		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", nil)
 	}
 
 	if err := h.validate.Struct(req); err != nil {
-		errorsMap := response.FormatValidationErrors(err)
-		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", errorsMap)
+		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", response.FormatValidationErrors(err))
 	}
 
-	token, err := h.u.Login(c.Context(), req.Email, req.Password)
+	i := usecase.LoginInput{
+		Email:    req.Email,
+		Password: req.Password,
+	}
+
+	result, err := h.u.Login(c.Context(), i)
 	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, err.Error(), nil)
 	}
 
 	// set cookie
-	cookie.SetAuthCookies(c, token.AccessToken, token.RefreshToken)
+	cookie.SetAuthCookies(c, result.AccessToken, result.RefreshToken)
 	return response.Success(c, fiber.StatusOK, "login successful", nil)
 }
 
@@ -116,7 +123,7 @@ func (h *AuthHandler) RefreshToken(c fiber.Ctx) error {
 	refreshToken = c.Cookies("refresh_token")
 
 	if refreshToken == "" {
-		var req entity.RefreshTokenRequest
+		var req dto.RefreshTokenRequest
 		if err := c.Bind().Body(&req); err == nil && req.RefreshToken != "" {
 			refreshToken = req.RefreshToken
 		}
@@ -126,13 +133,13 @@ func (h *AuthHandler) RefreshToken(c fiber.Ctx) error {
 		return response.Error(c, fiber.StatusUnauthorized, "refresh token is missing", nil)
 	}
 
-	token, err := h.u.RefreshToken(c.Context(), refreshToken)
+	result, err := h.u.RefreshToken(c.Context(), refreshToken)
 	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, err.Error(), nil)
 	}
 
 	// set cookie
-	cookie.SetAuthCookies(c, token.AccessToken, token.RefreshToken)
+	cookie.SetAuthCookies(c, result.AccessToken, result.RefreshToken)
 	return response.Success(c, fiber.StatusOK, "token refreshed successfully", nil)
 }
 
@@ -148,14 +155,13 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 }
 
 func (h *AuthHandler) ForgotPassword(c fiber.Ctx) error {
-	var req entity.ResetPasswordRequest
+	var req dto.ForgotPasswordRequest
 	if err := c.Bind().Body(&req); err != nil {
 		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", nil)
 	}
 
 	if err := h.validate.Struct(req); err != nil {
-		errorsMap := response.FormatValidationErrors(err)
-		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", errorsMap)
+		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", response.FormatValidationErrors(err))
 	}
 
 	if err := h.u.ForgotPassword(c.Context(), req.Email); err != nil {
@@ -166,19 +172,51 @@ func (h *AuthHandler) ForgotPassword(c fiber.Ctx) error {
 }
 
 func (h *AuthHandler) ResetPassword(c fiber.Ctx) error {
-	var req entity.ChangePasswordRequest
+	var req dto.ResetPasswordRequest
 	if err := c.Bind().Body(&req); err != nil {
 		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", nil)
 	}
 
 	if err := h.validate.Struct(req); err != nil {
-		errorsMap := response.FormatValidationErrors(err)
-		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", errorsMap)
+		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", response.FormatValidationErrors(err))
 	}
 
-	if err := h.u.ResetPassword(c.Context(), req.Password, req.ConfirmPassword, req.Token); err != nil {
+	i := usecase.ResetPasswordInput{
+		Token:           req.Token,
+		NewPassword:     req.NewPassword,
+		ConfirmPassword: req.ConfirmPassword,
+	}
+
+	if err := h.u.ResetPassword(c.Context(), i); err != nil {
 		return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
 	}
 
 	return response.Success(c, fiber.StatusOK, "reset password successfully", nil)
+}
+
+func (h *AuthHandler) ChangePassword(c fiber.Ctx) error {
+	var req dto.ChangePasswordRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", nil)
+	}
+	if err := h.validate.Struct(req); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", response.FormatValidationErrors(err))
+	}
+
+	userID := c.Locals("user_id").(uint)
+	currentRefreshToken := cookie.GetRefreshToken(c)
+
+	i := usecase.ChangePasswordInput{
+		UserID:              userID,
+		CurrentPassword:     req.CurrentPassword,
+		NewPassword:         req.NewPassword,
+		ConfirmPassword:     req.ConfirmPassword,
+		CurrentRefreshToken: currentRefreshToken,
+	}
+
+	if err := h.u.ChangePassword(c.Context(), i); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
+	}
+
+	return response.Success(c, fiber.StatusOK, "password changed successfully", nil)
 }

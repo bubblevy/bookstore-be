@@ -54,10 +54,11 @@ func Init(env, outputPath string) {
 	var handlers []slog.Handler
 
 	if cfg.env == "production" || cfg.env == "prod" {
-		handlers = append(handlers, slog.NewJSONHandler(os.Stdout, opts))
 		if outputPath != "" {
 			fileHandler := newFileHandler(outputPath, opts)
 			handlers = append(handlers, fileHandler)
+		} else {
+			handlers = append(handlers, slog.NewJSONHandler(io.Discard, opts))
 		}
 	} else {
 		handlers = append(handlers, slog.NewTextHandler(os.Stdout, opts))

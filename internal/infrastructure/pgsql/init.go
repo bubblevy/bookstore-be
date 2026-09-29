@@ -8,6 +8,7 @@ import (
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 func Init() (*gorm.DB, error) {
@@ -16,13 +17,22 @@ func Init() (*gorm.DB, error) {
 	dbName := os.Getenv("DATABASE_NAME")
 	dbHost := os.Getenv("DATABASE_HOST")
 	dbPort := os.Getenv("DATABASE_PORT")
+	appENV := os.Getenv("APP_ENV")
 
 	if dbUser == "" || dbPassword == "" || dbName == "" || dbHost == "" || dbPort == "" {
 		return nil, fmt.Errorf("database configuration is not set properly")
 	}
 
+	var gormLogger logger.Interface
+	if appENV == "production" || appENV == "prod" {
+		gormLogger = logger.Default.LogMode(logger.Silent)
+	} else {
+		gormLogger = logger.Default.LogMode(logger.Info)
+	}
+
 	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable TimeZone=Asia/Jakarta", dbHost, dbPort, dbUser, dbPassword, dbName)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger: gormLogger,
 		NowFunc: func() time.Time {
 			return time.Now().Local()
 		},

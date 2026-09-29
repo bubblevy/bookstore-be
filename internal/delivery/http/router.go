@@ -64,10 +64,11 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	validate := validator.NewValidator()
 	authMiddleware := middleware.AuthMiddleware(jwtService)
 	emailSender := email.NewSMTPEmailSender(cfg.SMTP)
+	txManager := pgsql.NewTransactionManager(db)
 
 	userRepo := pgsql.NewUserRepository(db)
 	sessionRepo := pgsql.NewSessionRepository(db)
-	authUsecase := usecase.NewAuthUsecase(userRepo, sessionRepo, jwtService, emailSender)
+	authUsecase := usecase.NewAuthUsecase(userRepo, sessionRepo, txManager, jwtService, emailSender)
 
 	// start background session cleanup (every 6 hours)
 	authUsecase.StartSessionCleanup(context.Background(), 6*time.Hour)

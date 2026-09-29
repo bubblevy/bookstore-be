@@ -20,7 +20,8 @@ func NewUserRepository(db *gorm.DB) repository.UserRepository {
 
 func (r *userRepository) FindByEmail(ctx context.Context, email string) (*entity.User, error) {
 	var user entity.User
-	err := r.db.WithContext(ctx).Where("email = ?", email).First(&user).Error
+	db := extractDB(ctx, r.db)
+	err := db.Where("email = ?", email).First(&user).Error
 	if err != nil {
 		return nil, err
 	}
@@ -28,7 +29,8 @@ func (r *userRepository) FindByEmail(ctx context.Context, email string) (*entity
 }
 
 func (r *userRepository) Create(ctx context.Context, user *entity.User) error {
-	err := r.db.WithContext(ctx).Create(user).Error
+	db := extractDB(ctx, r.db)
+	err := db.Create(user).Error
 	if err != nil {
 		return err
 	}
@@ -37,7 +39,8 @@ func (r *userRepository) Create(ctx context.Context, user *entity.User) error {
 
 func (r *userRepository) FindByID(ctx context.Context, id uint) (*entity.User, error) {
 	var user entity.User
-	err := r.db.WithContext(ctx).First(&user, id).Error
+	db := extractDB(ctx, r.db)
+	err := db.First(&user, id).Error
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +49,8 @@ func (r *userRepository) FindByID(ctx context.Context, id uint) (*entity.User, e
 
 func (r *userRepository) FindByActivationToken(ctx context.Context, token string) (*entity.User, error) {
 	var user entity.User
-	err := r.db.WithContext(ctx).Where("activation_token = ?", token).First(&user).Error
+	db := extractDB(ctx, r.db)
+	err := db.Where("activation_token = ?", token).First(&user).Error
 	if err != nil {
 		return nil, err
 	}
@@ -54,12 +58,14 @@ func (r *userRepository) FindByActivationToken(ctx context.Context, token string
 }
 
 func (r *userRepository) Update(ctx context.Context, user *entity.User) error {
-	return r.db.WithContext(ctx).Save(user).Error
+	db := extractDB(ctx, r.db)
+	return db.Save(user).Error
 }
 
 func (r *userRepository) FindByResetPasswordToken(ctx context.Context, token string) (*entity.User, error) {
 	var user entity.User
-	err := r.db.WithContext(ctx).Where("reset_password_token = ?", token).First(&user).Error
+	db := extractDB(ctx, r.db)
+	err := db.Where("reset_password_token = ?", token).First(&user).Error
 	if err != nil {
 		return nil, err
 	}
