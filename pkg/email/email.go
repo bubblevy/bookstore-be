@@ -78,15 +78,14 @@ func (s *smtpEmailSender) SendActivationEmail(ctx context.Context, toEmail, reci
 
 func (s *smtpEmailSender) SendResetPasswordEmail(ctx context.Context, toEmail, recipientName, resetToken string) error {
 	resetLink := fmt.Sprintf("%s/reset-password?token=%s", s.config.FrontendURL, url.QueryEscape(resetToken))
-	safeAppName := template.HTMLEscapeString(s.config.AppName)
 
 	payload := emailPayload{
-		Subject:       fmt.Sprintf("Reset Kata Sandi - %s", s.config.AppName),
+		Subject:       fmt.Sprintf("Reset Password - %s", s.config.AppName),
 		Greeting:      fmt.Sprintf("Halo, %s!", recipientName),
-		Message:       template.HTML(fmt.Sprintf("Kami menerima permintaan untuk mereset kata sandi akun <strong>%s</strong> Anda. Klik tombol di bawah ini untuk membuat kata sandi baru.", safeAppName)),
+		Message:       template.HTML("Kami menerima permintaan untuk mereset kata sandi akun Anda. Klik tombol di bawah ini untuk membuat kata sandi baru."),
 		CTAButtonText: "Reset Kata Sandi",
 		CTAURL:        resetLink,
-		WarningNote:   "Jika Anda tidak meminta reset kata sandi, silakan abaikan email ini. Link ini hanya berlaku selama 1 jam.",
+		WarningNote:   "Jika Anda tidak meminta reset kata sandi, silakan abaikan email ini. Link ini hanya berlaku selama 30 Menit.",
 	}
 
 	return s.send(ctx, toEmail, recipientName, payload)

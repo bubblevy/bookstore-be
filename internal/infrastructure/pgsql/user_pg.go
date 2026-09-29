@@ -56,3 +56,12 @@ func (r *userRepository) FindByActivationToken(ctx context.Context, token string
 func (r *userRepository) Update(ctx context.Context, user *entity.User) error {
 	return r.db.WithContext(ctx).Save(user).Error
 }
+
+func (r *userRepository) FindByResetPasswordToken(ctx context.Context, token string) (*entity.User, error) {
+	var user entity.User
+	err := r.db.WithContext(ctx).Where("reset_password_token = ?", token).First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}

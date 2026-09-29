@@ -44,14 +44,14 @@ func RateLimit(cfg RateLimitConfig) fiber.Handler {
 }
 
 var (
-	AuthRateLimit = RateLimitConfig{
+	StrictRateLimit = RateLimitConfig{
 		Max:        5,
 		Expiration: 1 * time.Minute,
 		KeyPrefix:  "auth",
 	}
 
 	StandardRateLimit = RateLimitConfig{
-		Max:        100,
+		Max:        60,
 		Expiration: 1 * time.Minute,
 		KeyPrefix:  "standard",
 	}

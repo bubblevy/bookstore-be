@@ -11,5 +11,6 @@ type UserRepository interface {
 	FindByEmail(ctx context.Context, email string) (*entity.User, error)
 	Create(ctx context.Context, user *entity.User) error
 	FindByActivationToken(ctx context.Context, token string) (*entity.User, error)
+	FindByResetPasswordToken(ctx context.Context, token string) (*entity.User, error)
 	Update(ctx context.Context, user *entity.User) error
 }

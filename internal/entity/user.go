@@ -62,3 +62,16 @@ type UserResponse struct {
 type ResendActivationRequest struct {
 	Email string `json:"email" validate:"required,email"`
 }
+
+type ActivateAccountRequest struct {
+	Token string `json:"token" validate:"required"`
+}
+
+type ResetPasswordRequest struct {
+	Email string `json:"email" validate:"required,email"`
+}
+type ChangePasswordRequest struct {
+	Token           string `json:"token" validate:"required"`
+	Password        string `json:"password" validate:"required,strong_password"`
+	ConfirmPassword string `json:"confirm_password" validate:"required"`
+}

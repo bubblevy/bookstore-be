@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"github.com/bubblevy/bookstore/internal/delivery/http/middleware"
 	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/usecase"
 	"github.com/bubblevy/bookstore/pkg/cookie"
@@ -23,14 +24,15 @@ func NewAuthHandler(r fiber.Router, u usecase.AuthUsecase, validate *validator.V
 	}
 
 	// routes
-	r.Post("/register", h.Register)
-	r.Post("/login", h.Login)
-	r.Post("/refresh-token", h.RefreshToken)
-	// r.Post("/reset-password", h.ResetPassword)
+	r.Post("/register", middleware.RateLimit(middleware.StandardRateLimit), h.Register)
+	r.Post("/login", middleware.RateLimit(middleware.StrictRateLimit), h.Login)
+	r.Post("/refresh-token", middleware.RateLimit(middleware.StandardRateLimit), h.RefreshToken)
+	r.Post("/forgot-password", middleware.RateLimit(middleware.StrictRateLimit), h.ForgotPassword)
+	r.Post("/reset-password", middleware.RateLimit(middleware.StrictRateLimit), h.ResetPassword)
 	// r.Post("/change-password", h.ChangePassword)
-	r.Delete("/logout", h.Logout)
-	r.Post("/resend-activation", h.ResendActivation)
-	r.Get("/activate-account", h.ActivateAccount)
+	r.Delete("/logout", middleware.RateLimit(middleware.StandardRateLimit), h.Logout)
+	r.Post("/resend-activation", middleware.RateLimit(middleware.StandardRateLimit), h.ResendActivation)
+	r.Post("/activate-account", middleware.RateLimit(middleware.StandardRateLimit), h.ActivateAccount)
 }
 
 func (h *AuthHandler) Register(c fiber.Ctx) error {
@@ -67,20 +69,25 @@ func (h *AuthHandler) ResendActivation(c fiber.Ctx) error {
 		return response.Error(c, fiber.StatusInternalServerError, "failed to process request", nil)
 	}
 
-	return response.Success(c, fiber.StatusOK, "if your email is registered and not yet activated, a new activation link has been sent to your inbox.", nil)
+	return response.Success(c, fiber.StatusOK, "if your email is registered and not yet activated, a new activation link has been sent to your inbox", nil)
 }
 
 func (h *AuthHandler) ActivateAccount(c fiber.Ctx) error {
-	token := c.Query("token")
-	if token == "" {
-		return response.Error(c, fiber.StatusBadRequest, "activation token is required", nil)
+	var req entity.ActivateAccountRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", nil)
 	}
 
-	if err := h.u.ActivateAccount(c.Context(), token); err != nil {
+	if err := h.validate.Struct(req); err != nil {
+		errorsMap := response.FormatValidationErrors(err)
+		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", errorsMap)
+	}
+
+	if err := h.u.ActivateAccount(c.Context(), req.Token); err != nil {
 		return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
 	}
 
-	return response.Success(c, fiber.StatusOK, "account activated successfully. you can now login.", nil)
+	return response.Success(c, fiber.StatusOK, "account activated successfully", nil)
 }
 
 func (h *AuthHandler) Login(c fiber.Ctx) error {
@@ -138,4 +145,40 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 
 	cookie.ClearAuthCookies(c)
 	return response.Success(c, fiber.StatusOK, "logout successful", nil)
+}
+
+func (h *AuthHandler) ForgotPassword(c fiber.Ctx) error {
+	var req entity.ResetPasswordRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", nil)
+	}
+
+	if err := h.validate.Struct(req); err != nil {
+		errorsMap := response.FormatValidationErrors(err)
+		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", errorsMap)
+	}
+
+	if err := h.u.ForgotPassword(c.Context(), req.Email); err != nil {
+		return response.Error(c, fiber.StatusInternalServerError, "failed to process request", nil)
+	}
+
+	return response.Success(c, fiber.StatusOK, "if your email is registered, a password reset link has been sent to your inbox", nil)
+}
+
+func (h *AuthHandler) ResetPassword(c fiber.Ctx) error {
+	var req entity.ChangePasswordRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", nil)
+	}
+
+	if err := h.validate.Struct(req); err != nil {
+		errorsMap := response.FormatValidationErrors(err)
+		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", errorsMap)
+	}
+
+	if err := h.u.ResetPassword(c.Context(), req.Password, req.ConfirmPassword, req.Token); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
+	}
+
+	return response.Success(c, fiber.StatusOK, "reset password successfully", nil)
 }
