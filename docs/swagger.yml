@@ -1,0 +1,380 @@
+openapi: 3.0.3
+info:
+  title: Bookstore API
+  description: The core API for the Bookstore application. This comprehensive API serves as the backend for the entire platform, handling authentication, user management, product catalogs, transactions, and other essential services.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: Local Development Server
+tags:
+  - name: Health
+    description: System health and readiness checks
+  - name: Auth
+    description: User authentication and account management
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: System health check
+      description: Returns the basic operational status of the service.
+      responses:
+        '200':
+          description: Service is up and running
+          content:
+            application/json:
+              example:
+                status: ok
+                service: Bookstore
+                timestamp: "2026-10-02T00:00:00Z"
+  /health/ready:
+    get:
+      tags:
+        - Health
+      summary: Database readiness check
+      description: Verifies if the service is successfully connected to the database.
+      responses:
+        '200':
+          description: Database is connected
+          content:
+            application/json:
+              example:
+                status: ok
+                database: connected
+                timestamp: "2026-10-02T00:00:00Z"
+        '503':
+          description: Database connection unavailable
+
+  /api/v1/auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Register a new user
+      description: Creates a new user account and sends an activation email.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid request payload or email already exists
+
+  /api/v1/auth/login:
+    post:
+      tags:
+        - Auth
+      summary: User login
+      description: Authenticates a user and sets HTTP-only cookies for access and refresh tokens.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: access_token=abcde12345; Path=/; HttpOnly
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          description: Invalid credentials or inactive account
+
+  /api/v1/auth/refresh-token:
+    post:
+      tags:
+        - Auth
+      summary: Refresh access token
+      description: Generates a new access and refresh token pair. Accepts refresh token via HTTP-only cookie or request body.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          description: Invalid, missing, or expired refresh token
+
+  /api/v1/auth/logout:
+    delete:
+      tags:
+        - Auth
+      summary: User logout
+      description: Revokes the current refresh token and clears authentication cookies.
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/auth/activate-account:
+    post:
+      tags:
+        - Auth
+      summary: Activate user account
+      description: Activates a newly registered account using the token sent via email.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivateAccountRequest'
+      responses:
+        '200':
+          description: Account activated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid or expired activation token
+
+  /api/v1/auth/resend-activation:
+    post:
+      tags:
+        - Auth
+      summary: Resend activation email
+      description: Generates a new activation token and resends the activation email to an unactivated user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendActivationRequest'
+      responses:
+        '200':
+          description: Activation email sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/auth/forgot-password:
+    post:
+      tags:
+        - Auth
+      summary: Request password reset
+      description: Sends a password reset link to the user's registered email address.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        '200':
+          description: Reset password email sent (if email exists)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/auth/reset-password:
+    post:
+      tags:
+        - Auth
+      summary: Reset password
+      description: Resets the user's password using the token sent via email. Also revokes all existing sessions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200':
+          description: Password reset successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid token, expired token, or password mismatch
+
+  /api/v1/auth/change-password:
+    post:
+      tags:
+        - Auth
+      summary: Change account password
+      description: Allows an authenticated user to change their password. Revokes other active sessions.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Incorrect current password or password mismatch
+        '401':
+          description: Unauthorized request
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Provide the JWT Access Token (can also be passed automatically via 'access_token' cookie).
+
+  schemas:
+    SuccessResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 200
+        status:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "request successful"
+        data:
+          type: object
+          nullable: true
+
+    RegisterRequest:
+      type: object
+      required:
+        - name
+        - email
+        - password
+      properties:
+        name:
+          type: string
+          minLength: 3
+          example: "John Doe"
+        email:
+          type: string
+          format: email
+          example: "john@example.com"
+        password:
+          type: string
+          format: password
+          description: "Must be at least 8 characters, with uppercase, lowercase, number, and special character."
+          example: "StrongP@ssw0rd!"
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: "john@example.com"
+        password:
+          type: string
+          format: password
+          example: "StrongP@ssw0rd!"
+
+    RefreshTokenRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          description: "Required only if not provided via HTTP-only cookie"
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+    ActivateAccountRequest:
+      type: object
+      required:
+        - token
+      properties:
+        token:
+          type: string
+          example: "random_hex_token_from_email"
+
+    ResendActivationRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          example: "john@example.com"
+
+    ForgotPasswordRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          example: "john@example.com"
+
+    ResetPasswordRequest:
+      type: object
+      required:
+        - token
+        - new_password
+        - confirm_password
+      properties:
+        token:
+          type: string
+          example: "random_hex_token_from_email"
+        new_password:
+          type: string
+          format: password
+          example: "NewStr0ngP@ss!"
+        confirm_password:
+          type: string
+          format: password
+          example: "NewStr0ngP@ss!"
+
+    ChangePasswordRequest:
+      type: object
+      required:
+        - current_password
+        - new_password
+        - confirm_password
+      properties:
+        current_password:
+          type: string
+          format: password
+          example: "OldP@ssw0rd!"
+        new_password:
+          type: string
+          format: password
+          example: "NewStr0ngP@ss!"
+        confirm_password:
+          type: string
+          format: password
+          example: "NewStr0ngP@ss!"
