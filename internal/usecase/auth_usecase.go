@@ -363,6 +363,15 @@ func (u *authUsecase) ActivateAccount(ctx context.Context, token string) error {
 		return entity.ErrInvalidActivationToken
 	}
 
+	if user.IsActive {
+		user.ActivationToken = nil
+		user.ActivationExpiresAt = nil
+		_ = u.userRepo.Update(ctx, user)
+
+		logger.Info("activate account - user already active", "user_id", user.ID)
+		return entity.ErrAccountAlreadyActive
+	}
+
 	if user.ActivationExpiresAt != nil && time.Now().After(*user.ActivationExpiresAt) {
 		logger.Warn("activate account - token expired", "user_id", user.ID)
 		return entity.ErrActivationTokenExpired

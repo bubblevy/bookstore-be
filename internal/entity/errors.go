@@ -24,4 +24,5 @@ var (
 	ErrResetPasswordTokenRequired  = errors.New("reset password token is required")
 	ErrResetPasswordTokenExpired   = errors.New("reset password token has expired")
 	ErrInvalidCurrentPassword      = errors.New("current password is incorrect")
+	ErrAccountAlreadyActive        = errors.New("account is already active")
 )

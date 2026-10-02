@@ -3,11 +3,13 @@ package handler
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 
 	"github.com/bubblevy/bookstore/config"
 	"github.com/bubblevy/bookstore/internal/delivery/http/dto"
 	"github.com/bubblevy/bookstore/internal/delivery/http/middleware"
+	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/usecase"
 	"github.com/bubblevy/bookstore/pkg/cookie"
 	"github.com/bubblevy/bookstore/pkg/response"
@@ -99,6 +101,9 @@ func (h *AuthHandler) ActivateAccount(c fiber.Ctx) error {
 	}
 
 	if err := h.u.ActivateAccount(c.Context(), req.Token); err != nil {
+		if errors.Is(err, entity.ErrAccountAlreadyActive) {
+			return response.Success(c, fiber.StatusOK, "account is already active", nil)
+		}
 		return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
 	}
 
