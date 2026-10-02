@@ -7,14 +7,17 @@ import (
 
 	"github.com/bubblevy/bookstore/pkg/email"
 	"github.com/joho/godotenv"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 )
 
 type AppConfig struct {
-	BaseURL   string
-	Port      string
-	JWTSecret string
-	SMTP      email.SMTPConfig
-	AppEnv    string
+	BaseURL     string
+	Port        string
+	JWTSecret   string
+	SMTP        email.SMTPConfig
+	AppEnv      string
+	GoogleOAuth *oauth2.Config
 }
 
 func LoadConfig() AppConfig {
@@ -41,6 +44,16 @@ func LoadConfig() AppConfig {
 			UseTLS:      getEnvBool("SMTP_USE_TLS", false),
 			FrontendURL: os.Getenv("FRONTEND_URL"),
 		},
+		GoogleOAuth: &oauth2.Config{
+			ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+			ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+			RedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"),
+			Scopes: []string{
+				"https://www.googleapis.com/auth/userinfo.email",
+				"https://www.googleapis.com/auth/userinfo.profile",
+			},
+			Endpoint: google.Endpoint,
+		},
 	}
 
 	// validate required fields
@@ -58,6 +71,12 @@ func LoadConfig() AppConfig {
 	// validate SMTP config
 	if cfg.SMTP.Host == "" || cfg.SMTP.Port == "" || cfg.SMTP.AuthUser == "" || cfg.SMTP.AuthPass == "" || cfg.SMTP.FromEmail == "" {
 		fmt.Fprintln(os.Stderr, "fatal: SMTP configuration is incomplete: SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, EMAIL_FROM_ADDRESS are required")
+		os.Exit(1)
+	}
+
+	// validate Google OAuth config
+	if cfg.GoogleOAuth.ClientID == "" || cfg.GoogleOAuth.ClientSecret == "" || cfg.GoogleOAuth.RedirectURL == "" {
+		fmt.Fprintln(os.Stderr, "fatal: Google OAuth configuration is incomplete: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URL are required")
 		os.Exit(1)
 	}
 

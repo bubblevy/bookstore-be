@@ -1,6 +1,11 @@
 package handler
 
 import (
+	"crypto/rand"
+	"encoding/base64"
+	"fmt"
+
+	"github.com/bubblevy/bookstore/config"
 	"github.com/bubblevy/bookstore/internal/delivery/http/dto"
 	"github.com/bubblevy/bookstore/internal/delivery/http/middleware"
 	"github.com/bubblevy/bookstore/internal/usecase"
@@ -8,19 +13,24 @@ import (
 	"github.com/bubblevy/bookstore/pkg/response"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v3"
+	"golang.org/x/oauth2"
 )
 
 type AuthHandler struct {
 	u              usecase.AuthUsecase
 	validate       *validator.Validate
 	authMiddleware fiber.Handler
+	oauthConfig    *oauth2.Config
+	frontendURL    string
 }
 
-func NewAuthHandler(r fiber.Router, u usecase.AuthUsecase, validate *validator.Validate, authMiddleware fiber.Handler) {
+func NewAuthHandler(r fiber.Router, u usecase.AuthUsecase, validate *validator.Validate, authMiddleware fiber.Handler, cfg config.AppConfig) {
 	h := &AuthHandler{
 		u:              u,
 		validate:       validate,
 		authMiddleware: authMiddleware,
+		oauthConfig:    cfg.GoogleOAuth,
+		frontendURL:    cfg.SMTP.FrontendURL,
 	}
 
 	// routes
@@ -33,6 +43,8 @@ func NewAuthHandler(r fiber.Router, u usecase.AuthUsecase, validate *validator.V
 	r.Delete("/logout", middleware.RateLimit(middleware.StandardRateLimit), h.Logout)
 	r.Post("/resend-activation", middleware.RateLimit(middleware.StandardRateLimit), h.ResendActivation)
 	r.Post("/activate-account", middleware.RateLimit(middleware.StandardRateLimit), h.ActivateAccount)
+	r.Get("/google/login", h.GoogleLogin)
+	r.Get("/google/callback", h.GoogleCallback)
 }
 
 func (h *AuthHandler) Register(c fiber.Ctx) error {
@@ -219,4 +231,44 @@ func (h *AuthHandler) ChangePassword(c fiber.Ctx) error {
 	}
 
 	return response.Success(c, fiber.StatusOK, "password changed successfully", nil)
+}
+
+func (h *AuthHandler) GoogleLogin(c fiber.Ctx) error {
+	b := make([]byte, 16)
+	rand.Read(b)
+	state := base64.URLEncoding.EncodeToString(b)
+
+	c.Cookie(&fiber.Cookie{
+		Name:     "oauth_state",
+		Value:    state,
+		MaxAge:   300,
+		HTTPOnly: true,
+	})
+
+	url := h.oauthConfig.AuthCodeURL(state)
+	return c.Redirect().To(url)
+}
+
+func (h *AuthHandler) GoogleCallback(c fiber.Ctx) error {
+	state := c.Query("state")
+	cookieState := c.Cookies("oauth_state")
+
+	if state != cookieState {
+		return response.Error(c, fiber.StatusUnauthorized, "invalid oauth state", nil)
+	}
+
+	c.Cookie(&fiber.Cookie{Name: "oauth_state", MaxAge: -1})
+
+	code := c.Query("code")
+	if code == "" {
+		return response.Error(c, fiber.StatusBadRequest, "code not found", nil)
+	}
+
+	result, err := h.u.GoogleLogin(c.Context(), code, h.oauthConfig)
+	if err != nil {
+		return c.Redirect().To(fmt.Sprintf("%s/login?error=oauth_failed", h.frontendURL))
+	}
+
+	cookie.SetAuthCookies(c, result.AccessToken, result.RefreshToken)
+	return c.Redirect().To(fmt.Sprintf("%s/dashboard", h.frontendURL))
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"gorm.io/gorm"
 
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/oauth2"
 )
 
 type RegisterInput struct {
@@ -50,6 +52,12 @@ type AuthResult struct {
 	RefreshToken string
 }
 
+type GoogleUser struct {
+	ID    string `json:"id"`
+	Email string `json:"email"`
+	Name  string `json:"name"`
+}
+
 type AuthUsecase interface {
 	Login(ctx context.Context, i LoginInput) (*AuthResult, error)
 	Register(ctx context.Context, i RegisterInput) error
@@ -61,6 +69,7 @@ type AuthUsecase interface {
 	ForgotPassword(ctx context.Context, email string) error
 	ResetPassword(ctx context.Context, i ResetPasswordInput) error
 	ChangePassword(ctx context.Context, i ChangePasswordInput) error
+	GoogleLogin(ctx context.Context, code string, oauthConfig *oauth2.Config) (*AuthResult, error)
 }
 
 type authUsecase struct {
@@ -571,4 +580,92 @@ func (u *authUsecase) ChangePassword(ctx context.Context, i ChangePasswordInput)
 
 	logger.Info("change password account - password changed", "user_id", user.ID)
 	return nil
+}
+
+func (u *authUsecase) GoogleLogin(ctx context.Context, code string, oauthConfig *oauth2.Config) (*AuthResult, error) {
+	token, err := oauthConfig.Exchange(ctx, code)
+	if err != nil {
+		logger.Error("google login - failed to exchange token", "error", err)
+		return nil, errors.New("failed to exchange google token")
+	}
+
+	client := oauthConfig.Client(ctx, token)
+	response, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
+	if err != nil {
+		logger.Error("google login - failed to get user info", "error", err)
+		return nil, errors.New("failed to get user info from google")
+	}
+	defer response.Body.Close()
+
+	var googleUser GoogleUser
+	if err := json.NewDecoder(response.Body).Decode(&googleUser); err != nil {
+		return nil, errors.New("failed to decode google user info")
+	}
+
+	var accessToken, refreshToken string
+	err = u.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+		user, err := u.userRepo.FindByEmail(txCtx, googleUser.Email)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				user = &entity.User{
+					Name:     googleUser.Name,
+					Email:    googleUser.Email,
+					GoogleID: &googleUser.ID,
+					Role:     entity.RoleUser,
+					IsActive: true,
+				}
+				if err := u.userRepo.Create(txCtx, user); err != nil {
+					return fmt.Errorf("failed to create user: %w", err)
+				}
+				logger.Info("new user registered via google", "user_id", user.ID)
+			} else {
+				return fmt.Errorf("failed to check user: %w", err)
+			}
+		} else {
+			if user.GoogleID == nil {
+				user.GoogleID = &googleUser.ID
+				user.IsActive = true
+				if err := u.userRepo.Update(txCtx, user); err != nil {
+					return fmt.Errorf("failed to update user google id: %w", err)
+				}
+			} else {
+				if !user.IsActive {
+					logger.Warn("google login failed - account inactive", "user_id", user.ID)
+					return entity.ErrAccountInactive
+				}
+			}
+		}
+
+		accessToken, err = u.jwtService.GenerateToken(user.ID, user.Email, string(user.Role))
+		if err != nil {
+			return fmt.Errorf("failed to generate access token: %w", err)
+		}
+
+		refreshToken, err = u.jwtService.GenerateRefreshToken(user.ID)
+		if err != nil {
+			return fmt.Errorf("failed to generate refresh token: %w", err)
+		}
+
+		session := &entity.UserSession{
+			UserID:           user.ID,
+			RefreshTokenHash: hash.SHA256(refreshToken),
+			ExpiresAt:        time.Now().Add(7 * 24 * time.Hour),
+		}
+
+		if err := u.sessionRepo.Create(txCtx, session); err != nil {
+			return fmt.Errorf("failed to create session: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		logger.Error("google login - transaction failed", "error", err)
+		return nil, err
+	}
+
+	return &AuthResult{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+	}, nil
 }

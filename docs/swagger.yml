@@ -240,6 +240,43 @@ paths:
         '401':
           description: Unauthorized request
 
+  /api/v1/auth/google/login:
+    get:
+      tags:
+        - Auth
+      summary: Initiate Google OAuth2 Login
+      description: Redirects the user to the Google Consent screen.
+      responses:
+        '302':
+          description: Redirects to Google's OAuth2 authorization URL.
+
+  /api/v1/auth/google/callback:
+    get:
+      tags:
+        - Auth
+      summary: Google OAuth2 Callback
+      description: The callback endpoint for Google OAuth2. Google redirects here with an authorization code. The server exchanges it for a token, creates/updates the user, sets HTTP-only cookies, and redirects to the frontend dashboard.
+      parameters:
+        - in: query
+          name: code
+          required: true
+          schema:
+            type: string
+          description: The authorization code returned by Google.
+        - in: query
+          name: state
+          required: true
+          schema:
+            type: string
+          description: The CSRF state token to validate against the cookie.
+      responses:
+        '302':
+          description: Login successful, sets `access_token` and `refresh_token` cookies, and redirects to the frontend.
+        '400':
+          description: Missing code or invalid request.
+        '401':
+          description: Invalid OAuth state (CSRF failure).
+
 components:
   securitySchemes:
     BearerAuth:

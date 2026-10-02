@@ -79,15 +79,5 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 
 	// auth routes
 	authGroup := api.Group("/auth")
-	handler.NewAuthHandler(authGroup, authUsecase, validate, authMiddleware)
-
-	// user routes
-	userGroup := api.Group("/users")
-	userGroup.Use(middleware.RateLimit(middleware.StandardRateLimit))
-	// handler.NewUserHandler(userGroup, ...)
-
-	// public routes - relaxed rate limit (200 req/min)
-	// publicGroup := api.Group("/public")
-	// publicGroup.Use(middleware.RateLimit(middleware.ReadRateLimit))
-	// handler.NewPublicHandler(publicGroup, ...)
+	handler.NewAuthHandler(authGroup, authUsecase, validate, authMiddleware, cfg)
 }

@@ -1,9 +1,14 @@
 package auth_usecase_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/oauth2"
 	"gorm.io/gorm"
 )
 
@@ -547,7 +553,7 @@ func TestRefreshToken_SessionNotFound(t *testing.T) {
 func TestRefreshToken_SessionMismatch(t *testing.T) {
 	// Create a mock session repo that returns a session with wrong user_id
 	sessionRepo := &mockSessionRepoWithMismatch{
-		mockSessionRepo:  *newMockSessionRepo(),
+		mockSessionRepo: *newMockSessionRepo(),
 		mismatchUserID:  2,
 	}
 
@@ -1206,4 +1212,143 @@ func TestResendActivation_UpdatesToken(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, user.ActivationToken)
 	assert.NotEqual(t, hashedOldToken, *user.ActivationToken)
+}
+
+// ============================================================================
+// GOOGLE OAUTH2 TESTS
+// ============================================================================
+
+// mockOAuthTransport is used to intercept HTTP requests to the Google API
+type mockOAuthTransport struct {
+	mockUser     map[string]any
+	failExchange bool
+	failUserInfo bool
+}
+
+func (m *mockOAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Mock the response for oauthConfig.Exchange()
+	if strings.Contains(req.URL.Path, "/token") {
+		if m.failExchange {
+			return &http.Response{StatusCode: 400, Body: io.NopCloser(strings.NewReader("error"))}, nil
+		}
+		body := `{"access_token": "mock-token", "token_type": "Bearer"}`
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
+	}
+
+	// Mock the response for client.Get("/oauth2/v2/userinfo")
+	if strings.Contains(req.URL.Path, "/oauth2/v2/userinfo") {
+		if m.failUserInfo {
+			return &http.Response{StatusCode: 400, Body: io.NopCloser(strings.NewReader("error"))}, nil
+		}
+		b, _ := json.Marshal(m.mockUser)
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(b))}, nil
+	}
+
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+// setupGoogleMockContext is a helper to inject the mock HTTP client into the context
+func setupGoogleMockContext(transport *mockOAuthTransport) context.Context {
+	mockClient := &http.Client{Transport: transport}
+	// Override the default oauth2 HTTP Client with our Mock Client
+	return context.WithValue(context.Background(), oauth2.HTTPClient, mockClient)
+}
+
+func TestGoogleLogin_NewUser_Success(t *testing.T) {
+	authUC, userRepo, sessionRepo, _, _ := setupAuthUsecase()
+
+	mockTransport := &mockOAuthTransport{
+		mockUser: map[string]any{
+			"id":    "google-123",
+			"email": "newuser@gmail.com",
+			"name":  "Google User",
+		},
+	}
+	ctx := setupGoogleMockContext(mockTransport)
+	oauthConfig := &oauth2.Config{Endpoint: oauth2.Endpoint{TokenURL: "http://mock/token"}}
+
+	result, err := authUC.GoogleLogin(ctx, "mock-auth-code", oauthConfig)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.NotEmpty(t, result.AccessToken)
+
+	// Verify the new user is correctly created in the database
+	user, _ := userRepo.FindByEmail(ctx, "newuser@gmail.com")
+	assert.NotNil(t, user)
+	assert.Equal(t, "google-123", *user.GoogleID)
+	assert.True(t, user.IsActive)
+	assert.Equal(t, 1, len(sessionRepo.sessions))
+}
+
+func TestGoogleLogin_ExistingUser_NoGoogleID_Success(t *testing.T) {
+	authUC, userRepo, _, _, _ := setupAuthUsecase()
+
+	// Simulate a user who previously registered via Email but hasn't connected to Google yet
+	existingUser := createTestUser("existing@gmail.com", false, 1)
+	userRepo.users["existing@gmail.com"] = existingUser
+	userRepo.usersByID[1] = existingUser
+
+	mockTransport := &mockOAuthTransport{
+		mockUser: map[string]any{
+			"id":    "google-456",
+			"email": "existing@gmail.com",
+			"name":  "Existing User",
+		},
+	}
+	ctx := setupGoogleMockContext(mockTransport)
+	oauthConfig := &oauth2.Config{Endpoint: oauth2.Endpoint{TokenURL: "http://mock/token"}}
+
+	result, err := authUC.GoogleLogin(ctx, "mock-auth-code", oauthConfig)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+
+	// Verify the account is now successfully linked (GoogleID is populated and account is active)
+	user, _ := userRepo.FindByEmail(ctx, "existing@gmail.com")
+	assert.Equal(t, "google-456", *user.GoogleID)
+	assert.True(t, user.IsActive)
+}
+
+func TestGoogleLogin_BannedUser_Fail(t *testing.T) {
+	authUC, userRepo, _, _, _ := setupAuthUsecase()
+
+	// Simulate a user who connected to Google but was subsequently banned (IsActive = false)
+	existingUser := createTestUser("banned@gmail.com", false, 1)
+	googleID := "google-789"
+	existingUser.GoogleID = &googleID
+	userRepo.users["banned@gmail.com"] = existingUser
+	userRepo.usersByID[1] = existingUser
+
+	mockTransport := &mockOAuthTransport{
+		mockUser: map[string]any{
+			"id":    "google-789",
+			"email": "banned@gmail.com",
+			"name":  "Banned User",
+		},
+	}
+	ctx := setupGoogleMockContext(mockTransport)
+	oauthConfig := &oauth2.Config{Endpoint: oauth2.Endpoint{TokenURL: "http://mock/token"}}
+
+	result, err := authUC.GoogleLogin(ctx, "mock-auth-code", oauthConfig)
+
+	// Login should fail and return an inactive account error
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Equal(t, entity.ErrAccountInactive, err)
+}
+
+func TestGoogleLogin_ExchangeCode_Fail(t *testing.T) {
+	authUC, _, _, _, _ := setupAuthUsecase()
+
+	// Simulate a failure when exchanging the auth code for a token with Google
+	mockTransport := &mockOAuthTransport{failExchange: true}
+	ctx := setupGoogleMockContext(mockTransport)
+	oauthConfig := &oauth2.Config{Endpoint: oauth2.Endpoint{TokenURL: "http://mock/token"}}
+
+	result, err := authUC.GoogleLogin(ctx, "invalid-code", oauthConfig)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "failed to exchange")
 }
