@@ -11,10 +11,12 @@ tags:
     description: System health and readiness checks
   - name: Auth
     description: User authentication and account management
+  - name: Category
+    description: Book category catalog management (Public browsing, Admin CRUD)
   - name: Address
     description: User shipping address management (CRUD, primary address, max 5 addresses)
   - name: Shipping
-    description: RajaOngkir v2 destination lookup and shipping cost calculation
+    description: RajaOngkir destination lookup and authenticated shipping cost calculation
 paths:
   /health:
     get:
@@ -252,7 +254,7 @@ paths:
       summary: Initiate Google OAuth2 Login
       description: Redirects the user to the Google Consent screen.
       responses:
-        '302':
+        '303':
           description: Redirects to Google's OAuth2 authorization URL.
 
   /api/v1/auth/google/callback:
@@ -260,7 +262,7 @@ paths:
       tags:
         - Auth
       summary: Google OAuth2 Callback
-      description: The callback endpoint for Google OAuth2. Google redirects here with an authorization code. The server exchanges it for a token, creates/updates the user, sets HTTP-only cookies, and redirects to the frontend dashboard.
+      description: The callback endpoint for Google OAuth2. Exchanges authorization code for token, creates or links user, sets HTTP-only cookies, and redirects to frontend dashboard.
       parameters:
         - in: query
           name: code
@@ -275,12 +277,205 @@ paths:
             type: string
           description: The CSRF state token to validate against the cookie.
       responses:
-        '302':
-          description: Login successful, sets `access_token` and `refresh_token` cookies, and redirects to the frontend.
+        '303':
+          description: Login successful, sets `access_token` and `refresh_token` cookies, and redirects to dashboard.
         '400':
           description: Missing code or invalid request.
         '401':
           description: Invalid OAuth state (CSRF failure).
+
+  /api/v1/categories:
+    get:
+      tags:
+        - Category
+      summary: Get all active categories
+      description: Public endpoint to retrieve all categories available in the store.
+      responses:
+        '200':
+          description: Categories retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "categories retrieved successfully"
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CategoryListItem'
+        '500':
+          description: Internal server error
+    post:
+      tags:
+        - Category
+      summary: Create a category
+      description: Admin-only endpoint to create a new book category. Slug is automatically generated from name.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCategoryRequest'
+      responses:
+        '201':
+          description: Category created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 201
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "category created successfully"
+                  data:
+                    $ref: '#/components/schemas/CategoryResult'
+        '400':
+          description: Validation error
+        '401':
+          description: Unauthorized request
+        '403':
+          description: Forbidden (Admin role required)
+        '409':
+          description: Category slug already exists
+        '500':
+          description: Internal server error
+
+  /api/v1/categories/{slug}:
+    get:
+      tags:
+        - Category
+      summary: Get category by slug
+      description: Public endpoint to retrieve details of a specific category using its slug.
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+          description: The category slug (e.g. fiksi-ilmiah)
+      responses:
+        '200':
+          description: Category retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "category retrieved successfully"
+                  data:
+                    $ref: '#/components/schemas/CategoryResult'
+        '404':
+          description: Category not found
+        '500':
+          description: Internal server error
+
+  /api/v1/categories/{id}:
+    put:
+      tags:
+        - Category
+      summary: Update a category
+      description: Admin-only endpoint to update an existing category's name and regenerated slug.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: The category ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCategoryRequest'
+      responses:
+        '200':
+          description: Category updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "category updated successfully"
+                  data:
+                    $ref: '#/components/schemas/CategoryResult'
+        '400':
+          description: Validation error or invalid ID parameter
+        '401':
+          description: Unauthorized request
+        '403':
+          description: Forbidden (Admin role required)
+        '404':
+          description: Category not found
+        '409':
+          description: Category slug already exists
+        '500':
+          description: Internal server error
+    delete:
+      tags:
+        - Category
+      summary: Delete a category
+      description: Admin-only endpoint to soft-delete a category.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: The category ID
+      responses:
+        '200':
+          description: Category deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid ID parameter
+        '401':
+          description: Unauthorized request
+        '403':
+          description: Forbidden (Admin role required)
+        '404':
+          description: Category not found
+        '500':
+          description: Internal server error
 
   /api/v1/addresses:
     get:
@@ -319,7 +514,7 @@ paths:
       tags:
         - Address
       summary: Create a new address
-      description: Adds a new address for the authenticated user using Komerce destination ID. Maximum 5 addresses per user. First address becomes primary automatically.
+      description: Adds a new address for the authenticated user using RajaOngkir/Komerce destination ID. Maximum 5 addresses per user. First address becomes primary automatically.
       security:
         - BearerAuth: []
       requestBody:
@@ -509,7 +704,7 @@ paths:
       tags:
         - Shipping
       summary: Search domestic destination
-      description: Single-endpoint location lookup using keyword (minimum 3 characters) powered by RajaOngkir/Komerce.
+      description: Public single-endpoint location lookup using keyword (minimum 3 characters) powered by RajaOngkir/Komerce.
       parameters:
         - in: query
           name: search
@@ -563,7 +758,9 @@ paths:
       tags:
         - Shipping
       summary: Calculate domestic shipping cost
-      description: Calculates delivery rates from store origin (Welahan, Jepara) to the destination location ID using selected couriers.
+      description: Calculates delivery rates from store origin (Welahan, Jepara) to the destination location ID using selected couriers. Requires authentication as purchase checkout mandates login.
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -593,6 +790,8 @@ paths:
                       $ref: '#/components/schemas/ShippingCostResult'
         '400':
           description: Invalid request payload
+        '401':
+          description: Unauthorized request
         '500':
           description: Failed to calculate shipping costs from RajaOngkir
 
@@ -621,6 +820,68 @@ components:
           type: object
           nullable: true
 
+    # =========================================================================
+    # CATEGORY SCHEMAS
+    # =========================================================================
+    CreateCategoryRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: "Sains & Teknologi"
+
+    UpdateCategoryRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: "Fiksi Ilmiah"
+
+    CategoryListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "Fiksi"
+        slug:
+          type: string
+          example: "fiksi"
+
+    CategoryResult:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "Fiksi Ilmiah"
+        slug:
+          type: string
+          example: "fiksi-ilmiah"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-10-14T09:39:55+07:00"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-10-14T09:39:55+07:00"
+
+    # =========================================================================
+    # AUTH SCHEMAS
+    # =========================================================================
     RegisterRequest:
       type: object
       required:
@@ -735,6 +996,9 @@ components:
           format: password
           example: "NewStr0ngP@ss!"
 
+    # =========================================================================
+    # ADDRESS SCHEMAS
+    # =========================================================================
     CreateAddressRequest:
       type: object
       required:
@@ -916,6 +1180,9 @@ components:
           nullable: true
           example: null
 
+    # =========================================================================
+    # SHIPPING SCHEMAS
+    # =========================================================================
     DomesticDestination:
       type: object
       properties:

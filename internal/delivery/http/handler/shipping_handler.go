@@ -21,7 +21,7 @@ type CheckCostPayload struct {
 	Courier       string `json:"courier"`
 }
 
-func NewShippingHandler(r fiber.Router, roClient *rajaongkir.Client, validate *validator.Validate) {
+func NewShippingHandler(r fiber.Router, roClient *rajaongkir.Client, validate *validator.Validate, authMiddleware fiber.Handler) {
 	h := &ShippingHandler{
 		roClient: roClient,
 		validate: validate,
@@ -29,7 +29,7 @@ func NewShippingHandler(r fiber.Router, roClient *rajaongkir.Client, validate *v
 
 	routes := r.Group("/shipping")
 	routes.Get("/destinations", middleware.RateLimit(middleware.StandardRateLimit), h.SearchDestinations)
-	routes.Post("/cost", middleware.RateLimit(middleware.StandardRateLimit), h.CheckCost)
+	routes.Post("/cost", authMiddleware, middleware.RateLimit(middleware.StrictRateLimit), h.CheckCost)
 }
 
 func (h *ShippingHandler) SearchDestinations(c fiber.Ctx) error {

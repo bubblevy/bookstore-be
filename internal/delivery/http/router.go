@@ -64,6 +64,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	jwtService := jwt.NewJWTService(cfg.JWTSecret)
 	validate := validator.NewValidator()
 	authMiddleware := middleware.AuthMiddleware(jwtService)
+	adminMiddleware := middleware.AdminMiddleware()
 	emailSender := email.NewSMTPEmailSender(cfg.SMTP)
 	txManager := pgsql.NewTransactionManager(db)
 
@@ -89,5 +90,10 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 
 	// shipping routes
 	roClient := rajaongkir.NewClient(cfg.RajaOngkir)
-	handler.NewShippingHandler(api, roClient, validate)
+	handler.NewShippingHandler(api, roClient, validate, authMiddleware)
+
+	// category routes
+	categoryRepo := pgsql.NewCategoryRepository(db)
+	categoryUsecase := usecase.NewCategoryUsecase(categoryRepo)
+	handler.NewCategoryHandler(api, categoryUsecase, validate, authMiddleware, adminMiddleware)
 }

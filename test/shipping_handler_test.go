@@ -110,9 +110,21 @@ func TestRajaOngkirClient_CalculateCost_Success(t *testing.T) {
 // SHIPPING HTTP HANDLER TESTS
 // ============================================================================
 
-func setupShippingApp(mockServerURL string) *fiber.App {
+func setupShippingApp(mockServerURL string, authenticated bool) *fiber.App {
 	app := fiber.New()
 	validate := validator.New()
+
+	authMiddleware := func(c fiber.Ctx) error {
+		if !authenticated {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"code":    401,
+				"status":  false,
+				"message": "unauthorized",
+			})
+		}
+		c.Locals("user_id", uint(1))
+		return c.Next()
+	}
 
 	client := rajaongkir.NewClient(config.RajaOngkirConfig{
 		APIKey:   "mock-key",
@@ -121,7 +133,7 @@ func setupShippingApp(mockServerURL string) *fiber.App {
 	})
 
 	api := app.Group("/api/v1")
-	handler.NewShippingHandler(api, client, validate)
+	handler.NewShippingHandler(api, client, validate, authMiddleware)
 	return app
 }
 
@@ -142,7 +154,8 @@ func TestShippingHandler_SearchDestinations_Success(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	app := setupShippingApp(mockServer.URL)
+	// Public endpoint: tetap jalan walau authenticated = false
+	app := setupShippingApp(mockServer.URL, false)
 
 	req := httptest.NewRequest("GET", "/api/v1/shipping/destinations?search=welahan", nil)
 	resp, err := app.Test(req)
@@ -150,7 +163,6 @@ func TestShippingHandler_SearchDestinations_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	body, _ := io.ReadAll(resp.Body)
-
 	var res struct {
 		Code    int                              `json:"code"`
 		Status  bool                             `json:"status"`
@@ -166,7 +178,7 @@ func TestShippingHandler_SearchDestinations_Success(t *testing.T) {
 }
 
 func TestShippingHandler_SearchDestinations_QueryTooShort(t *testing.T) {
-	app := setupShippingApp("http://dummy-url")
+	app := setupShippingApp("http://dummy-url", false)
 
 	req := httptest.NewRequest("GET", "/api/v1/shipping/destinations?search=we", nil)
 	resp, err := app.Test(req)
@@ -192,7 +204,8 @@ func TestShippingHandler_CheckCost_Success(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	app := setupShippingApp(mockServer.URL)
+	// Protected endpoint: authenticated = true
+	app := setupShippingApp(mockServer.URL, true)
 
 	reqBody := `{"destination_id": 19601, "weight_grams": 1000}`
 	req := httptest.NewRequest("POST", "/api/v1/shipping/cost", strings.NewReader(reqBody))
@@ -203,7 +216,6 @@ func TestShippingHandler_CheckCost_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	body, _ := io.ReadAll(resp.Body)
-
 	var res struct {
 		Code    int                             `json:"code"`
 		Status  bool                            `json:"status"`
@@ -218,10 +230,22 @@ func TestShippingHandler_CheckCost_Success(t *testing.T) {
 	assert.Equal(t, 15000, res.Data[0].Cost)
 }
 
-func TestShippingHandler_CheckCost_ValidationError(t *testing.T) {
-	app := setupShippingApp("http://dummy-url")
+func TestShippingHandler_CheckCost_Unauthorized(t *testing.T) {
+	// authenticated = false
+	app := setupShippingApp("http://dummy-url", false)
 
-	// Payload tanpa destination_id (wajib > 0)
+	reqBody := `{"destination_id": 19601, "weight_grams": 1000}`
+	req := httptest.NewRequest("POST", "/api/v1/shipping/cost", strings.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestShippingHandler_CheckCost_ValidationError(t *testing.T) {
+	app := setupShippingApp("http://dummy-url", true)
+
 	reqBody := `{"destination_id": 0, "weight_grams": 1000}`
 	req := httptest.NewRequest("POST", "/api/v1/shipping/cost", strings.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")

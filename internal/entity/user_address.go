@@ -1,6 +1,21 @@
 package entity
 
-import "gorm.io/gorm"
+import (
+	"errors"
+
+	"gorm.io/gorm"
+)
+
+var (
+	ErrAddressNotFound            = errors.New("address not found")
+	ErrAddressForbidden           = errors.New("you are not authorized to access this address")
+	ErrFailedCreateAddress        = errors.New("failed to create address")
+	ErrFailedUpdateAddress        = errors.New("failed to update address")
+	ErrFailedDeleteAddress        = errors.New("failed to delete address")
+	ErrFailedFetchAddress         = errors.New("failed to fetch address")
+	ErrAddressLimitReached        = errors.New("maximum address limit reached (maximum 5 addresses)")
+	ErrCannotDeletePrimaryAddress = errors.New("cannot delete primary address, please set another address as primary first")
+)
 
 type UserAddress struct {
 	gorm.Model

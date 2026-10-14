@@ -1,7 +1,16 @@
 package entity
 
 import (
+	"errors"
+
 	"gorm.io/gorm"
+)
+
+var (
+	ErrBookNotFound     = errors.New("book not found")
+	ErrBookSlugConflict = errors.New("book slug already exists")
+	ErrBookISBNConflict = errors.New("book isbn already exists")
+	ErrBookOutOfStock   = errors.New("book out of stock")
 )
 
 type Book struct {
@@ -10,8 +19,8 @@ type Book struct {
 	AuthorID        uint    `gorm:"not null;index" json:"author_id"`
 	PublisherID     uint    `gorm:"not null" json:"publisher_id"`
 	Title           string  `gorm:"type:varchar(255);not null" json:"title"`
-	Slug            string  `gorm:"type:varchar(270);uniqueIndex;not null" json:"slug"`
-	ISBN            *string `gorm:"type:varchar(30);uniqueIndex" json:"isbn,omitempty"`
+	Slug            string  `gorm:"type:varchar(270);not null;uniqueIndex:uq_books_slug_active,where:deleted_at IS NULL" json:"slug"`
+	ISBN            *string `gorm:"type:varchar(30);uniqueIndex:uq_books_isbn_active,where:deleted_at IS NULL AND isbn IS NOT NULL" json:"isbn,omitempty"`
 	Synopsis        *string `gorm:"type:text" json:"synopsis,omitempty"`
 	Price           float64 `gorm:"type:numeric(12,2);not null" json:"price"`
 	WeightGrams     int     `gorm:"not null" json:"weight_grams"`
