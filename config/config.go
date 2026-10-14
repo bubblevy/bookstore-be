@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/bubblevy/bookstore/pkg/email"
@@ -11,6 +12,12 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
+type RajaOngkirConfig struct {
+	APIKey   string
+	BaseURL  string
+	OriginID int
+}
+
 type AppConfig struct {
 	BaseURL     string
 	Port        string
@@ -18,6 +25,7 @@ type AppConfig struct {
 	SMTP        email.SMTPConfig
 	AppEnv      string
 	GoogleOAuth *oauth2.Config
+	RajaOngkir  RajaOngkirConfig
 }
 
 func LoadConfig() AppConfig {
@@ -26,6 +34,8 @@ func LoadConfig() AppConfig {
 		fmt.Fprintln(os.Stderr, "environment variable failed to load or .env file not found")
 		os.Exit(1)
 	}
+
+	originCityID, _ := strconv.Atoi(os.Getenv("RAJAONGKIR_ORIGIN_CITY_ID"))
 
 	cfg := AppConfig{
 		BaseURL:   os.Getenv("BASE_URL"),
@@ -54,7 +64,17 @@ func LoadConfig() AppConfig {
 			},
 			Endpoint: google.Endpoint,
 		},
+		RajaOngkir: RajaOngkirConfig{
+			APIKey:   os.Getenv("RAJAONGKIR_API_KEY"),
+			BaseURL:  os.Getenv("RAJAONGKIR_BASE_URL"),
+			OriginID: originCityID,
+		},
 	}
+
+	if cfg.RajaOngkir.BaseURL == "" {
+		cfg.RajaOngkir.BaseURL = "https://api.rajaongkir.com/starter"
+	}
+	cfg.RajaOngkir.BaseURL = strings.TrimSuffix(cfg.RajaOngkir.BaseURL, "/")
 
 	// validate required fields
 	if cfg.SMTP.AppName == "" || cfg.JWTSecret == "" || cfg.BaseURL == "" {
@@ -77,6 +97,12 @@ func LoadConfig() AppConfig {
 	// validate Google OAuth config
 	if cfg.GoogleOAuth.ClientID == "" || cfg.GoogleOAuth.ClientSecret == "" || cfg.GoogleOAuth.RedirectURL == "" {
 		fmt.Fprintln(os.Stderr, "fatal: Google OAuth configuration is incomplete: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URL are required")
+		os.Exit(1)
+	}
+
+	// validate RajaOngkir config
+	if cfg.RajaOngkir.APIKey == "" || cfg.RajaOngkir.OriginID <= 0 {
+		fmt.Fprintln(os.Stderr, "fatal: RajaOngkir configuration is incomplete: RAJAONGKIR_API_KEY and valid RAJAONGKIR_ORIGIN_CITY_ID are required")
 		os.Exit(1)
 	}
 

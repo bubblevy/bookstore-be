@@ -15,11 +15,10 @@ type CreateAddressInput struct {
 	ReceiverName    string
 	Phone           string
 	AddressLine     string
-	ProvinceID      int
+	DestinationID   int
 	ProvinceName    string
-	CityID          int
 	CityName        string
-	SubdistrictID   *int
+	DistrictName    string
 	SubdistrictName *string
 	PostalCode      string
 	IsPrimary       bool
@@ -31,11 +30,10 @@ type UpdateAddressInput struct {
 	ReceiverName    string
 	Phone           string
 	AddressLine     string
-	ProvinceID      int
+	DestinationID   int
 	ProvinceName    string
-	CityID          int
 	CityName        string
-	SubdistrictID   *int
+	DistrictName    string
 	SubdistrictName *string
 	PostalCode      string
 	IsPrimary       bool
@@ -57,11 +55,10 @@ type AddressResult struct {
 	ReceiverName    string     `json:"receiver_name"`
 	Phone           string     `json:"phone"`
 	AddressLine     string     `json:"address_line"`
-	ProvinceID      int        `json:"province_id"`
+	DestinationID   int        `json:"destination_id"`
 	ProvinceName    string     `json:"province_name"`
-	CityID          int        `json:"city_id"`
 	CityName        string     `json:"city_name"`
-	SubdistrictID   *int       `json:"subdistrict_id,omitempty"`
+	DistrictName    string     `json:"district_name"`
 	SubdistrictName *string    `json:"subdistrict_name,omitempty"`
 	PostalCode      string     `json:"postal_code"`
 	IsPrimary       bool       `json:"is_primary"`
@@ -113,11 +110,10 @@ func (u *addressUsecase) Create(ctx context.Context, i CreateAddressInput) (*Add
 		ReceiverName:    i.ReceiverName,
 		Phone:           i.Phone,
 		AddressLine:     i.AddressLine,
-		ProvinceID:      i.ProvinceID,
+		DestinationID:   i.DestinationID,
 		ProvinceName:    i.ProvinceName,
-		CityID:          i.CityID,
 		CityName:        i.CityName,
-		SubdistrictID:   i.SubdistrictID,
+		DistrictName:    i.DistrictName,
 		SubdistrictName: i.SubdistrictName,
 		PostalCode:      i.PostalCode,
 		IsPrimary:       isPrimary,
@@ -199,11 +195,10 @@ func (u *addressUsecase) Update(ctx context.Context, i UpdateAddressInput) (*Add
 	addr.ReceiverName = i.ReceiverName
 	addr.Phone = i.Phone
 	addr.AddressLine = i.AddressLine
-	addr.ProvinceID = i.ProvinceID
+	addr.DestinationID = i.DestinationID
 	addr.ProvinceName = i.ProvinceName
-	addr.CityID = i.CityID
 	addr.CityName = i.CityName
-	addr.SubdistrictID = i.SubdistrictID
+	addr.DistrictName = i.DistrictName
 	addr.SubdistrictName = i.SubdistrictName
 	addr.PostalCode = i.PostalCode
 
@@ -304,17 +299,15 @@ func toAddressResult(a *entity.UserAddress) AddressResult {
 	if a.DeletedAt.Valid {
 		deletedAt = &a.DeletedAt.Time
 	}
-
 	return AddressResult{
 		ID:              a.ID,
 		ReceiverName:    a.ReceiverName,
 		Phone:           a.Phone,
 		AddressLine:     a.AddressLine,
-		ProvinceID:      a.ProvinceID,
+		DestinationID:   a.DestinationID,
 		ProvinceName:    a.ProvinceName,
-		CityID:          a.CityID,
 		CityName:        a.CityName,
-		SubdistrictID:   a.SubdistrictID,
+		DistrictName:    a.DistrictName,
 		SubdistrictName: a.SubdistrictName,
 		PostalCode:      a.PostalCode,
 		IsPrimary:       a.IsPrimary,

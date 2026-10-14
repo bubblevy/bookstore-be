@@ -144,23 +144,27 @@ func setupAddressUsecase() (usecase.AddressUsecase, *mockAddressRepo, *mockAddre
 func TestCreateAddress_FirstAddress_AutoPrimary(t *testing.T) {
 	uc, _, _ := setupAddressUsecase()
 
+	subdistrict := "Gayamprit"
 	input := usecase.CreateAddressInput{
-		UserID:       1,
-		ReceiverName: "Budi Santoso",
-		Phone:        "081234567890",
-		AddressLine:  "Jl. Merbabu No. 12",
-		ProvinceID:   10,
-		ProvinceName: "Jawa Tengah",
-		CityID:       196,
-		CityName:     "Klaten",
-		PostalCode:   "57411",
-		IsPrimary:    false,
+		UserID:          1,
+		ReceiverName:    "Budi Santoso",
+		Phone:           "081234567890",
+		AddressLine:     "Jl. Merbabu No. 12",
+		DestinationID:   26895,
+		ProvinceName:    "Jawa Tengah",
+		CityName:        "Klaten",
+		DistrictName:    "Klaten Selatan",
+		SubdistrictName: &subdistrict,
+		PostalCode:      "57411",
+		IsPrimary:       false,
 	}
 
 	result, err := uc.Create(context.Background(), input)
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, uint(1), result.ID)
+	assert.Equal(t, 26895, result.DestinationID)
+	assert.Equal(t, "Klaten Selatan", result.DistrictName)
 	assert.True(t, result.IsPrimary)
 }
 
@@ -168,30 +172,31 @@ func TestCreateAddress_SecondAddress_SetAsNewPrimary(t *testing.T) {
 	uc, repo, _ := setupAddressUsecase()
 
 	addr1 := &entity.UserAddress{
-		UserID:       1,
-		ReceiverName: "Alamat Pertama",
-		IsPrimary:    true,
+		UserID:        1,
+		ReceiverName:  "Alamat Pertama",
+		DestinationID: 26895,
+		IsPrimary:     true,
 	}
 	_ = repo.Create(context.Background(), addr1)
 
 	input := usecase.CreateAddressInput{
-		UserID:       1,
-		ReceiverName: "Alamat Kedua",
-		Phone:        "081234567891",
-		AddressLine:  "Jl. Pemuda No. 45",
-		ProvinceID:   10,
-		ProvinceName: "Jawa Tengah",
-		CityID:       196,
-		CityName:     "Klaten",
-		PostalCode:   "57411",
-		IsPrimary:    true,
+		UserID:        1,
+		ReceiverName:  "Alamat Kedua",
+		Phone:         "081234567891",
+		AddressLine:   "Jl. Pemuda No. 45",
+		DestinationID: 26896,
+		ProvinceName:  "Jawa Tengah",
+		CityName:      "Klaten",
+		DistrictName:  "Klaten Tengah",
+		PostalCode:    "57411",
+		IsPrimary:     true,
 	}
 
 	result, err := uc.Create(context.Background(), input)
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
+	assert.Equal(t, 26896, result.DestinationID)
 	assert.True(t, result.IsPrimary)
-
 	assert.False(t, repo.addresses[addr1.ID].IsPrimary)
 }
 
@@ -200,21 +205,22 @@ func TestCreateAddress_LimitReached_Fail(t *testing.T) {
 
 	for i := 1; i <= 5; i++ {
 		_ = repo.Create(context.Background(), &entity.UserAddress{
-			UserID:       1,
-			ReceiverName: "Alamat Test",
+			UserID:        1,
+			ReceiverName:  "Alamat Test",
+			DestinationID: 26895,
 		})
 	}
 
 	input := usecase.CreateAddressInput{
-		UserID:       1,
-		ReceiverName: "Alamat Ke-6",
-		Phone:        "081234567890",
-		AddressLine:  "Jl. Merbabu No. 12",
-		ProvinceID:   10,
-		ProvinceName: "Jawa Tengah",
-		CityID:       196,
-		CityName:     "Klaten",
-		PostalCode:   "57411",
+		UserID:        1,
+		ReceiverName:  "Alamat Ke-6",
+		Phone:         "081234567890",
+		AddressLine:   "Jl. Merbabu No. 12",
+		DestinationID: 26895,
+		ProvinceName:  "Jawa Tengah",
+		CityName:      "Klaten",
+		DistrictName:  "Klaten Selatan",
+		PostalCode:    "57411",
 	}
 
 	result, err := uc.Create(context.Background(), input)
@@ -240,9 +246,9 @@ func TestCreateAddress_CountError_Fail(t *testing.T) {
 func TestGetAllByUser_Success(t *testing.T) {
 	uc, repo, _ := setupAddressUsecase()
 
-	_ = repo.Create(context.Background(), &entity.UserAddress{UserID: 1, ReceiverName: "User 1 - Alamat 1"})
-	_ = repo.Create(context.Background(), &entity.UserAddress{UserID: 1, ReceiverName: "User 1 - Alamat 2"})
-	_ = repo.Create(context.Background(), &entity.UserAddress{UserID: 2, ReceiverName: "User 2 - Alamat 1"})
+	_ = repo.Create(context.Background(), &entity.UserAddress{UserID: 1, ReceiverName: "User 1 - Alamat 1", DestinationID: 26895})
+	_ = repo.Create(context.Background(), &entity.UserAddress{UserID: 1, ReceiverName: "User 1 - Alamat 2", DestinationID: 26896})
+	_ = repo.Create(context.Background(), &entity.UserAddress{UserID: 2, ReceiverName: "User 2 - Alamat 1", DestinationID: 26897})
 
 	res, err := uc.GetAllByUser(context.Background(), 1)
 	assert.NoError(t, err)
@@ -273,19 +279,26 @@ func TestGetAllByUser_DBError(t *testing.T) {
 func TestGetByID_Success(t *testing.T) {
 	uc, repo, _ := setupAddressUsecase()
 
-	addr := &entity.UserAddress{UserID: 1, ReceiverName: "Andi"}
+	addr := &entity.UserAddress{
+		UserID:        1,
+		ReceiverName:  "Andi",
+		DestinationID: 26895,
+		DistrictName:  "Klaten Selatan",
+	}
 	_ = repo.Create(context.Background(), addr)
 
 	res, err := uc.GetByID(context.Background(), addr.ID, 1)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 	assert.Equal(t, "Andi", res.ReceiverName)
+	assert.Equal(t, 26895, res.DestinationID)
+	assert.Equal(t, "Klaten Selatan", res.DistrictName)
 }
 
 func TestGetByID_NotFound_WrongUser(t *testing.T) {
 	uc, repo, _ := setupAddressUsecase()
 
-	addr := &entity.UserAddress{UserID: 1, ReceiverName: "Andi"}
+	addr := &entity.UserAddress{UserID: 1, ReceiverName: "Andi", DestinationID: 26895}
 	_ = repo.Create(context.Background(), addr)
 
 	res, err := uc.GetByID(context.Background(), addr.ID, 2)
@@ -301,24 +314,25 @@ func TestUpdateAddress_Success(t *testing.T) {
 	uc, repo, _ := setupAddressUsecase()
 
 	addr := &entity.UserAddress{
-		UserID:       1,
-		ReceiverName: "Nama Lama",
-		IsPrimary:    false,
+		UserID:        1,
+		ReceiverName:  "Nama Lama",
+		DestinationID: 26895,
+		IsPrimary:     false,
 	}
 	_ = repo.Create(context.Background(), addr)
 
 	input := usecase.UpdateAddressInput{
-		ID:           addr.ID,
-		UserID:       1,
-		ReceiverName: "Nama Baru",
-		Phone:        "089999999",
-		AddressLine:  "Jalan Baru",
-		ProvinceID:   11,
-		ProvinceName: "Jawa Timur",
-		CityID:       200,
-		CityName:     "Surabaya",
-		PostalCode:   "60111",
-		IsPrimary:    false,
+		ID:            addr.ID,
+		UserID:        1,
+		ReceiverName:  "Nama Baru",
+		Phone:         "089999999",
+		AddressLine:   "Jalan Baru",
+		DestinationID: 30000,
+		ProvinceName:  "Jawa Timur",
+		CityName:      "Surabaya",
+		DistrictName:  "Wonokromo",
+		PostalCode:    "60111",
+		IsPrimary:     false,
 	}
 
 	res, err := uc.Update(context.Background(), input)
@@ -326,6 +340,8 @@ func TestUpdateAddress_Success(t *testing.T) {
 	assert.NotNil(t, res)
 	assert.Equal(t, "Nama Baru", res.ReceiverName)
 	assert.Equal(t, "Surabaya", res.CityName)
+	assert.Equal(t, "Wonokromo", res.DistrictName)
+	assert.Equal(t, 30000, res.DestinationID)
 }
 
 func TestUpdateAddress_NotFound(t *testing.T) {
@@ -348,8 +364,8 @@ func TestUpdateAddress_NotFound(t *testing.T) {
 func TestSetPrimary_Success(t *testing.T) {
 	uc, repo, _ := setupAddressUsecase()
 
-	addr1 := &entity.UserAddress{UserID: 1, IsPrimary: true}
-	addr2 := &entity.UserAddress{UserID: 1, IsPrimary: false}
+	addr1 := &entity.UserAddress{UserID: 1, IsPrimary: true, DestinationID: 26895}
+	addr2 := &entity.UserAddress{UserID: 1, IsPrimary: false, DestinationID: 26896}
 	_ = repo.Create(context.Background(), addr1)
 	_ = repo.Create(context.Background(), addr2)
 
@@ -363,7 +379,7 @@ func TestSetPrimary_Success(t *testing.T) {
 func TestSetPrimary_AlreadyPrimary_NoAction(t *testing.T) {
 	uc, repo, _ := setupAddressUsecase()
 
-	addr := &entity.UserAddress{UserID: 1, IsPrimary: true}
+	addr := &entity.UserAddress{UserID: 1, IsPrimary: true, DestinationID: 26895}
 	_ = repo.Create(context.Background(), addr)
 
 	err := uc.SetPrimary(context.Background(), addr.ID, 1)
@@ -378,8 +394,8 @@ func TestSetPrimary_AlreadyPrimary_NoAction(t *testing.T) {
 func TestDeleteAddress_Success_NonPrimary(t *testing.T) {
 	uc, repo, _ := setupAddressUsecase()
 
-	addrPrimary := &entity.UserAddress{UserID: 1, IsPrimary: true}
-	addrSecondary := &entity.UserAddress{UserID: 1, IsPrimary: false}
+	addrPrimary := &entity.UserAddress{UserID: 1, IsPrimary: true, DestinationID: 26895}
+	addrSecondary := &entity.UserAddress{UserID: 1, IsPrimary: false, DestinationID: 26896}
 	_ = repo.Create(context.Background(), addrPrimary)
 	_ = repo.Create(context.Background(), addrSecondary)
 
@@ -392,8 +408,8 @@ func TestDeleteAddress_Success_NonPrimary(t *testing.T) {
 func TestDeleteAddress_Block_PrimaryWhenOthersExist(t *testing.T) {
 	uc, repo, _ := setupAddressUsecase()
 
-	addr1 := &entity.UserAddress{UserID: 1, IsPrimary: true}
-	addr2 := &entity.UserAddress{UserID: 1, IsPrimary: false}
+	addr1 := &entity.UserAddress{UserID: 1, IsPrimary: true, DestinationID: 26895}
+	addr2 := &entity.UserAddress{UserID: 1, IsPrimary: false, DestinationID: 26896}
 	_ = repo.Create(context.Background(), addr1)
 	_ = repo.Create(context.Background(), addr2)
 
@@ -406,7 +422,7 @@ func TestDeleteAddress_Block_PrimaryWhenOthersExist(t *testing.T) {
 func TestDeleteAddress_Allow_PrimaryWhenOnlyOneLeft(t *testing.T) {
 	uc, repo, _ := setupAddressUsecase()
 
-	addrOnly := &entity.UserAddress{UserID: 1, IsPrimary: true}
+	addrOnly := &entity.UserAddress{UserID: 1, IsPrimary: true, DestinationID: 26895}
 	_ = repo.Create(context.Background(), addrOnly)
 
 	err := uc.Delete(context.Background(), addrOnly.ID, 1)

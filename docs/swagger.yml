@@ -13,6 +13,8 @@ tags:
     description: User authentication and account management
   - name: Address
     description: User shipping address management (CRUD, primary address, max 5 addresses)
+  - name: Shipping
+    description: RajaOngkir v2 destination lookup and shipping cost calculation
 paths:
   /health:
     get:
@@ -317,7 +319,7 @@ paths:
       tags:
         - Address
       summary: Create a new address
-      description: Adds a new address for the authenticated user. Maximum 5 addresses per user. First address becomes primary automatically.
+      description: Adds a new address for the authenticated user using Komerce destination ID. Maximum 5 addresses per user. First address becomes primary automatically.
       security:
         - BearerAuth: []
       requestBody:
@@ -502,6 +504,98 @@ paths:
         '500':
           description: Internal server error
 
+  /api/v1/shipping/destinations:
+    get:
+      tags:
+        - Shipping
+      summary: Search domestic destination
+      description: Single-endpoint location lookup using keyword (minimum 3 characters) powered by RajaOngkir/Komerce.
+      parameters:
+        - in: query
+          name: search
+          required: true
+          schema:
+            type: string
+            minLength: 3
+          description: Keyword to search (e.g., welahan, gayamprit, klaten)
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            default: 10
+          description: Limit number of results
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            default: 0
+          description: Offset for pagination
+      responses:
+        '200':
+          description: Destinations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "destinations retrieved successfully"
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DomesticDestination'
+        '400':
+          description: Search keyword must be at least 3 characters
+        '500':
+          description: Failed to retrieve destinations from RajaOngkir
+
+  /api/v1/shipping/cost:
+    post:
+      tags:
+        - Shipping
+      summary: Calculate domestic shipping cost
+      description: Calculates delivery rates from store origin (Welahan, Jepara) to the destination location ID using selected couriers.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckCostRequest'
+      responses:
+        '200':
+          description: Shipping costs calculated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "shipping costs calculated successfully"
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ShippingCostResult'
+        '400':
+          description: Invalid request payload
+        '500':
+          description: Failed to calculate shipping costs from RajaOngkir
+
 components:
   securitySchemes:
     BearerAuth:
@@ -647,10 +741,10 @@ components:
         - receiver_name
         - phone
         - address_line
-        - province_id
+        - destination_id
         - province_name
-        - city_id
         - city_name
+        - district_name
         - postal_code
       properties:
         receiver_name:
@@ -666,31 +760,28 @@ components:
         address_line:
           type: string
           minLength: 10
-          example: "Jl. Merbabu No. 12, RT 03 / RW 02, Kel. Gayamprit"
-        province_id:
+          maxLength: 255
+          example: "Jl. Merbabu No. 12, RT 03 / RW 02"
+        destination_id:
           type: integer
-          example: 10
+          example: 26895
         province_name:
           type: string
           example: "Jawa Tengah"
-        city_id:
-          type: integer
-          example: 196
         city_name:
           type: string
-          example: "Klaten"
-        subdistrict_id:
-          type: integer
-          nullable: true
-          example: null
+          example: "Jepara"
+        district_name:
+          type: string
+          example: "Welahan"
         subdistrict_name:
           type: string
           nullable: true
-          example: null
+          example: "Welahan"
         postal_code:
           type: string
           pattern: '^[0-9]{5}$'
-          example: "57411"
+          example: "59464"
         is_primary:
           type: boolean
           example: true
@@ -701,10 +792,10 @@ components:
         - receiver_name
         - phone
         - address_line
-        - province_id
+        - destination_id
         - province_name
-        - city_id
         - city_name
+        - district_name
         - postal_code
       properties:
         receiver_name:
@@ -720,31 +811,28 @@ components:
         address_line:
           type: string
           minLength: 10
-          example: "Jl. Merbabu No. 12, RT 03 / RW 02, Kel. Gayamprit"
-        province_id:
+          maxLength: 255
+          example: "Jl. Merbabu No. 12, RT 03 / RW 02"
+        destination_id:
           type: integer
-          example: 10
+          example: 26895
         province_name:
           type: string
           example: "Jawa Tengah"
-        city_id:
-          type: integer
-          example: 196
         city_name:
           type: string
-          example: "Klaten"
-        subdistrict_id:
-          type: integer
-          nullable: true
-          example: null
+          example: "Jepara"
+        district_name:
+          type: string
+          example: "Welahan"
         subdistrict_name:
           type: string
           nullable: true
-          example: null
+          example: "Welahan"
         postal_code:
           type: string
           pattern: '^[0-9]{5}$'
-          example: "57411"
+          example: "59464"
         is_primary:
           type: boolean
           example: true
@@ -763,16 +851,16 @@ components:
           example: "081234567890"
         address_line:
           type: string
-          example: "Jl. Merbabu No. 12, RT 03 / RW 02, Kel. Gayamprit"
+          example: "Jl. Merbabu No. 12, RT 03 / RW 02"
         city_name:
           type: string
-          example: "Klaten"
+          example: "Jepara"
         province_name:
           type: string
           example: "Jawa Tengah"
         postal_code:
           type: string
-          example: "57411"
+          example: "59464"
         is_primary:
           type: boolean
           example: true
@@ -783,9 +871,6 @@ components:
         id:
           type: integer
           example: 1
-        user_id:
-          type: integer
-          example: 5
         receiver_name:
           type: string
           example: "Budi Santoso"
@@ -794,30 +879,26 @@ components:
           example: "081234567890"
         address_line:
           type: string
-          example: "Jl. Merbabu No. 12, RT 03 / RW 02, Kel. Gayamprit"
-        province_id:
+          example: "Jl. Merbabu No. 12, RT 03 / RW 02"
+        destination_id:
           type: integer
-          example: 10
+          example: 26895
         province_name:
           type: string
           example: "Jawa Tengah"
-        city_id:
-          type: integer
-          example: 196
         city_name:
           type: string
-          example: "Klaten"
-        subdistrict_id:
-          type: integer
-          nullable: true
-          example: null
+          example: "Jepara"
+        district_name:
+          type: string
+          example: "Welahan"
         subdistrict_name:
           type: string
           nullable: true
-          example: null
+          example: "Welahan"
         postal_code:
           type: string
-          example: "57411"
+          example: "59464"
         is_primary:
           type: boolean
           example: true
@@ -834,3 +915,68 @@ components:
           format: date-time
           nullable: true
           example: null
+
+    DomesticDestination:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 26895
+        label:
+          type: string
+          example: "Welahan, Jepara, Jawa Tengah, 59464"
+        subdistrict_name:
+          type: string
+          example: "Welahan"
+        district_name:
+          type: string
+          example: "Welahan"
+        city_name:
+          type: string
+          example: "Jepara"
+        province_name:
+          type: string
+          example: "Jawa Tengah"
+        zip_code:
+          type: string
+          example: "59464"
+
+    CheckCostRequest:
+      type: object
+      required:
+        - destination_id
+        - weight_grams
+      properties:
+        destination_id:
+          type: integer
+          example: 26895
+        weight_grams:
+          type: integer
+          description: Total weight in grams (defaults to 1000 if not specified)
+          example: 1000
+        courier:
+          type: string
+          description: "Colon-separated list of couriers or single courier (e.g. jne, jne:pos:tiki)"
+          example: "jne:pos:tiki"
+
+    ShippingCostResult:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "Jalur Nugraha Ekakurir (JNE)"
+        code:
+          type: string
+          example: "jne"
+        service:
+          type: string
+          example: "REG"
+        description:
+          type: string
+          example: "Layanan Reguler"
+        cost:
+          type: integer
+          example: 15000
+        etd:
+          type: string
+          example: "2-3"

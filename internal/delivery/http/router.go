@@ -11,6 +11,7 @@ import (
 	"github.com/bubblevy/bookstore/internal/usecase"
 	"github.com/bubblevy/bookstore/pkg/email"
 	"github.com/bubblevy/bookstore/pkg/jwt"
+	"github.com/bubblevy/bookstore/pkg/rajaongkir"
 	"github.com/bubblevy/bookstore/pkg/validator"
 
 	"github.com/gofiber/fiber/v3"
@@ -85,4 +86,8 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	addressRepo := pgsql.NewAddressRepository(db)
 	addressUsecase := usecase.NewAddressUsecase(addressRepo, txManager)
 	handler.NewAddressHandler(api, addressUsecase, validate, authMiddleware)
+
+	// shipping routes
+	roClient := rajaongkir.NewClient(cfg.RajaOngkir)
+	handler.NewShippingHandler(api, roClient, validate)
 }
