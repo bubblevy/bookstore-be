@@ -127,7 +127,7 @@ func (u *authUsecase) Register(ctx context.Context, i RegisterInput) error {
 	user := &entity.User{
 		Name:                i.Name,
 		Email:               i.Email,
-		Role:                entity.RoleUser,
+		Role:                entity.RoleCustomer,
 		Password:            string(hashedPassword),
 		ActivationToken:     &hashedActivationToken,
 		ActivationExpiresAt: &expiresAt,
@@ -620,7 +620,7 @@ func (u *authUsecase) GoogleLogin(ctx context.Context, code string, oauthConfig 
 					Name:     googleUser.Name,
 					Email:    googleUser.Email,
 					GoogleID: &googleUser.ID,
-					Role:     entity.RoleUser,
+					Role:     entity.RoleCustomer,
 					IsActive: true,
 				}
 				if err := u.userRepo.Create(txCtx, user); err != nil {

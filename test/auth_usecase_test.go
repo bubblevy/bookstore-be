@@ -302,7 +302,7 @@ func createTestUser(email string, isActive bool, id uint) *entity.User {
 	user := &entity.User{
 		Name:     "Test User",
 		Email:    email,
-		Role:     entity.RoleUser,
+		Role:     entity.RoleCustomer,
 		IsActive: isActive,
 	}
 	user.ID = id
