@@ -80,4 +80,9 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	// auth routes
 	authGroup := api.Group("/auth")
 	handler.NewAuthHandler(authGroup, authUsecase, validate, authMiddleware, cfg)
+
+	// address routes
+	addressRepo := pgsql.NewAddressRepository(db)
+	addressUsecase := usecase.NewAddressUsecase(addressRepo, txManager)
+	handler.NewAddressHandler(api, addressUsecase, validate, authMiddleware)
 }

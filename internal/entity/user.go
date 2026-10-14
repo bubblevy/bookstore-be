@@ -26,7 +26,10 @@ type User struct {
 	ResetPasswordToken     *string    `gorm:"type:varchar(255);index" json:"-"`
 	ResetPasswordExpiresAt *time.Time `json:"-"`
 
-	Sessions []UserSession `gorm:"foreignKey:UserID"`
+	// one to many relationship
+	Sessions  []UserSession `gorm:"foreignKey:UserID"`
+	Addresses []UserAddress `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"addresses,omitempty"`
+	Orders    []Order       `gorm:"foreignKey:UserID" json:"orders,omitempty"`
 }
 
 func (User) TableName() string {

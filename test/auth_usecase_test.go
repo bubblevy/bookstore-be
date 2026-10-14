@@ -1,4 +1,4 @@
-package auth_usecase_test
+package test
 
 import (
 	"bytes"

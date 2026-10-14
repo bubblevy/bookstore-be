@@ -11,6 +11,8 @@ tags:
     description: System health and readiness checks
   - name: Auth
     description: User authentication and account management
+  - name: Address
+    description: User shipping address management (CRUD, primary address, max 5 addresses)
 paths:
   /health:
     get:
@@ -27,6 +29,7 @@ paths:
                 status: ok
                 service: Bookstore
                 timestamp: "2026-10-02T00:00:00Z"
+
   /health/ready:
     get:
       tags:
@@ -277,6 +280,228 @@ paths:
         '401':
           description: Invalid OAuth state (CSRF failure).
 
+  /api/v1/addresses:
+    get:
+      tags:
+        - Address
+      summary: Get all user addresses
+      description: Returns a simplified list of addresses belonging to the authenticated user.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Addresses retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "addresses retrieved successfully"
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AddressListItem'
+        '401':
+          description: Unauthorized request
+        '500':
+          description: Internal server error
+    post:
+      tags:
+        - Address
+      summary: Create a new address
+      description: Adds a new address for the authenticated user. Maximum 5 addresses per user. First address becomes primary automatically.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAddressRequest'
+      responses:
+        '201':
+          description: Address created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 201
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "address created successfully"
+                  data:
+                    $ref: '#/components/schemas/AddressDetail'
+        '400':
+          description: Validation error or maximum address limit reached (5 addresses)
+        '401':
+          description: Unauthorized request
+        '500':
+          description: Internal server error
+
+  /api/v1/addresses/{id}:
+    get:
+      tags:
+        - Address
+      summary: Get address details by ID
+      description: Returns complete details of a specific address owned by the authenticated user.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: The address ID
+      responses:
+        '200':
+          description: Address retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "address retrieved successfully"
+                  data:
+                    $ref: '#/components/schemas/AddressDetail'
+        '400':
+          description: Invalid ID parameter
+        '401':
+          description: Unauthorized request
+        '404':
+          description: Address not found
+        '500':
+          description: Internal server error
+    put:
+      tags:
+        - Address
+      summary: Update an address
+      description: Updates an existing address owned by the authenticated user.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: The address ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAddressRequest'
+      responses:
+        '200':
+          description: Address updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "address updated successfully"
+                  data:
+                    $ref: '#/components/schemas/AddressDetail'
+        '400':
+          description: Validation error or invalid ID parameter
+        '401':
+          description: Unauthorized request
+        '404':
+          description: Address not found
+        '500':
+          description: Internal server error
+    delete:
+      tags:
+        - Address
+      summary: Delete an address
+      description: Performs a soft-delete on an address. Blocked if the address is primary and other addresses exist.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: The address ID
+      responses:
+        '200':
+          description: Address deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Cannot delete primary address while other addresses exist, or invalid ID parameter
+        '401':
+          description: Unauthorized request
+        '404':
+          description: Address not found
+        '500':
+          description: Internal server error
+
+  /api/v1/addresses/{id}/primary:
+    patch:
+      tags:
+        - Address
+      summary: Set address as primary
+      description: Sets the selected address as the primary address and unsets any previous primary address.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: The address ID
+      responses:
+        '200':
+          description: Primary address updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid ID parameter
+        '401':
+          description: Unauthorized request
+        '404':
+          description: Address not found
+        '500':
+          description: Internal server error
+
 components:
   securitySchemes:
     BearerAuth:
@@ -415,3 +640,197 @@ components:
           type: string
           format: password
           example: "NewStr0ngP@ss!"
+
+    CreateAddressRequest:
+      type: object
+      required:
+        - receiver_name
+        - phone
+        - address_line
+        - province_id
+        - province_name
+        - city_id
+        - city_name
+        - postal_code
+      properties:
+        receiver_name:
+          type: string
+          minLength: 3
+          maxLength: 150
+          example: "Budi Santoso"
+        phone:
+          type: string
+          minLength: 9
+          maxLength: 20
+          example: "081234567890"
+        address_line:
+          type: string
+          minLength: 10
+          example: "Jl. Merbabu No. 12, RT 03 / RW 02, Kel. Gayamprit"
+        province_id:
+          type: integer
+          example: 10
+        province_name:
+          type: string
+          example: "Jawa Tengah"
+        city_id:
+          type: integer
+          example: 196
+        city_name:
+          type: string
+          example: "Klaten"
+        subdistrict_id:
+          type: integer
+          nullable: true
+          example: null
+        subdistrict_name:
+          type: string
+          nullable: true
+          example: null
+        postal_code:
+          type: string
+          pattern: '^[0-9]{5}$'
+          example: "57411"
+        is_primary:
+          type: boolean
+          example: true
+
+    UpdateAddressRequest:
+      type: object
+      required:
+        - receiver_name
+        - phone
+        - address_line
+        - province_id
+        - province_name
+        - city_id
+        - city_name
+        - postal_code
+      properties:
+        receiver_name:
+          type: string
+          minLength: 3
+          maxLength: 150
+          example: "Budi Santoso"
+        phone:
+          type: string
+          minLength: 9
+          maxLength: 20
+          example: "081234567890"
+        address_line:
+          type: string
+          minLength: 10
+          example: "Jl. Merbabu No. 12, RT 03 / RW 02, Kel. Gayamprit"
+        province_id:
+          type: integer
+          example: 10
+        province_name:
+          type: string
+          example: "Jawa Tengah"
+        city_id:
+          type: integer
+          example: 196
+        city_name:
+          type: string
+          example: "Klaten"
+        subdistrict_id:
+          type: integer
+          nullable: true
+          example: null
+        subdistrict_name:
+          type: string
+          nullable: true
+          example: null
+        postal_code:
+          type: string
+          pattern: '^[0-9]{5}$'
+          example: "57411"
+        is_primary:
+          type: boolean
+          example: true
+
+    AddressListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        receiver_name:
+          type: string
+          example: "Budi Santoso"
+        phone:
+          type: string
+          example: "081234567890"
+        address_line:
+          type: string
+          example: "Jl. Merbabu No. 12, RT 03 / RW 02, Kel. Gayamprit"
+        city_name:
+          type: string
+          example: "Klaten"
+        province_name:
+          type: string
+          example: "Jawa Tengah"
+        postal_code:
+          type: string
+          example: "57411"
+        is_primary:
+          type: boolean
+          example: true
+
+    AddressDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        user_id:
+          type: integer
+          example: 5
+        receiver_name:
+          type: string
+          example: "Budi Santoso"
+        phone:
+          type: string
+          example: "081234567890"
+        address_line:
+          type: string
+          example: "Jl. Merbabu No. 12, RT 03 / RW 02, Kel. Gayamprit"
+        province_id:
+          type: integer
+          example: 10
+        province_name:
+          type: string
+          example: "Jawa Tengah"
+        city_id:
+          type: integer
+          example: 196
+        city_name:
+          type: string
+          example: "Klaten"
+        subdistrict_id:
+          type: integer
+          nullable: true
+          example: null
+        subdistrict_name:
+          type: string
+          nullable: true
+          example: null
+        postal_code:
+          type: string
+          example: "57411"
+        is_primary:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-10-14T09:39:55+07:00"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-10-14T09:39:55+07:00"
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: null

@@ -45,6 +45,8 @@ func FormatValidationErrors(err error) map[string]string {
 				msg = fmt.Sprintf("field '%s' must be a valid email address", e.Field())
 			case "min":
 				msg = fmt.Sprintf("field '%s' must be at least %s characters", e.Field(), e.Param())
+			case "max":
+				msg = fmt.Sprintf("field '%s' must be at most %s characters", e.Field(), e.Param())
 			case "strong_password":
 				msg = fmt.Sprintf("field '%s' must be at least 8 characters long and include uppercase, lowercase, number, and special character", e.Field())
 			default:
