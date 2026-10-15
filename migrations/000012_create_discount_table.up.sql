@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS discounts (
     code VARCHAR(50) NOT NULL,
     name VARCHAR(150) NOT NULL,
     description TEXT,
-    discount_type VARCHAR(20) NOT NULL CHECK (discount_type IN ('PERCENTAGE', 'FIXED')),
+    discount_type VARCHAR(20) NOT NULL CHECK (discount_type IN ('PERCENTAGE', 'FIXED', 'TIERED')),
     discount_value NUMERIC(12, 2) NOT NULL CHECK (discount_value > 0),
     min_purchase NUMERIC(12, 2) DEFAULT 0 NOT NULL CHECK (min_purchase >= 0),
     max_discount_amount NUMERIC(12, 2) CHECK (max_discount_amount > 0),

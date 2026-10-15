@@ -111,4 +111,9 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	bookRepo := pgsql.NewBookRepository(db)
 	bookUsecase := usecase.NewBookUsecase(bookRepo, categoryRepo, authorRepo, publisherRepo)
 	handler.NewBookHandler(api, bookUsecase, validate, authMiddleware, adminMiddleware)
+
+	// discount routes
+	discountRepo := pgsql.NewDiscountRepository(db)
+	discountUsecase := usecase.NewDiscountUsecase(discountRepo, bookRepo)
+	handler.NewDiscountHandler(api, discountUsecase, validate, authMiddleware, adminMiddleware)
 }

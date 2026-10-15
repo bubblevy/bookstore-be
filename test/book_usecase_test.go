@@ -46,6 +46,19 @@ func (m *MockBookRepository) FindAll(ctx context.Context, filter repository.Book
 	return args.Get(0).([]entity.Book), args.Get(1).(int64), args.Error(2)
 }
 
+func (m *MockBookRepository) FindByIDs(ctx context.Context, ids []uint) ([]entity.Book, error) {
+	args := m.Called(ctx, ids)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]entity.Book), args.Error(1)
+}
+
+func (m *MockBookRepository) CountExistingIDs(ctx context.Context, ids []uint) (int64, error) {
+	args := m.Called(ctx, ids)
+	return args.Get(0).(int64), args.Error(1)
+}
+
 func (m *MockBookRepository) Update(ctx context.Context, book *entity.Book) error {
 	return m.Called(ctx, book).Error(0)
 }
@@ -89,19 +102,27 @@ func (m *MockCategoryRepositoryForBook) FindByID(ctx context.Context, id uint) (
 	}
 	return args.Get(0).(*entity.Category), args.Error(1)
 }
+
 func (m *MockCategoryRepositoryForBook) Create(ctx context.Context, c *entity.Category) error {
 	return nil
 }
+
 func (m *MockCategoryRepositoryForBook) FindBySlug(ctx context.Context, s string) (*entity.Category, error) {
 	return nil, nil
 }
+
 func (m *MockCategoryRepositoryForBook) FindAll(ctx context.Context) ([]entity.Category, error) {
 	return nil, nil
 }
+
 func (m *MockCategoryRepositoryForBook) Update(ctx context.Context, c *entity.Category) error {
 	return nil
 }
-func (m *MockCategoryRepositoryForBook) Delete(ctx context.Context, id uint) error { return nil }
+
+func (m *MockCategoryRepositoryForBook) Delete(ctx context.Context, id uint) error {
+	return nil
+}
+
 func (m *MockCategoryRepositoryForBook) ExistsBySlug(ctx context.Context, s string, e ...uint) (bool, error) {
 	return false, nil
 }
@@ -117,20 +138,29 @@ func (m *MockAuthorRepositoryForBook) FindByID(ctx context.Context, id uint) (*e
 	}
 	return args.Get(0).(*entity.Author), args.Error(1)
 }
-func (m *MockAuthorRepositoryForBook) Create(ctx context.Context, a *entity.Author) error { return nil }
+
+func (m *MockAuthorRepositoryForBook) Create(ctx context.Context, a *entity.Author) error {
+	return nil
+}
+
 func (m *MockAuthorRepositoryForBook) FindBySlug(ctx context.Context, s string) (*entity.Author, error) {
 	return nil, nil
 }
+
 func (m *MockAuthorRepositoryForBook) FindAll(ctx context.Context, l, o int) ([]entity.Author, int64, error) {
 	return nil, 0, nil
 }
-func (m *MockAuthorRepositoryForBook) Update(ctx context.Context, a *entity.Author) error { return nil }
-func (m *MockAuthorRepositoryForBook) Delete(ctx context.Context, id uint) error          { return nil }
+
+func (m *MockAuthorRepositoryForBook) Update(ctx context.Context, a *entity.Author) error {
+	return nil
+}
+
+func (m *MockAuthorRepositoryForBook) Delete(ctx context.Context, id uint) error {
+	return nil
+}
+
 func (m *MockAuthorRepositoryForBook) ExistsBySlug(ctx context.Context, s string, e ...uint) (bool, error) {
 	return false, nil
-}
-func (m *MockAuthorRepositoryForBook) FindBooksByAuthorID(ctx context.Context, aID uint, l, o int) ([]entity.Book, int64, error) {
-	return nil, 0, nil
 }
 
 type MockPublisherRepositoryForBook struct {
@@ -144,19 +174,27 @@ func (m *MockPublisherRepositoryForBook) FindByID(ctx context.Context, id uint) 
 	}
 	return args.Get(0).(*entity.Publisher), args.Error(1)
 }
+
 func (m *MockPublisherRepositoryForBook) Create(ctx context.Context, p *entity.Publisher) error {
 	return nil
 }
+
 func (m *MockPublisherRepositoryForBook) FindBySlug(ctx context.Context, s string) (*entity.Publisher, error) {
 	return nil, nil
 }
+
 func (m *MockPublisherRepositoryForBook) FindAll(ctx context.Context) ([]entity.Publisher, error) {
 	return nil, nil
 }
+
 func (m *MockPublisherRepositoryForBook) Update(ctx context.Context, p *entity.Publisher) error {
 	return nil
 }
-func (m *MockPublisherRepositoryForBook) Delete(ctx context.Context, id uint) error { return nil }
+
+func (m *MockPublisherRepositoryForBook) Delete(ctx context.Context, id uint) error {
+	return nil
+}
+
 func (m *MockPublisherRepositoryForBook) ExistsBySlug(ctx context.Context, s string, e ...uint) (bool, error) {
 	return false, nil
 }
@@ -166,7 +204,6 @@ func TestBookUsecase_Create_Success(t *testing.T) {
 	mockCatRepo := new(MockCategoryRepositoryForBook)
 	mockAuthRepo := new(MockAuthorRepositoryForBook)
 	mockPubRepo := new(MockPublisherRepositoryForBook)
-
 	uc := usecase.NewBookUsecase(mockBookRepo, mockCatRepo, mockAuthRepo, mockPubRepo)
 	ctx := context.Background()
 
@@ -213,7 +250,6 @@ func TestBookUsecase_Create_CategoryNotFound(t *testing.T) {
 	mockCatRepo := new(MockCategoryRepositoryForBook)
 	mockAuthRepo := new(MockAuthorRepositoryForBook)
 	mockPubRepo := new(MockPublisherRepositoryForBook)
-
 	uc := usecase.NewBookUsecase(mockBookRepo, mockCatRepo, mockAuthRepo, mockPubRepo)
 	ctx := context.Background()
 
@@ -266,7 +302,8 @@ func TestBookUsecase_FindBySlug_Success(t *testing.T) {
 	ctx := context.Background()
 
 	book := &entity.Book{
-		Model: gorm.Model{ID: 1,
+		Model: gorm.Model{
+			ID:        1,
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 		},

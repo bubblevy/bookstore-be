@@ -12,15 +12,17 @@ tags:
   - name: Auth
     description: User authentication and account management
   - name: Category
-    description: Book category catalog management (Public browsing, Admin CRUD)
+    description: Book category catalog management 
   - name: Publisher
-    description: Book publisher catalog management (Public browsing, Admin CRUD)
+    description: Book publisher catalog management 
   - name: Author
-    description: Book author catalog management (Public browsing, Admin CRUD)
+    description: Book author catalog management 
   - name: Book
-    description: Book catalog management (SEO-friendly slug queries, dynamic filters, Admin CRUD via IDs)
+    description: Book catalog management
+  - name: Discount
+    description: Discount & voucher management
   - name: Address
-    description: User shipping address management (CRUD, primary address, max 5 addresses)
+    description: User shipping address management
   - name: Shipping
     description: RajaOngkir destination lookup and authenticated shipping cost calculation
 
@@ -1177,6 +1179,296 @@ paths:
           description: Internal server error
 
   # =========================================================================
+  # DISCOUNTS
+  # =========================================================================
+  /api/v1/discounts:
+    get:
+      tags:
+        - Discount
+      summary: Get all discounts (paginated & lean list)
+      description: Admin-only endpoint to retrieve a lean list of discounts without deep relations (books and tiers omitted for speed).
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: search
+          required: false
+          schema:
+            type: string
+          description: Search by discount name or code
+        - in: query
+          name: is_active
+          required: false
+          schema:
+            type: string
+            enum: ["true", "false"]
+          description: Filter by active state
+        - in: query
+          name: only_valid
+          required: false
+          schema:
+            type: string
+            enum: ["true", "false"]
+          description: Filter discounts currently within valid date range with available quota
+        - in: query
+          name: page
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+          description: Page number
+        - in: query
+          name: per_page
+          required: false
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+          description: Items per page
+      responses:
+        '200':
+          description: Discounts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "discounts retrieved successfully"
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DiscountListItem'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          description: Unauthorized request
+        '403':
+          description: Forbidden (Admin role required)
+        '500':
+          description: Internal server error
+    post:
+      tags:
+        - Discount
+      summary: Create a discount voucher
+      description: Admin-only endpoint to create a voucher. Code is automatically converted to uppercase. Supports PERCENTAGE, FIXED, and TIERED ('Up To') discounts.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDiscountRequest'
+      responses:
+        '201':
+          description: Discount created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 201
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "discount created successfully"
+                  data:
+                    $ref: '#/components/schemas/DiscountDetailResult'
+        '400':
+          description: Validation error, missing required tiers for TIERED type, or invalid book_ids
+        '401':
+          description: Unauthorized request
+        '403':
+          description: Forbidden (Admin role required)
+        '409':
+          description: Discount voucher code already exists
+        '500':
+          description: Internal server error
+
+  /api/v1/discounts/{id}:
+    get:
+      tags:
+        - Discount
+      summary: Get discount details by ID
+      description: Admin-only endpoint to retrieve comprehensive details of a discount voucher including associated books and tiered rewards.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Discount ID
+      responses:
+        '200':
+          description: Discount retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "discount retrieved successfully"
+                  data:
+                    $ref: '#/components/schemas/DiscountDetailResult'
+        '400':
+          description: Invalid ID parameter
+        '401':
+          description: Unauthorized request
+        '403':
+          description: Forbidden (Admin role required)
+        '404':
+          description: Discount not found
+        '500':
+          description: Internal server error
+    put:
+      tags:
+        - Discount
+      summary: Update a discount voucher
+      description: Admin-only endpoint to update an existing discount voucher. Code is automatically uppercased.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Discount ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDiscountRequest'
+      responses:
+        '200':
+          description: Discount updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "discount updated successfully"
+                  data:
+                    $ref: '#/components/schemas/DiscountDetailResult'
+        '400':
+          description: Validation error, missing tiers, or invalid book_ids
+        '401':
+          description: Unauthorized request
+        '403':
+          description: Forbidden (Admin role required)
+        '404':
+          description: Discount not found
+        '409':
+          description: Discount code already exists on another voucher
+        '500':
+          description: Internal server error
+    delete:
+      tags:
+        - Discount
+      summary: Delete a discount voucher
+      description: Admin-only endpoint to soft-delete a discount voucher.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Discount ID
+      responses:
+        '200':
+          description: Discount deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid ID parameter
+        '401':
+          description: Unauthorized request
+        '403':
+          description: Forbidden (Admin role required)
+        '404':
+          description: Discount not found
+        '500':
+          description: Internal server error
+
+  /api/v1/discounts/check:
+    post:
+      tags:
+        - Discount
+      summary: Validate voucher & calculate cart discount
+      description: Authenticated user checkout verification. Fetches book prices and active status directly from the database (no client-side price injection).
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckDiscountRequest'
+      responses:
+        '200':
+          description: Voucher applied successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "voucher applied successfully"
+                  data:
+                    $ref: '#/components/schemas/CheckDiscountResult'
+        '400':
+          description: Voucher expired, quota exhausted, minimum purchase not met, or not applicable to cart items
+        '401':
+          description: Unauthorized request
+        '404':
+          description: Voucher code not found or cart book not found in database
+        '500':
+          description: Internal server error
+
+  # =========================================================================
   # ADDRESSES
   # =========================================================================
   /api/v1/addresses:
@@ -1978,6 +2270,393 @@ components:
           type: string
           format: date-time
           example: "2026-10-15T13:40:00+07:00"
+
+    # =========================================================================
+    # DISCOUNT SCHEMAS
+    # =========================================================================
+    DiscountTierRequest:
+      type: object
+      required:
+        - min_spend
+        - reward_type
+        - reward_value
+      properties:
+        min_spend:
+          type: number
+          format: double
+          minimum: 0
+          example: 100000.00
+        reward_type:
+          type: string
+          enum: [PERCENTAGE, FIXED]
+          example: "FIXED"
+        reward_value:
+          type: number
+          format: double
+          minimum: 0.01
+          example: 5000.00
+        max_reward:
+          type: number
+          format: double
+          nullable: true
+          minimum: 0.01
+          example: null
+
+    CreateDiscountRequest:
+      type: object
+      required:
+        - code
+        - name
+        - discount_type
+        - discount_value
+        - min_purchase
+        - is_all_books
+        - start_date
+        - end_date
+      properties:
+        code:
+          type: string
+          minLength: 3
+          maxLength: 50
+          pattern: '^[a-zA-Z0-9]+$'
+          description: Unique voucher code (automatically converted to uppercase)
+          example: "DISKONHEMAT10"
+        name:
+          type: string
+          minLength: 3
+          maxLength: 150
+          example: "Promo Belanja Hemat Up To 10%"
+        description:
+          type: string
+          nullable: true
+          example: "Potongan harga bertingkat untuk buku pilihan"
+        discount_type:
+          type: string
+          enum: [PERCENTAGE, FIXED, TIERED]
+          example: "TIERED"
+        discount_value:
+          type: number
+          format: double
+          minimum: 0.01
+          description: Base value for PERCENTAGE/FIXED, or max rate cap representation for TIERED
+          example: 10.00
+        min_purchase:
+          type: number
+          format: double
+          minimum: 0
+          default: 0
+          example: 100000.00
+        max_discount_amount:
+          type: number
+          format: double
+          nullable: true
+          minimum: 0.01
+          description: Global max discount cap
+          example: 25000.00
+        quota:
+          type: integer
+          minimum: 0
+          default: 0
+          description: Max total redemptions (0 indicates unlimited)
+          example: 100
+        is_all_books:
+          type: boolean
+          description: If true, discount applies to all books. If false, book_ids must be specified.
+          example: false
+        is_active:
+          type: boolean
+          default: true
+          example: true
+        start_date:
+          type: string
+          format: date-time
+          example: "2026-10-01T00:00:00Z"
+        end_date:
+          type: string
+          format: date-time
+          example: "2026-10-31T23:59:59Z"
+        book_ids:
+          type: array
+          items:
+            type: integer
+          description: Eligible book IDs (used when is_all_books is false)
+          example: [1, 2]
+        tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscountTierRequest'
+          description: Threshold reward tiers (required if discount_type is TIERED)
+
+    UpdateDiscountRequest:
+      type: object
+      required:
+        - code
+        - name
+        - discount_type
+        - discount_value
+        - min_purchase
+        - is_all_books
+        - start_date
+        - end_date
+      properties:
+        code:
+          type: string
+          minLength: 3
+          maxLength: 50
+          pattern: '^[a-zA-Z0-9]+$'
+          example: "DISKONHEMAT10"
+        name:
+          type: string
+          minLength: 3
+          maxLength: 150
+          example: "Promo Belanja Hemat Up To 10% (Updated)"
+        description:
+          type: string
+          nullable: true
+          example: "Potongan harga bertingkat untuk buku pilihan"
+        discount_type:
+          type: string
+          enum: [PERCENTAGE, FIXED, TIERED]
+          example: "TIERED"
+        discount_value:
+          type: number
+          format: double
+          minimum: 0.01
+          example: 10.00
+        min_purchase:
+          type: number
+          format: double
+          minimum: 0
+          example: 100000.00
+        max_discount_amount:
+          type: number
+          format: double
+          nullable: true
+          minimum: 0.01
+          example: 25000.00
+        quota:
+          type: integer
+          minimum: 0
+          example: 150
+        is_all_books:
+          type: boolean
+          example: false
+        is_active:
+          type: boolean
+          example: true
+        start_date:
+          type: string
+          format: date-time
+          example: "2026-10-01T00:00:00Z"
+        end_date:
+          type: string
+          format: date-time
+          example: "2026-11-15T23:59:59Z"
+        book_ids:
+          type: array
+          items:
+            type: integer
+          example: [1, 2]
+        tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscountTierRequest'
+
+    DiscountListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        code:
+          type: string
+          example: "DISKONHEMAT10"
+        name:
+          type: string
+          example: "Promo Belanja Hemat Up To 10%"
+        discount_type:
+          type: string
+          example: "TIERED"
+        discount_value:
+          type: number
+          format: double
+          example: 10.00
+        min_purchase:
+          type: number
+          format: double
+          example: 100000.00
+        quota:
+          type: integer
+          example: 100
+        used_count:
+          type: integer
+          example: 14
+        is_all_books:
+          type: boolean
+          example: false
+        is_active:
+          type: boolean
+          example: true
+        start_date:
+          type: string
+          format: date-time
+          example: "2026-10-01T07:00:00+07:00"
+        end_date:
+          type: string
+          format: date-time
+          example: "2026-10-31T23:59:59+07:00"
+
+    DiscountBookItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        title:
+          type: string
+          example: "Bumi Manusia"
+        slug:
+          type: string
+          example: "bumi-manusia"
+
+    DiscountTierResult:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        min_spend:
+          type: number
+          format: double
+          example: 100000.00
+        reward_type:
+          type: string
+          example: "FIXED"
+        reward_value:
+          type: number
+          format: double
+          example: 5000.00
+        max_reward:
+          type: number
+          format: double
+          nullable: true
+          example: null
+
+    DiscountDetailResult:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        code:
+          type: string
+          example: "DISKONHEMAT10"
+        name:
+          type: string
+          example: "Promo Belanja Hemat Up To 10%"
+        description:
+          type: string
+          nullable: true
+          example: "Potongan belanja bertingkat hingga 10% untuk buku pilihan"
+        discount_type:
+          type: string
+          example: "TIERED"
+        discount_value:
+          type: number
+          format: double
+          example: 10.00
+        min_purchase:
+          type: number
+          format: double
+          example: 100000.00
+        max_discount_amount:
+          type: number
+          format: double
+          nullable: true
+          example: 25000.00
+        quota:
+          type: integer
+          example: 100
+        used_count:
+          type: integer
+          example: 14
+        is_all_books:
+          type: boolean
+          example: false
+        is_active:
+          type: boolean
+          example: true
+        start_date:
+          type: string
+          format: date-time
+          example: "2026-10-01T07:00:00+07:00"
+        end_date:
+          type: string
+          format: date-time
+          example: "2026-10-31T23:59:59+07:00"
+        books:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscountBookItem'
+        tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscountTierResult'
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-10-15T15:27:09+07:00"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-10-15T15:27:09+07:00"
+
+    CartItemForCheck:
+      type: object
+      required:
+        - book_id
+        - quantity
+      properties:
+        book_id:
+          type: integer
+          example: 1
+        quantity:
+          type: integer
+          minimum: 1
+          example: 2
+
+    CheckDiscountRequest:
+      type: object
+      required:
+        - code
+        - items
+      properties:
+        code:
+          type: string
+          example: "DISKONHEMAT10"
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/CartItemForCheck'
+
+    CheckDiscountResult:
+      type: object
+      properties:
+        code:
+          type: string
+          example: "DISKONHEMAT10"
+        name:
+          type: string
+          example: "Promo Belanja Hemat Up To 10%"
+        discount_amount:
+          type: number
+          format: double
+          example: 7000.00
+        final_amount:
+          type: number
+          format: double
+          example: 123000.00
 
     # =========================================================================
     # AUTH SCHEMAS

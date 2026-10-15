@@ -29,4 +29,6 @@ type BookRepository interface {
 	ExistsBySlug(ctx context.Context, slug string, excludeID ...uint) (bool, error)
 	ExistsByISBN(ctx context.Context, isbn string, excludeID ...uint) (bool, error)
 	UpdateStock(ctx context.Context, id uint, quantity int) error
+	CountExistingIDs(ctx context.Context, ids []uint) (int64, error)
+	FindByIDs(ctx context.Context, ids []uint) ([]entity.Book, error)
 }

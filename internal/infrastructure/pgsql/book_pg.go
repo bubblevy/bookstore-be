@@ -185,3 +185,29 @@ func (r *bookRepository) UpdateStock(ctx context.Context, id uint, quantity int)
 	}
 	return nil
 }
+
+func (r *bookRepository) CountExistingIDs(ctx context.Context, ids []uint) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	db := extractDB(ctx, r.db)
+	var count int64
+	err := db.Model(&entity.Book{}).Where("id IN ?", ids).Count(&count).Error
+	return count, err
+}
+
+func (r *bookRepository) FindByIDs(ctx context.Context, ids []uint) ([]entity.Book, error) {
+	if len(ids) == 0 {
+		return []entity.Book{}, nil
+	}
+
+	db := extractDB(ctx, r.db)
+	var books []entity.Book
+
+	err := db.Where("id IN ? AND is_active = ?", ids, true).Find(&books).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return books, nil
+}
