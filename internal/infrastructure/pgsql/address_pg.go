@@ -78,7 +78,7 @@ func (r *addressRepository) Delete(ctx context.Context, id uint, userID uint) er
 func (r *addressRepository) ResetPrimaryStatus(ctx context.Context, userID uint) error {
 	db := extractDB(ctx, r.db)
 	return db.Model(&entity.UserAddress{}).
-		Where("user_id = ?", userID).
+		Where("user_id = ? AND is_primary = ?", userID, true).
 		Update("is_primary", false).Error
 }
 

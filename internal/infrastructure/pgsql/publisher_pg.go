@@ -18,12 +18,14 @@ func NewPublisherRepository(db *gorm.DB) repository.PublisherRepository {
 }
 
 func (r *publisherRepository) Create(ctx context.Context, publisher *entity.Publisher) error {
-	return r.db.WithContext(ctx).Create(publisher).Error
+	db := extractDB(ctx, r.db)
+	return db.Create(publisher).Error
 }
 
 func (r *publisherRepository) FindByID(ctx context.Context, id uint) (*entity.Publisher, error) {
+	db := extractDB(ctx, r.db)
 	var publisher entity.Publisher
-	err := r.db.WithContext(ctx).First(&publisher, id).Error
+	err := db.First(&publisher, id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -34,8 +36,9 @@ func (r *publisherRepository) FindByID(ctx context.Context, id uint) (*entity.Pu
 }
 
 func (r *publisherRepository) FindBySlug(ctx context.Context, slug string) (*entity.Publisher, error) {
+	db := extractDB(ctx, r.db)
 	var publisher entity.Publisher
-	err := r.db.WithContext(ctx).Where("slug = ?", slug).First(&publisher).Error
+	err := db.Where("slug = ?", slug).First(&publisher).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -46,25 +49,38 @@ func (r *publisherRepository) FindBySlug(ctx context.Context, slug string) (*ent
 }
 
 func (r *publisherRepository) FindAll(ctx context.Context) ([]entity.Publisher, error) {
+	db := extractDB(ctx, r.db)
 	var publishers []entity.Publisher
-	err := r.db.WithContext(ctx).Order("name ASC").Find(&publishers).Error
+	err := db.Order("name ASC").Find(&publishers).Error
 	return publishers, err
 }
 
 func (r *publisherRepository) Update(ctx context.Context, publisher *entity.Publisher) error {
-	return r.db.WithContext(ctx).Save(publisher).Error
+	db := extractDB(ctx, r.db)
+	return db.Save(publisher).Error
 }
 
 func (r *publisherRepository) Delete(ctx context.Context, id uint) error {
-	return r.db.WithContext(ctx).Delete(&entity.Publisher{}, id).Error
+	db := extractDB(ctx, r.db)
+	result := db.Delete(&entity.Publisher{}, id)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func (r *publisherRepository) ExistsBySlug(ctx context.Context, slug string, excludeID ...uint) (bool, error) {
+	db := extractDB(ctx, r.db)
 	var count int64
-	query := r.db.WithContext(ctx).Model(&entity.Publisher{}).Where("slug = ?", slug)
-	if len(excludeID) > 0 {
+
+	query := db.Model(&entity.Publisher{}).Where("slug = ?", slug)
+	if len(excludeID) > 0 && excludeID[0] > 0 {
 		query = query.Where("id != ?", excludeID[0])
 	}
+
 	err := query.Count(&count).Error
 	return count > 0, err
 }

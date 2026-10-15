@@ -3,6 +3,7 @@ package response
 import (
 	"fmt"
 
+	"github.com/bubblevy/bookstore/pkg/pagination"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v3"
 )
@@ -12,6 +13,14 @@ type Response struct {
 	Status  bool   `json:"status"`
 	Message string `json:"message"`
 	Data    any    `json:"data,omitempty"`
+}
+
+type PaginatedResponse[T any] struct {
+	Code    int             `json:"code"`
+	Status  bool            `json:"status"`
+	Message string          `json:"message"`
+	Data    []T             `json:"data"`
+	Meta    pagination.Meta `json:"meta"`
 }
 
 func Success(c fiber.Ctx, code int, message string, data any) error {
@@ -29,6 +38,16 @@ func Error(c fiber.Ctx, code int, message string, data any) error {
 		Status:  false,
 		Message: message,
 		Data:    data,
+	})
+}
+
+func SuccessWithPagination[T any](c fiber.Ctx, status int, message string, data []T, meta pagination.Meta) error {
+	return c.Status(status).JSON(PaginatedResponse[T]{
+		Code:    status,
+		Status:  true,
+		Message: message,
+		Data:    data,
+		Meta:    meta,
 	})
 }
 

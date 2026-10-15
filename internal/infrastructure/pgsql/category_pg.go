@@ -18,12 +18,14 @@ func NewCategoryRepository(db *gorm.DB) repository.CategoryRepository {
 }
 
 func (r *categoryRepository) Create(ctx context.Context, category *entity.Category) error {
-	return r.db.WithContext(ctx).Create(category).Error
+	db := extractDB(ctx, r.db)
+	return db.Create(category).Error
 }
 
 func (r *categoryRepository) FindByID(ctx context.Context, id uint) (*entity.Category, error) {
+	db := extractDB(ctx, r.db)
 	var category entity.Category
-	err := r.db.WithContext(ctx).First(&category, id).Error
+	err := db.First(&category, id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -34,8 +36,9 @@ func (r *categoryRepository) FindByID(ctx context.Context, id uint) (*entity.Cat
 }
 
 func (r *categoryRepository) FindBySlug(ctx context.Context, slug string) (*entity.Category, error) {
+	db := extractDB(ctx, r.db)
 	var category entity.Category
-	err := r.db.WithContext(ctx).Where("slug = ?", slug).First(&category).Error
+	err := db.Where("slug = ?", slug).First(&category).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -46,25 +49,38 @@ func (r *categoryRepository) FindBySlug(ctx context.Context, slug string) (*enti
 }
 
 func (r *categoryRepository) FindAll(ctx context.Context) ([]entity.Category, error) {
+	db := extractDB(ctx, r.db)
 	var categories []entity.Category
-	err := r.db.WithContext(ctx).Order("name ASC").Find(&categories).Error
+	err := db.Order("name ASC").Find(&categories).Error
 	return categories, err
 }
 
 func (r *categoryRepository) Update(ctx context.Context, category *entity.Category) error {
-	return r.db.WithContext(ctx).Save(category).Error
+	db := extractDB(ctx, r.db)
+	return db.Save(category).Error
 }
 
 func (r *categoryRepository) Delete(ctx context.Context, id uint) error {
-	return r.db.WithContext(ctx).Delete(&entity.Category{}, id).Error
+	db := extractDB(ctx, r.db)
+	result := db.Delete(&entity.Category{}, id)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func (r *categoryRepository) ExistsBySlug(ctx context.Context, slug string, excludeID ...uint) (bool, error) {
+	db := extractDB(ctx, r.db)
 	var count int64
-	query := r.db.WithContext(ctx).Model(&entity.Category{}).Where("slug = ?", slug)
+
+	query := db.Model(&entity.Category{}).Where("slug = ?", slug)
 	if len(excludeID) > 0 && excludeID[0] > 0 {
 		query = query.Where("id != ?", excludeID[0])
 	}
+
 	err := query.Count(&count).Error
 	return count > 0, err
 }
