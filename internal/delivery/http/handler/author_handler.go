@@ -76,16 +76,13 @@ func (h *AuthorHandler) FindAll(c fiber.Ctx) error {
 
 func (h *AuthorHandler) FindBySlug(c fiber.Ctx) error {
 	slugStr := c.Params("slug")
-	bookPq := pagination.FromFiber(c)
-
-	res, err := h.usecase.FindBySlug(c.Context(), slugStr, bookPq)
+	res, err := h.usecase.FindBySlug(c.Context(), slugStr)
 	if err != nil {
 		if errors.Is(err, entity.ErrAuthorNotFound) {
 			return response.Error(c, fiber.StatusNotFound, err.Error(), nil)
 		}
 		return response.Error(c, fiber.StatusInternalServerError, err.Error(), nil)
 	}
-
 	return response.Success(c, fiber.StatusOK, "author retrieved successfully", res)
 }
 

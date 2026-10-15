@@ -56,7 +56,7 @@ type AuthorDetailResult struct {
 type AuthorUsecase interface {
 	Create(ctx context.Context, req CreateAuthorInput) (*AuthorResult, error)
 	FindAll(ctx context.Context, pq pagination.Query) ([]AuthorList, pagination.Meta, error)
-	FindBySlug(ctx context.Context, slug string, bookPq pagination.Query) (*AuthorDetailResult, error)
+	FindBySlug(ctx context.Context, slug string) (*AuthorResult, error)
 	Update(ctx context.Context, id uint, req UpdateAuthorInput) (*AuthorResult, error)
 	Delete(ctx context.Context, id uint) error
 }
@@ -122,39 +122,15 @@ func (u *authorUsecase) FindAll(ctx context.Context, pq pagination.Query) ([]Aut
 	return responses, meta, nil
 }
 
-func (u *authorUsecase) FindBySlug(ctx context.Context, slugStr string, bookPq pagination.Query) (*AuthorDetailResult, error) {
+func (u *authorUsecase) FindBySlug(ctx context.Context, slugStr string) (*AuthorResult, error) {
 	author, err := u.authorRepo.FindBySlug(ctx, slugStr)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get author: %w", err)
 	}
 	if author == nil {
 		return nil, entity.ErrAuthorNotFound
 	}
-
-	books, totalBooks, err := u.authorRepo.FindBooksByAuthorID(ctx, author.ID, bookPq.PerPage, bookPq.Offset())
-	if err != nil {
-		return nil, err
-	}
-
-	bookItems := make([]AuthorBookItem, 0, len(books))
-	for _, b := range books {
-		bookItems = append(bookItems, AuthorBookItem{
-			ID:    b.ID,
-			Title: b.Title,
-			Slug:  b.Slug,
-			Price: b.Price,
-			Cover: b.CoverImage,
-		})
-	}
-
-	return &AuthorDetailResult{
-		ID:        author.ID,
-		Name:      author.Name,
-		Slug:      author.Slug,
-		Bio:       author.Bio,
-		Books:     bookItems,
-		BooksMeta: pagination.BuildMeta(totalBooks, bookPq.Page, bookPq.PerPage),
-	}, nil
+	return u.toResponse(author), nil
 }
 
 func (u *authorUsecase) Update(ctx context.Context, id uint, req UpdateAuthorInput) (*AuthorResult, error) {

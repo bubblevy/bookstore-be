@@ -14,5 +14,4 @@ type AuthorRepository interface {
 	Update(ctx context.Context, author *entity.Author) error
 	Delete(ctx context.Context, id uint) error
 	ExistsBySlug(ctx context.Context, slug string, excludeID ...uint) (bool, error)
-	FindBooksByAuthorID(ctx context.Context, authorID uint, limit, offset int) ([]entity.Book, int64, error)
 }

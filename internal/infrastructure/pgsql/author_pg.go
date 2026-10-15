@@ -98,28 +98,3 @@ func (r *authorRepository) ExistsBySlug(ctx context.Context, slug string, exclud
 	err := query.Count(&count).Error
 	return count > 0, err
 }
-
-func (r *authorRepository) FindBooksByAuthorID(ctx context.Context, authorID uint, limit, offset int) ([]entity.Book, int64, error) {
-	db := extractDB(ctx, r.db)
-	var total int64
-
-	baseQuery := db.Model(&entity.Book{}).
-		Where("author_id = ? AND is_active = ?", authorID, true)
-
-	if err := baseQuery.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-
-	if total == 0 {
-		return []entity.Book{}, 0, nil
-	}
-
-	var books []entity.Book
-	err := baseQuery.
-		Order("created_at DESC").
-		Limit(limit).
-		Offset(offset).
-		Find(&books).Error
-
-	return books, total, err
-}

@@ -16,12 +16,18 @@ tags:
   - name: Publisher
     description: Book publisher catalog management (Public browsing, Admin CRUD)
   - name: Author
-    description: Book author catalog management (Public browsing, Admin CRUD, paginated books)
+    description: Book author catalog management (Public browsing, Admin CRUD)
+  - name: Book
+    description: Book catalog management (SEO-friendly slug queries, dynamic filters, Admin CRUD via IDs)
   - name: Address
     description: User shipping address management (CRUD, primary address, max 5 addresses)
   - name: Shipping
     description: RajaOngkir destination lookup and authenticated shipping cost calculation
+
 paths:
+  # =========================================================================
+  # HEALTH
+  # =========================================================================
   /health:
     get:
       tags:
@@ -56,6 +62,9 @@ paths:
         '503':
           description: Database connection unavailable
 
+  # =========================================================================
+  # AUTH
+  # =========================================================================
   /api/v1/auth/register:
     post:
       tags:
@@ -266,28 +275,29 @@ paths:
       tags:
         - Auth
       summary: Google OAuth2 Callback
-      description: The callback endpoint for Google OAuth2. Exchanges authorization code for token, creates or links user, sets HTTP-only cookies, and redirects to frontend dashboard.
+      description: The callback endpoint for Google OAuth2.
       parameters:
         - in: query
           name: code
           required: true
           schema:
             type: string
-          description: The authorization code returned by Google.
         - in: query
           name: state
           required: true
           schema:
             type: string
-          description: The CSRF state token to validate against the cookie.
       responses:
         '303':
-          description: Login successful, sets `access_token` and `refresh_token` cookies, and redirects to dashboard.
+          description: Login successful, sets auth cookies, and redirects.
         '400':
           description: Missing code or invalid request.
         '401':
           description: Invalid OAuth state (CSRF failure).
 
+  # =========================================================================
+  # CATEGORIES
+  # =========================================================================
   /api/v1/categories:
     get:
       tags:
@@ -481,6 +491,9 @@ paths:
         '500':
           description: Internal server error
 
+  # =========================================================================
+  # PUBLISHERS
+  # =========================================================================
   /api/v1/publishers:
     get:
       tags:
@@ -674,6 +687,9 @@ paths:
         '500':
           description: Internal server error
 
+  # =========================================================================
+  # AUTHORS
+  # =========================================================================
   /api/v1/authors:
     get:
       tags:
@@ -770,8 +786,8 @@ paths:
     get:
       tags:
         - Author
-      summary: Get author by slug with paginated books
-      description: Public endpoint to retrieve author details and a paginated list of their active books.
+      summary: Get author by slug
+      description: Public endpoint to retrieve profile details of a specific author using their slug. To view books by this author, query `/api/v1/books?author={slug}`.
       parameters:
         - in: path
           name: slug
@@ -779,23 +795,6 @@ paths:
           schema:
             type: string
           description: Author slug (e.g. tere-liye)
-        - in: query
-          name: page
-          required: false
-          schema:
-            type: integer
-            default: 1
-            minimum: 1
-          description: Book list page number
-        - in: query
-          name: per_page
-          required: false
-          schema:
-            type: integer
-            default: 10
-            minimum: 1
-            maximum: 100
-          description: Books per page
       responses:
         '200':
           description: Author retrieved successfully
@@ -814,7 +813,7 @@ paths:
                     type: string
                     example: "author retrieved successfully"
                   data:
-                    $ref: '#/components/schemas/AuthorDetailResult'
+                    $ref: '#/components/schemas/AuthorResult'
         '404':
           description: Author not found
         '500':
@@ -904,6 +903,282 @@ paths:
         '500':
           description: Internal server error
 
+  # =========================================================================
+  # BOOKS
+  # =========================================================================
+  /api/v1/books:
+    get:
+      tags:
+        - Book
+      summary: Get all books (paginated & filtered)
+      description: Public endpoint to retrieve books with search, relational slug filters, price ranges, and sorting. Non-admin users are restricted to active books only.
+      parameters:
+        - in: query
+          name: search
+          required: false
+          schema:
+            type: string
+          description: Search keyword across title and ISBN
+        - in: query
+          name: category
+          required: false
+          schema:
+            type: string
+          description: Filter books by Category slug (e.g., fiksi-sejarah)
+        - in: query
+          name: author
+          required: false
+          schema:
+            type: string
+          description: Filter books by Author slug (e.g., pramoedya-ananta-toer)
+        - in: query
+          name: publisher
+          required: false
+          schema:
+            type: string
+          description: Filter books by Publisher slug (e.g., lentera-dipantara)
+        - in: query
+          name: min_price
+          required: false
+          schema:
+            type: number
+            format: double
+            minimum: 0
+          description: Minimum book price filter
+        - in: query
+          name: max_price
+          required: false
+          schema:
+            type: number
+            format: double
+            minimum: 0
+          description: Maximum book price filter
+        - in: query
+          name: sort_by
+          required: false
+          schema:
+            type: string
+            enum: [newest, price_asc, price_desc, title_asc]
+            default: newest
+          description: Sorting criterion
+        - in: query
+          name: is_active
+          required: false
+          schema:
+            type: string
+            enum: ["true", "false", "all"]
+          description: Admin-only filter for book status (ignored for non-admin users)
+        - in: query
+          name: page
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+          description: Page number
+        - in: query
+          name: per_page
+          required: false
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+          description: Items per page
+      responses:
+        '200':
+          description: Books retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "books retrieved successfully"
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BookListItem'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '400':
+          description: Invalid query parameters (e.g. invalid price format)
+        '500':
+          description: Internal server error
+    post:
+      tags:
+        - Book
+      summary: Create a book
+      description: Admin-only endpoint to create a new book. Uses integer foreign keys for relationships and auto-generates unique slug from title.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBookRequest'
+      responses:
+        '201':
+          description: Book created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 201
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "book created successfully"
+                  data:
+                    $ref: '#/components/schemas/BookDetailResult'
+        '400':
+          description: Validation error or referenced category/author/publisher ID not found
+        '401':
+          description: Unauthorized request
+        '403':
+          description: Forbidden (Admin role required)
+        '409':
+          description: Book slug or ISBN conflict
+        '500':
+          description: Internal server error
+
+  /api/v1/books/{slug}:
+    get:
+      tags:
+        - Book
+      summary: Get book details by slug
+      description: Public endpoint to retrieve full details of an active book. Inactive books return 404 for non-admin visitors.
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+          description: Book slug (e.g., bumi-manusia)
+      responses:
+        '200':
+          description: Book retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "book retrieved successfully"
+                  data:
+                    $ref: '#/components/schemas/BookDetailResult'
+        '404':
+          description: Book not found or inactive
+        '500':
+          description: Internal server error
+
+  /api/v1/books/{id}:
+    put:
+      tags:
+        - Book
+      summary: Update a book
+      description: Admin-only endpoint to update an existing book by its numeric ID. Regenerates slug if title changed.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Book ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBookRequest'
+      responses:
+        '200':
+          description: Book updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "book updated successfully"
+                  data:
+                    $ref: '#/components/schemas/BookDetailResult'
+        '400':
+          description: Validation error, invalid ID parameter, or foreign key not found
+        '401':
+          description: Unauthorized request
+        '403':
+          description: Forbidden (Admin role required)
+        '404':
+          description: Book not found
+        '409':
+          description: Book slug or ISBN conflict
+        '500':
+          description: Internal server error
+    delete:
+      tags:
+        - Book
+      summary: Delete a book
+      description: Admin-only endpoint to soft-delete a book.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Book ID
+      responses:
+        '200':
+          description: Book deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid ID parameter
+        '401':
+          description: Unauthorized request
+        '403':
+          description: Forbidden (Admin role required)
+        '404':
+          description: Book not found
+        '500':
+          description: Internal server error
+
+  # =========================================================================
+  # ADDRESSES
+  # =========================================================================
   /api/v1/addresses:
     get:
       tags:
@@ -941,7 +1216,7 @@ paths:
       tags:
         - Address
       summary: Create a new address
-      description: Adds a new address for the authenticated user using RajaOngkir/Komerce destination ID. Maximum 5 addresses per user. First address becomes primary automatically.
+      description: Adds a new address for the authenticated user using RajaOngkir destination ID. Maximum 5 addresses per user.
       security:
         - BearerAuth: []
       requestBody:
@@ -1126,6 +1401,9 @@ paths:
         '500':
           description: Internal server error
 
+  # =========================================================================
+  # SHIPPING
+  # =========================================================================
   /api/v1/shipping/destinations:
     get:
       tags:
@@ -1185,7 +1463,7 @@ paths:
       tags:
         - Shipping
       summary: Calculate domestic shipping cost
-      description: Calculates delivery rates from store origin (Welahan, Jepara) to the destination location ID using selected couriers. Requires authentication as purchase checkout mandates login.
+      description: Calculates delivery rates from store origin to destination location ID using selected couriers.
       security:
         - BearerAuth: []
       requestBody:
@@ -1455,28 +1733,144 @@ components:
           format: date-time
           example: "2026-10-14T10:15:30+07:00"
 
-    AuthorBookItem:
+    # =========================================================================
+    # BOOK SCHEMAS
+    # =========================================================================
+    CreateBookRequest:
       type: object
+      required:
+        - category_id
+        - author_id
+        - publisher_id
+        - title
+        - price
+        - weight_grams
       properties:
-        id:
+        category_id:
           type: integer
-          example: 101
+          example: 1
+        author_id:
+          type: integer
+          example: 1
+        publisher_id:
+          type: integer
+          example: 1
         title:
           type: string
-          example: "Bumi"
-        slug:
+          minLength: 2
+          maxLength: 255
+          example: "Bumi Manusia"
+        isbn:
           type: string
-          example: "bumi"
+          maxLength: 30
+          nullable: true
+          example: "9789799731234"
+        synopsis:
+          type: string
+          nullable: true
+          example: "Roman berlatar Hindia Belanda menceritakan Minke dan Annelies."
         price:
           type: number
           format: double
-          example: 95000.00
+          minimum: 0
+          example: 135000.00
+        weight_grams:
+          type: integer
+          minimum: 1
+          example: 450
+        pages:
+          type: integer
+          minimum: 1
+          nullable: true
+          example: 535
+        publication_year:
+          type: integer
+          minimum: 1000
+          maximum: 2100
+          nullable: true
+          example: 2011
+        stock:
+          type: integer
+          minimum: 0
+          default: 0
+          example: 40
         cover_image:
           type: string
+          maxLength: 255
           nullable: true
-          example: "bumi.jpg"
+          example: "https://example.com/covers/bumi-manusia.jpg"
+        is_active:
+          type: boolean
+          default: true
+          example: true
 
-    AuthorDetailResult:
+    UpdateBookRequest:
+      type: object
+      required:
+        - category_id
+        - author_id
+        - publisher_id
+        - title
+        - price
+        - weight_grams
+      properties:
+        category_id:
+          type: integer
+          example: 1
+        author_id:
+          type: integer
+          example: 1
+        publisher_id:
+          type: integer
+          example: 1
+        title:
+          type: string
+          minLength: 2
+          maxLength: 255
+          example: "Bumi Manusia (Edisi Khusus)"
+        isbn:
+          type: string
+          maxLength: 30
+          nullable: true
+          example: "9789799731234"
+        synopsis:
+          type: string
+          nullable: true
+          example: "Edisi hardcover terbaru dari Tetralogi Buru."
+        price:
+          type: number
+          format: double
+          minimum: 0
+          example: 160000.00
+        weight_grams:
+          type: integer
+          minimum: 1
+          example: 550
+        pages:
+          type: integer
+          minimum: 1
+          nullable: true
+          example: 550
+        publication_year:
+          type: integer
+          minimum: 1000
+          maximum: 2100
+          nullable: true
+          example: 2024
+        stock:
+          type: integer
+          minimum: 0
+          example: 50
+        cover_image:
+          type: string
+          maxLength: 255
+          nullable: true
+          example: "https://example.com/covers/bumi-manusia-special.jpg"
+        is_active:
+          type: boolean
+          example: true
+
+    BookRelationItem:
       type: object
       properties:
         id:
@@ -1484,20 +1878,106 @@ components:
           example: 1
         name:
           type: string
-          example: "Tere Liye"
+          example: "Fiksi Sejarah"
         slug:
           type: string
-          example: "tere-liye"
-        bio:
+          example: "fiksi-sejarah"
+
+    BookListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        title:
+          type: string
+          example: "Bumi Manusia"
+        slug:
+          type: string
+          example: "bumi-manusia"
+        price:
+          type: number
+          format: double
+          example: 135000.00
+        stock:
+          type: integer
+          example: 40
+        weight_grams:
+          type: integer
+          example: 450
+        cover_image:
           type: string
           nullable: true
-          example: "Penulis novel ternama Indonesia"
-        books:
-          type: array
-          items:
-            $ref: '#/components/schemas/AuthorBookItem'
-        books_meta:
-          $ref: '#/components/schemas/PaginationMeta'
+          example: "https://example.com/covers/bumi-manusia.jpg"
+        is_active:
+          type: boolean
+          example: true
+        category:
+          $ref: '#/components/schemas/BookRelationItem'
+        author:
+          $ref: '#/components/schemas/BookRelationItem'
+        publisher:
+          $ref: '#/components/schemas/BookRelationItem'
+
+    BookDetailResult:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        title:
+          type: string
+          example: "Bumi Manusia"
+        slug:
+          type: string
+          example: "bumi-manusia"
+        isbn:
+          type: string
+          nullable: true
+          example: "9789799731234"
+        synopsis:
+          type: string
+          nullable: true
+          example: "Sebuah roman berlatar zaman kolonial Hindia Belanda."
+        price:
+          type: number
+          format: double
+          example: 135000.00
+        weight_grams:
+          type: integer
+          example: 450
+        pages:
+          type: integer
+          nullable: true
+          example: 535
+        publication_year:
+          type: integer
+          nullable: true
+          example: 2011
+        stock:
+          type: integer
+          example: 40
+        cover_image:
+          type: string
+          nullable: true
+          example: "https://example.com/covers/bumi-manusia.jpg"
+        is_active:
+          type: boolean
+          example: true
+        category:
+          $ref: '#/components/schemas/BookRelationItem'
+        author:
+          $ref: '#/components/schemas/BookRelationItem'
+        publisher:
+          $ref: '#/components/schemas/BookRelationItem'
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-10-15T13:40:00+07:00"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-10-15T13:40:00+07:00"
 
     # =========================================================================
     # AUTH SCHEMAS

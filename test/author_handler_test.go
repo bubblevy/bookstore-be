@@ -40,12 +40,12 @@ func (m *MockAuthorUsecase) FindAll(ctx context.Context, pq pagination.Query) ([
 	return args.Get(0).([]usecase.AuthorList), args.Get(1).(pagination.Meta), args.Error(2)
 }
 
-func (m *MockAuthorUsecase) FindBySlug(ctx context.Context, slug string, bookPq pagination.Query) (*usecase.AuthorDetailResult, error) {
-	args := m.Called(ctx, slug, bookPq)
+func (m *MockAuthorUsecase) FindBySlug(ctx context.Context, slug string) (*usecase.AuthorResult, error) {
+	args := m.Called(ctx, slug)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*usecase.AuthorDetailResult), args.Error(1)
+	return args.Get(0).(*usecase.AuthorResult), args.Error(1)
 }
 
 func (m *MockAuthorUsecase) Update(ctx context.Context, id uint, req usecase.UpdateAuthorInput) (*usecase.AuthorResult, error) {
@@ -128,27 +128,36 @@ func TestAuthorHandler_FindBySlug_Success(t *testing.T) {
 	mockUC := new(MockAuthorUsecase)
 	app := setupAuthorApp(mockUC, false, false)
 
-	expectedDetail := &usecase.AuthorDetailResult{
-		ID:    1,
-		Name:  "Tere Liye",
-		Slug:  "tere-liye",
-		Books: []usecase.AuthorBookItem{},
-		BooksMeta: pagination.Meta{
-			CurrentPage: 1,
-			PerPage:     10,
-			TotalItems:  0,
-			TotalPages:  0,
-		},
+	bio := "Penulis ternama Indonesia"
+	expectedAuthor := &usecase.AuthorResult{
+		ID:        1,
+		Name:      "Tere Liye",
+		Slug:      "tere-liye",
+		Bio:       &bio,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
-	mockUC.On("FindBySlug", mock.Anything, "tere-liye", pagination.Query{Page: 1, PerPage: 10}).
-		Return(expectedDetail, nil)
+	mockUC.On("FindBySlug", mock.Anything, "tere-liye").Return(expectedAuthor, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/authors/tere-liye", nil)
 	resp, err := app.Test(req)
 
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	body, _ := io.ReadAll(resp.Body)
+	var res struct {
+		Code    int                  `json:"code"`
+		Status  bool                 `json:"status"`
+		Message string               `json:"message"`
+		Data    usecase.AuthorResult `json:"data"`
+	}
+	err = json.Unmarshal(body, &res)
+	assert.NoError(t, err)
+	assert.True(t, res.Status)
+	assert.Equal(t, "Tere Liye", res.Data.Name)
+	assert.Equal(t, "tere-liye", res.Data.Slug)
 	mockUC.AssertExpectations(t)
 }
 
@@ -156,8 +165,7 @@ func TestAuthorHandler_FindBySlug_NotFound(t *testing.T) {
 	mockUC := new(MockAuthorUsecase)
 	app := setupAuthorApp(mockUC, false, false)
 
-	mockUC.On("FindBySlug", mock.Anything, "unknown", pagination.Query{Page: 1, PerPage: 10}).
-		Return(nil, entity.ErrAuthorNotFound)
+	mockUC.On("FindBySlug", mock.Anything, "unknown").Return(nil, entity.ErrAuthorNotFound)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/authors/unknown", nil)
 	resp, err := app.Test(req)
