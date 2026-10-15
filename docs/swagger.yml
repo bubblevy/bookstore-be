@@ -12,15 +12,17 @@ tags:
   - name: Auth
     description: User authentication and account management
   - name: Category
-    description: Book category catalog management 
+    description: Book category catalog management
   - name: Publisher
-    description: Book publisher catalog management 
+    description: Book publisher catalog management
   - name: Author
-    description: Book author catalog management 
+    description: Book author catalog management
   - name: Book
     description: Book catalog management
   - name: Discount
     description: Discount & voucher management
+  - name: Cart
+    description: User shopping cart management
   - name: Address
     description: User shipping address management
   - name: Shipping
@@ -1469,6 +1471,195 @@ paths:
           description: Internal server error
 
   # =========================================================================
+  # CART
+  # =========================================================================
+  /api/v1/cart:
+    get:
+      tags:
+        - Cart
+      summary: Get user shopping cart
+      description: Retrieves the current active shopping cart for the authenticated user, including subtotal, total weight (in grams for shipping calculation), and real-time book stock.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Cart retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "cart retrieved successfully"
+                  data:
+                    $ref: '#/components/schemas/CartResult'
+        '401':
+          description: Unauthorized request
+        '500':
+          description: Internal server error
+    delete:
+      tags:
+        - Cart
+      summary: Clear shopping cart
+      description: Hard deletes all items currently in the authenticated user's shopping cart.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Cart cleared successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          description: Unauthorized request
+        '500':
+          description: Internal server error
+
+  /api/v1/cart/items:
+    post:
+      tags:
+        - Cart
+      summary: Add book to cart
+      description: Adds a book to the authenticated user's cart. If the book already exists in the cart, the quantity is accumulated automatically. Validates real-time book stock and active status.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddToCartRequest'
+      responses:
+        '201':
+          description: Item added to cart successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Validation error, inactive book, or insufficient stock
+        '401':
+          description: Unauthorized request
+        '500':
+          description: Internal server error
+
+  /api/v1/cart/items/{id}:
+    patch:
+      tags:
+        - Cart
+      summary: Update cart item quantity
+      description: Updates the quantity of a specific item in the authenticated user's cart. Verifies ownership and book stock.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Cart Item ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCartItemRequest'
+      responses:
+        '200':
+          description: Cart item updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Validation error, invalid ID parameter, inactive book, or insufficient stock
+        '401':
+          description: Unauthorized request
+        '404':
+          description: Cart item not found or does not belong to user
+        '500':
+          description: Internal server error
+    delete:
+      tags:
+        - Cart
+      summary: Delete single cart item
+      description: Hard deletes a specific item from the authenticated user's cart.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Cart Item ID
+      responses:
+        '200':
+          description: Cart item deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid ID parameter
+        '401':
+          description: Unauthorized request
+        '404':
+          description: Cart item not found or does not belong to user
+        '500':
+          description: Internal server error
+
+  /api/v1/cart/selected:
+    post:
+      tags:
+        - Cart
+      summary: Calculate and preview selected cart items (Selective Checkout)
+      description: Calculates subtotal price, total quantity, and shipping weight for a selected subset of items (Shopee style checkout preview). Verifies that all selected items exist in the user's cart, books are active, and stock is sufficient.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SelectedCartItemsRequest'
+      responses:
+        '200':
+          description: Selected items calculated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "selected items calculated successfully"
+                  data:
+                    $ref: '#/components/schemas/SelectedCartItemsResult'
+        '400':
+          description: Validation error, empty list, book inactive, or requested quantity exceeds available stock
+        '401':
+          description: Unauthorized request
+        '404':
+          description: One or more selected cart items not found in user's cart
+        '500':
+          description: Internal server error
+
+  # =========================================================================
   # ADDRESSES
   # =========================================================================
   /api/v1/addresses:
@@ -2657,6 +2848,148 @@ components:
           type: number
           format: double
           example: 123000.00
+
+    # =========================================================================
+    # CART SCHEMAS
+    # =========================================================================
+    AddToCartRequest:
+      type: object
+      required:
+        - book_id
+        - quantity
+      properties:
+        book_id:
+          type: integer
+          minimum: 1
+          example: 1
+        quantity:
+          type: integer
+          minimum: 1
+          example: 2
+
+    UpdateCartItemRequest:
+      type: object
+      required:
+        - quantity
+      properties:
+        quantity:
+          type: integer
+          minimum: 1
+          example: 3
+
+    SelectedCartItemsRequest:
+      type: object
+      required:
+        - item_ids
+      properties:
+        item_ids:
+          type: array
+          minItems: 1
+          items:
+            type: integer
+          description: Array of cart item IDs to check and calculate
+          example: [10, 12]
+
+    CartBookSummaryResult:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        title:
+          type: string
+          example: "Bumi Manusia"
+        slug:
+          type: string
+          example: "bumi-manusia"
+        price:
+          type: number
+          format: double
+          example: 135000.00
+        weight_grams:
+          type: integer
+          example: 450
+        stock:
+          type: integer
+          example: 40
+        cover_image:
+          type: string
+          nullable: true
+          example: "https://example.com/covers/bumi-manusia.jpg"
+        is_active:
+          type: boolean
+          example: true
+
+    CartItemResult:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 10
+        book_id:
+          type: integer
+          example: 1
+        quantity:
+          type: integer
+          example: 2
+        subtotal:
+          type: number
+          format: double
+          example: 270000.00
+        subweight_grams:
+          type: integer
+          example: 900
+        book:
+          $ref: '#/components/schemas/CartBookSummaryResult'
+
+    CartResult:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        total_items:
+          type: integer
+          description: Total number of distinct book entries in cart
+          example: 2
+        total_quantity:
+          type: integer
+          description: Total sum of book quantities
+          example: 3
+        total_weight_grams:
+          type: integer
+          description: Combined weight used directly for shipping calculation
+          example: 1350
+        total_price:
+          type: number
+          format: double
+          description: Subtotal price before discounts
+          example: 365000.00
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartItemResult'
+
+    SelectedCartItemsResult:
+      type: object
+      properties:
+        total_items:
+          type: integer
+          example: 2
+        total_quantity:
+          type: integer
+          example: 3
+        total_weight_grams:
+          type: integer
+          example: 1350
+        total_price:
+          type: number
+          format: double
+          example: 365000.00
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartItemResult'
 
     # =========================================================================
     # AUTH SCHEMAS
