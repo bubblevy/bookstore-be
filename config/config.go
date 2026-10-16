@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/bubblevy/bookstore/internal/usecase"
@@ -13,27 +14,29 @@ import (
 )
 
 type BiteshipConfig struct {
-	APIKey        string
-	BaseURL       string
-	OriginAreaID  string
-	WebhookSecret string
-	ShipperName   string
-	ShipperPhone  string
-	ShipperEmail  string
-	OriginName    string
-	OriginPhone   string
-	OriginAddr    string
+	APIKey           string
+	BaseURL          string
+	OriginAreaID     string
+	OriginPostalCode int
+	WebhookSecret    string
+	ShipperName      string
+	ShipperPhone     string
+	ShipperEmail     string
+	OriginName       string
+	OriginPhone      string
+	OriginAddr       string
 }
 
 func (b BiteshipConfig) ToStoreShippingConfig() usecase.StoreShippingConfig {
 	return usecase.StoreShippingConfig{
-		ShipperName:  b.ShipperName,
-		ShipperPhone: b.ShipperPhone,
-		ShipperEmail: b.ShipperEmail,
-		OriginName:   b.OriginName,
-		OriginPhone:  b.OriginPhone,
-		OriginAddr:   b.OriginAddr,
-		OriginAreaID: b.OriginAreaID,
+		ShipperName:      b.ShipperName,
+		ShipperPhone:     b.ShipperPhone,
+		ShipperEmail:     b.ShipperEmail,
+		OriginName:       b.OriginName,
+		OriginPhone:      b.OriginPhone,
+		OriginAddr:       b.OriginAddr,
+		OriginAreaID:     b.OriginAreaID,
+		OriginPostalCode: b.OriginPostalCode,
 	}
 }
 
@@ -88,16 +91,17 @@ func LoadConfig() AppConfig {
 			Endpoint: google.Endpoint,
 		},
 		Biteship: BiteshipConfig{
-			APIKey:        os.Getenv("BITESHIP_API_KEY"),
-			BaseURL:       getEnv("BITESHIP_BASE_URL", "https://api.biteship.com"),
-			OriginAreaID:  os.Getenv("BITESHIP_ORIGIN_AREA_ID"),
-			WebhookSecret: os.Getenv("BITESHIP_WEBHOOK_SECRET"),
-			ShipperName:   getEnv("STORE_SHIPPER_NAME", "Admin Bookstore"),
-			ShipperPhone:  os.Getenv("STORE_SHIPPER_PHONE"),
-			ShipperEmail:  os.Getenv("STORE_SHIPPER_EMAIL"),
-			OriginName:    getEnv("STORE_ORIGIN_NAME", "Gudang Utama Bookstore"),
-			OriginPhone:   os.Getenv("STORE_ORIGIN_PHONE"),
-			OriginAddr:    os.Getenv("STORE_ORIGIN_ADDRESS"),
+			APIKey:           os.Getenv("BITESHIP_API_KEY"),
+			BaseURL:          getEnv("BITESHIP_BASE_URL", "https://api.biteship.com"),
+			OriginAreaID:     os.Getenv("BITESHIP_ORIGIN_AREA_ID"),
+			OriginPostalCode: getEnvInt("BITESHIP_ORIGIN_POSTAL_CODE", 59464),
+			WebhookSecret:    os.Getenv("BITESHIP_WEBHOOK_SECRET"),
+			ShipperName:      getEnv("STORE_SHIPPER_NAME", "Admin Bookstore"),
+			ShipperPhone:     os.Getenv("STORE_SHIPPER_PHONE"),
+			ShipperEmail:     os.Getenv("STORE_SHIPPER_EMAIL"),
+			OriginName:       getEnv("STORE_ORIGIN_NAME", "Gudang Utama Bookstore"),
+			OriginPhone:      os.Getenv("STORE_ORIGIN_PHONE"),
+			OriginAddr:       os.Getenv("STORE_ORIGIN_ADDRESS"),
 		},
 		Midtrans: MidtransConfig{
 			ServerKey:    os.Getenv("MIDTRANS_SERVER_KEY"),
@@ -118,8 +122,8 @@ func LoadConfig() AppConfig {
 		os.Exit(1)
 	}
 
-	if cfg.Biteship.APIKey == "" || cfg.Biteship.OriginAreaID == "" {
-		fmt.Fprintln(os.Stderr, "fatal: BITESHIP_API_KEY and BITESHIP_ORIGIN_AREA_ID are required")
+	if cfg.Biteship.APIKey == "" || cfg.Biteship.OriginAreaID == "" || cfg.Biteship.OriginPostalCode <= 0 {
+		fmt.Fprintln(os.Stderr, "fatal: BITESHIP_API_KEY, BITESHIP_ORIGIN_AREA_ID, and STORE_ORIGIN_POSTAL_CODE are required")
 		os.Exit(1)
 	}
 
@@ -149,4 +153,16 @@ func getEnvBool(key string, defaultVal bool) bool {
 		return defaultVal
 	}
 	return strings.ToLower(val) == "true" || val == "1"
+}
+
+func getEnvInt(key string, fallback int) int {
+	val := os.Getenv(key)
+	if val == "" {
+		return fallback
+	}
+	v, err := strconv.Atoi(strings.TrimSpace(val))
+	if err != nil {
+		return fallback
+	}
+	return v
 }

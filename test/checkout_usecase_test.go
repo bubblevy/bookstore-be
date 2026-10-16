@@ -67,6 +67,11 @@ func (m *MockOrderRepository) UpdatePaymentStatus(ctx context.Context, orderID u
 	return args.Error(0)
 }
 
+func (m *MockOrderRepository) MarkAsReturned(ctx context.Context, orderID uint, reason string) error {
+	args := m.Called(ctx, orderID, reason)
+	return args.Error(0)
+}
+
 type MockAddressRepositoryForCheckout struct {
 	mock.Mock
 }
@@ -430,7 +435,11 @@ func TestCheckoutUsecase_CreateOrder(t *testing.T) {
 
 		mockOrderRepo.On("WithTx", mock.Anything).Return(mockOrderRepo).Once()
 		mockOrderRepo.On("CreateOrder", mock.Anything, mock.MatchedBy(func(o *entity.Order) bool {
-			return o.UserID == userID && o.Status == entity.OrderStatusWaitingPayment && o.TotalAmount == 224000
+			return o.UserID == userID &&
+				o.Status == entity.OrderStatusWaitingPayment &&
+				o.DestinationAreaID == dummyAddr.BiteshipAreaID &&
+				o.PostalCode == dummyAddr.PostalCode &&
+				o.TotalAmount == 224000
 		}), mock.Anything).Return(nil).Once()
 
 		sqlMock.ExpectExec(`(DELETE FROM "cart_items"|UPDATE "cart_items" SET "deleted_at")`).

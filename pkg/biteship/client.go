@@ -207,12 +207,14 @@ type CreateOrderByAreaIDRequest struct {
 	OriginAddress           string      `json:"origin_address"`
 	OriginNote              string      `json:"origin_note,omitempty"`
 	OriginAreaID            string      `json:"origin_area_id,omitempty"`
+	OriginPostalCode        int         `json:"origin_postal_code,omitempty"`
 	DestinationContactName  string      `json:"destination_contact_name"`
 	DestinationContactPhone string      `json:"destination_contact_phone"`
 	DestinationContactEmail string      `json:"destination_contact_email,omitempty"`
 	DestinationAddress      string      `json:"destination_address"`
 	DestinationNote         string      `json:"destination_note,omitempty"`
 	DestinationAreaID       string      `json:"destination_area_id"`
+	DestinationPostalCode   int         `json:"destination_postal_code,omitempty"`
 	CourierCompany          string      `json:"courier_company"`
 	CourierType             string      `json:"courier_type"`
 	CourierInsurance        int64       `json:"courier_insurance,omitempty"`
@@ -298,12 +300,22 @@ type TrackingHistory struct {
 	Status    string `json:"status"`
 }
 
+type CourierInfo struct {
+	Company     string  `json:"company"`
+	Name        string  `json:"name"`
+	DriverName  *string `json:"driver_name"`
+	DriverPhone *string `json:"driver_phone"`
+	Type        string  `json:"type"`
+	Link        *string `json:"link"`
+}
+
 type TrackingDetailResult struct {
 	Success     bool              `json:"success"`
 	Message     string            `json:"message"`
 	WaybillID   string            `json:"waybill_id"`
 	CourierCode string            `json:"courier_code"`
 	CourierName string            `json:"courier_name"`
+	Courier     CourierInfo       `json:"courier"`
 	Status      string            `json:"status"`
 	History     []TrackingHistory `json:"history"`
 }
@@ -314,6 +326,13 @@ func (c *client) TrackByID(ctx context.Context, trackingID string) (*TrackingDet
 	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &res); err != nil {
 		return nil, err
 	}
+
+	if res.CourierCode == "" {
+		res.CourierCode = res.Courier.Company
+	}
+	if res.CourierName == "" {
+		res.CourierName = res.Courier.Name
+	}
 	return &res, nil
 }
 
@@ -323,6 +342,20 @@ func (c *client) TrackWaybill(ctx context.Context, waybillID, courierCode string
 	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &res); err != nil {
 		return nil, err
 	}
+
+	if res.CourierCode == "" {
+		res.CourierCode = res.Courier.Company
+		if res.CourierCode == "" {
+			res.CourierCode = courierCode
+		}
+	}
+	if res.CourierName == "" {
+		res.CourierName = res.Courier.Name
+		if res.CourierName == "" {
+			res.CourierName = strings.ToUpper(courierCode)
+		}
+	}
+
 	return &res, nil
 }
 

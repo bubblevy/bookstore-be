@@ -3,6 +3,7 @@ package pgsql
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/repository"
@@ -83,4 +84,16 @@ func (r *orderRepository) UpdateOrderStatus(ctx context.Context, orderID uint, s
 func (r *orderRepository) UpdatePaymentStatus(ctx context.Context, orderID uint, status entity.PaymentStatus) error {
 	db := extractDB(ctx, r.db)
 	return db.Model(&entity.Payment{}).Where("order_id = ?", orderID).Update("status", status).Error
+}
+
+func (r *orderRepository) MarkAsReturned(ctx context.Context, orderID uint, reason string) error {
+	now := time.Now()
+	return r.db.WithContext(ctx).Model(&entity.Order{}).
+		Where("id = ?", orderID).
+		Updates(map[string]interface{}{
+			"status":        entity.OrderStatusReturned,
+			"returned_at":   now,
+			"return_reason": reason,
+			"updated_at":    now,
+		}).Error
 }

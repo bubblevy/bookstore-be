@@ -91,6 +91,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	handler.NewAddressHandler(api, addressUsecase, validate, authMiddleware)
 
 	// biteship
+	webhookBiteshipAuth := middleware.BiteshipWebhookAuth(cfg.Biteship.WebhookSecret)
 	biteshipClient := biteship.NewClient(cfg.Biteship.APIKey, cfg.Biteship.BaseURL, cfg.Biteship.OriginAreaID)
 
 	// category routes
@@ -131,5 +132,5 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	// shipping routes
 	shipmentRepo := pgsql.NewShipmentRepository(db)
 	shipmentUseCase := usecase.NewShippingUsecase(db, orderRepo, shipmentRepo, biteshipClient, cfg.Biteship.ToStoreShippingConfig())
-	handler.NewShippingHandler(api, shipmentUseCase, authMiddleware, adminMiddleware)
+	handler.NewShippingHandler(api, shipmentUseCase, authMiddleware, adminMiddleware, webhookBiteshipAuth)
 }

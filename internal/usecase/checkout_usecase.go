@@ -357,10 +357,6 @@ func (u *checkoutUsecase) calculateBreakdown(
 	}, nil
 }
 
-// =========================================================================
-// 1. PREVIEW CHECKOUT
-// =========================================================================
-
 func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, input PreviewCheckoutInput) (*PreviewCheckoutResult, error) {
 	calc, err := u.calculateBreakdown(
 		ctx,
@@ -397,10 +393,6 @@ func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, inpu
 		TotalPayment:     calc.FinalTotal,
 	}, nil
 }
-
-// =========================================================================
-// 2. CREATE ORDER
-// =========================================================================
 
 func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input CreateOrderInput) (*CreateOrderResult, error) {
 	now := time.Now()
@@ -461,28 +453,29 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 
 		totalGross = int64(calc.FinalTotal)
 		createdOrder = &entity.Order{
-			UserID:           userID,
-			InvoiceNumber:    invoiceNumber,
-			Status:           entity.OrderStatusWaitingPayment,
-			ItemsSubtotal:    calc.ItemsSubtotal,
-			ShippingCost:     calc.ShippingCost,
-			DiscountAmount:   calc.DiscountDeduction,
-			AdminFee:         calc.AdminFee,
-			TotalAmount:      calc.FinalTotal,
-			DiscountID:       discountID,
-			DiscountCode:     discountCode,
-			Courier:          input.Courier,
-			CourierService:   input.CourierService,
-			TotalWeightGrams: calc.TotalWeightGrams,
-			RecipientName:    calc.Address.ReceiverName,
-			RecipientPhone:   calc.Address.Phone,
-			RecipientAddress: calc.Address.AddressLine,
-			ProvinceName:     calc.Address.ProvinceName,
-			CityName:         calc.Address.CityName,
-			DistrictName:     calc.Address.DistrictName,
-			SubdistrictName:  calc.Address.SubdistrictName,
-			PostalCode:       calc.Address.PostalCode,
-			PaymentDeadline:  now.Add(24 * time.Hour),
+			UserID:            userID,
+			InvoiceNumber:     invoiceNumber,
+			Status:            entity.OrderStatusWaitingPayment,
+			ItemsSubtotal:     calc.ItemsSubtotal,
+			ShippingCost:      calc.ShippingCost,
+			DiscountAmount:    calc.DiscountDeduction,
+			AdminFee:          calc.AdminFee,
+			TotalAmount:       calc.FinalTotal,
+			DiscountID:        discountID,
+			DiscountCode:      discountCode,
+			Courier:           input.Courier,
+			CourierService:    input.CourierService,
+			TotalWeightGrams:  calc.TotalWeightGrams,
+			RecipientName:     calc.Address.ReceiverName,
+			RecipientPhone:    calc.Address.Phone,
+			RecipientAddress:  calc.Address.AddressLine,
+			ProvinceName:      calc.Address.ProvinceName,
+			CityName:          calc.Address.CityName,
+			DistrictName:      calc.Address.DistrictName,
+			SubdistrictName:   calc.Address.SubdistrictName,
+			DestinationAreaID: calc.Address.BiteshipAreaID,
+			PostalCode:        calc.Address.PostalCode,
+			PaymentDeadline:   now.Add(24 * time.Hour),
 		}
 
 		orderRepoTx := u.orderRepo.WithTx(tx)
@@ -543,10 +536,6 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 	}, nil
 }
 
-// =========================================================================
-// 3. MIDTRANS WEBHOOK LISTENER
-// =========================================================================
-
 func (u *checkoutUsecase) HandleMidtransWebhook(ctx context.Context, input MidtransWebhookInput) error {
 	isValid := u.midtransSvc.VerifyNotification(
 		input.OrderID,
@@ -568,7 +557,7 @@ func (u *checkoutUsecase) HandleMidtransWebhook(ctx context.Context, input Midtr
 			return err
 		}
 
-		if order.Status == entity.OrderStatusPaid || order.Status == entity.OrderStatusProcessing {
+		if order.Status == entity.OrderStatusShipped || order.Status == entity.OrderStatusCompleted || order.Status == entity.OrderStatusReturned {
 			return nil
 		}
 
@@ -618,6 +607,14 @@ func (u *checkoutUsecase) HandleMidtransWebhook(ctx context.Context, input Midtr
 			reason := "Payment cancelled by user"
 			order.CancelledAt = &now
 			order.CancellationReason = &reason
+		case "refund":
+			targetPaymentStatus = entity.PaymentStatusRefund
+			if order.Status == entity.OrderStatusPaid || order.Status == entity.OrderStatusProcessing {
+				targetOrderStatus = entity.OrderStatusCancelled
+				reason := "Payment refunded to customer"
+				order.CancelledAt = &now
+				order.CancellationReason = &reason
+			}
 		default:
 			return nil
 		}

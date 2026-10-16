@@ -1,0 +1,3 @@
+ALTER TABLE orders
+DROP COLUMN IF EXISTS returned_at,
+DROP COLUMN IF EXISTS return_reason;

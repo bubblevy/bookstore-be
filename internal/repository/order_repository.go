@@ -15,4 +15,5 @@ type OrderRepository interface {
 	FindByID(ctx context.Context, id uint) (*entity.Order, error)
 	UpdateOrderStatus(ctx context.Context, orderID uint, status entity.OrderStatus) error
 	UpdatePaymentStatus(ctx context.Context, orderID uint, status entity.PaymentStatus) error
+	MarkAsReturned(ctx context.Context, orderID uint, reason string) error
 }

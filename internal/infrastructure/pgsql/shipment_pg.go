@@ -36,6 +36,21 @@ func (r *shipmentRepository) FindByOrderID(ctx context.Context, orderID uint) (*
 	return &s, nil
 }
 
+func (r *shipmentRepository) FindByInvoiceNumber(ctx context.Context, invoiceNumber string) (*entity.Shipment, error) {
+	var s entity.Shipment
+	err := r.db.WithContext(ctx).
+		Joins("JOIN orders ON orders.id = shipments.order_id").
+		Where("orders.invoice_number = ?", invoiceNumber).
+		First(&s).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &s, nil
+}
+
 func (r *shipmentRepository) FindByBiteshipOrderID(ctx context.Context, biteshipOrderID string) (*entity.Shipment, error) {
 	var s entity.Shipment
 	if err := r.db.WithContext(ctx).Where("biteship_order_id = ?", biteshipOrderID).First(&s).Error; err != nil {

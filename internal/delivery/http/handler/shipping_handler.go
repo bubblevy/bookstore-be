@@ -2,7 +2,7 @@ package handler
 
 import (
 	"errors"
-	"strconv"
+	"net/url"
 	"strings"
 
 	"github.com/bubblevy/bookstore/internal/entity"
@@ -16,7 +16,7 @@ type ShippingHandler struct {
 	shippingUsecase usecase.ShippingUsecase
 }
 
-func NewShippingHandler(r fiber.Router, u usecase.ShippingUsecase, authMiddleware fiber.Handler, adminMiddleware fiber.Handler) {
+func NewShippingHandler(r fiber.Router, u usecase.ShippingUsecase, authMiddleware fiber.Handler, adminMiddleware fiber.Handler, webhookAuthMiddleware fiber.Handler) {
 	h := &ShippingHandler{shippingUsecase: u}
 
 	// Public Routes
@@ -24,14 +24,14 @@ func NewShippingHandler(r fiber.Router, u usecase.ShippingUsecase, authMiddlewar
 	r.Get("/shipping/couriers", h.GetCouriers)
 
 	// Webhook Route
-	r.Post("/shipping/webhook", h.HandleWebhook)
+	r.Post("/shipping/webhook", webhookAuthMiddleware, h.HandleWebhook)
 
-	// User & Admin Tracking Route
-	r.Get("/orders/:order_id/tracking", authMiddleware, h.TrackOrder)
+	// Customer & Admin Tracking Route
+	r.Get("/orders/:invoice_number/tracking", authMiddleware, h.TrackOrder)
 
-	// Admin Dispatch Order Route
-	admin := r.Group("/admin/orders", authMiddleware, adminMiddleware)
-	admin.Post("/:order_id/fulfill", h.FulfillOrder)
+	// Admin Order Fulfillment Route
+	r.Post("/orders/:invoice_number/fulfill", authMiddleware, adminMiddleware, h.FulfillOrder)
+	r.Post("/orders/:invoice_number/return", authMiddleware, adminMiddleware, h.ProcessReturn)
 }
 
 func (h *ShippingHandler) SearchAreas(c fiber.Ctx) error {
@@ -56,18 +56,23 @@ func (h *ShippingHandler) GetCouriers(c fiber.Ctx) error {
 }
 
 func (h *ShippingHandler) FulfillOrder(c fiber.Ctx) error {
-	idParam, err := strconv.ParseUint(c.Params("order_id"), 10, 32)
-	if err != nil || idParam == 0 {
-		return response.Error(c, fiber.StatusBadRequest, "invalid order id", nil)
+	rawInvoice := c.Params("invoice_number")
+	invoiceNumber, err := url.QueryUnescape(rawInvoice)
+	if err != nil {
+		invoiceNumber = rawInvoice
 	}
-	orderID := uint(idParam)
+	invoiceNumber = strings.TrimSpace(invoiceNumber)
+
+	if invoiceNumber == "" {
+		return response.Error(c, fiber.StatusBadRequest, "invoice number is required", nil)
+	}
 
 	var req struct {
 		OrderNote string `json:"order_note"`
 	}
 	_ = c.Bind().Body(&req)
 
-	result, err := h.shippingUsecase.FulfillOrder(c.Context(), orderID, req.OrderNote)
+	result, err := h.shippingUsecase.FulfillOrder(c.Context(), invoiceNumber, req.OrderNote)
 	if err != nil {
 		if errors.Is(err, entity.ErrOrderNotFound) {
 			return response.Error(c, fiber.StatusNotFound, err.Error(), nil)
@@ -79,15 +84,14 @@ func (h *ShippingHandler) FulfillOrder(c fiber.Ctx) error {
 }
 
 func (h *ShippingHandler) TrackOrder(c fiber.Ctx) error {
-	idParam, err := strconv.ParseUint(c.Params("order_id"), 10, 32)
-	if err != nil || idParam == 0 {
-		return response.Error(c, fiber.StatusBadRequest, "invalid order id", nil)
+	invoiceNumber := strings.TrimSpace(c.Params("invoice_number"))
+	if invoiceNumber == "" {
+		return response.Error(c, fiber.StatusBadRequest, "invoice number is required", nil)
 	}
-	orderID := uint(idParam)
 
 	userID, _ := c.Locals("user_id").(uint)
 
-	result, err := h.shippingUsecase.GetOrderTracking(c.Context(), userID, orderID)
+	result, err := h.shippingUsecase.GetOrderTracking(c.Context(), userID, invoiceNumber)
 	if err != nil {
 		if errors.Is(err, entity.ErrOrderNotFound) || errors.Is(err, entity.ErrShipmentNotFound) {
 			return response.Error(c, fiber.StatusNotFound, err.Error(), nil)
@@ -99,6 +103,27 @@ func (h *ShippingHandler) TrackOrder(c fiber.Ctx) error {
 	}
 
 	return response.Success(c, fiber.StatusOK, "tracking details retrieved successfully", result)
+}
+
+func (h *ShippingHandler) ProcessReturn(c fiber.Ctx) error {
+	invoiceNumber := strings.TrimSpace(c.Params("invoice_number"))
+	if invoiceNumber == "" {
+		return response.Error(c, fiber.StatusBadRequest, "invoice number is required", nil)
+	}
+
+	var req struct {
+		Reason string `json:"reason"`
+	}
+	_ = c.Bind().Body(&req)
+
+	if err := h.shippingUsecase.ProcessReturn(c.Context(), invoiceNumber, req.Reason); err != nil {
+		if errors.Is(err, entity.ErrOrderNotFound) {
+			return response.Error(c, fiber.StatusNotFound, err.Error(), nil)
+		}
+		return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
+	}
+
+	return response.Success(c, fiber.StatusOK, "order return processed and stock restored successfully", nil)
 }
 
 func (h *ShippingHandler) HandleWebhook(c fiber.Ctx) error {

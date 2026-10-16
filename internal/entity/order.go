@@ -14,6 +14,7 @@ const (
 	OrderStatusShipped        OrderStatus = "shipped"
 	OrderStatusCompleted      OrderStatus = "completed"
 	OrderStatusCancelled      OrderStatus = "cancelled"
+	OrderStatusReturned       OrderStatus = "returned"
 )
 
 var (
@@ -48,6 +49,7 @@ type Order struct {
 	CityName               string      `gorm:"type:varchar(100);not null" json:"city_name"`
 	DistrictName           string      `gorm:"type:varchar(100);not null" json:"district_name"`
 	SubdistrictName        string      `gorm:"type:varchar(100);default:''" json:"subdistrict_name"`
+	DestinationAreaID      string      `gorm:"size:100;not null" json:"destination_area_id"`
 	PostalCode             string      `gorm:"type:varchar(10);not null" json:"postal_code"`
 	PaymentDeadline        time.Time   `gorm:"not null" json:"payment_deadline"`
 	PaidAt                 *time.Time  `json:"paid_at,omitempty"`
