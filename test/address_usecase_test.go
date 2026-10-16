@@ -5,434 +5,458 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/bubblevy/bookstore/internal/entity"
+	"github.com/bubblevy/bookstore/internal/repository"
 	"github.com/bubblevy/bookstore/internal/usecase"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
-// ============================================================================
-// MOCKS
-// ============================================================================
-
-type mockAddressRepo struct {
-	addresses     map[uint]*entity.UserAddress
-	nextAddressID uint
-	shouldFail    bool
+type MockAddressRepository struct {
+	mock.Mock
 }
 
-func newMockAddressRepo() *mockAddressRepo {
-	return &mockAddressRepo{
-		addresses:     make(map[uint]*entity.UserAddress),
-		nextAddressID: 1,
+func (m *MockAddressRepository) WithTx(tx *gorm.DB) repository.AddressRepository {
+	args := m.Called(tx)
+	if res := args.Get(0); res != nil {
+		return res.(repository.AddressRepository)
 	}
+	return m
 }
 
-func (m *mockAddressRepo) Create(ctx context.Context, address *entity.UserAddress) error {
-	if m.shouldFail {
-		return errors.New("db create error")
+func (m *MockAddressRepository) Create(ctx context.Context, address *entity.Address) error {
+	args := m.Called(ctx, address)
+	if args.Get(0) == nil {
+		address.ID = 1
 	}
-	address.ID = m.nextAddressID
-	m.nextAddressID++
-	m.addresses[address.ID] = address
-	return nil
+	return args.Error(0)
 }
 
-func (m *mockAddressRepo) FindByID(ctx context.Context, id uint) (*entity.UserAddress, error) {
-	if m.shouldFail {
-		return nil, errors.New("db error")
+func (m *MockAddressRepository) FindByID(ctx context.Context, id uint) (*entity.Address, error) {
+	args := m.Called(ctx, id)
+	if res := args.Get(0); res != nil {
+		return res.(*entity.Address), args.Error(1)
 	}
-	if addr, ok := m.addresses[id]; ok {
-		return addr, nil
-	}
-	return nil, gorm.ErrRecordNotFound
+	return nil, args.Error(1)
 }
 
-func (m *mockAddressRepo) FindByIDAndUserID(ctx context.Context, id uint, userID uint) (*entity.UserAddress, error) {
-	if m.shouldFail {
-		return nil, errors.New("db error")
+func (m *MockAddressRepository) FindByUserID(ctx context.Context, userID uint) ([]entity.Address, error) {
+	args := m.Called(ctx, userID)
+	if res := args.Get(0); res != nil {
+		return res.([]entity.Address), args.Error(1)
 	}
-	if addr, ok := m.addresses[id]; ok && addr.UserID == userID {
-		return addr, nil
-	}
-	return nil, nil
+	return nil, args.Error(1)
 }
 
-func (m *mockAddressRepo) FindByUserID(ctx context.Context, userID uint) ([]entity.UserAddress, error) {
-	if m.shouldFail {
-		return nil, errors.New("db error")
+func (m *MockAddressRepository) FindPrimaryByUserID(ctx context.Context, userID uint) (*entity.Address, error) {
+	args := m.Called(ctx, userID)
+	if res := args.Get(0); res != nil {
+		return res.(*entity.Address), args.Error(1)
 	}
-	var res []entity.UserAddress
-	for _, addr := range m.addresses {
-		if addr.UserID == userID {
-			res = append(res, *addr)
-		}
-	}
-	return res, nil
+	return nil, args.Error(1)
 }
 
-func (m *mockAddressRepo) Update(ctx context.Context, address *entity.UserAddress) error {
-	if m.shouldFail {
-		return errors.New("db update error")
-	}
-	m.addresses[address.ID] = address
-	return nil
+func (m *MockAddressRepository) Update(ctx context.Context, address *entity.Address) error {
+	args := m.Called(ctx, address)
+	return args.Error(0)
 }
 
-func (m *mockAddressRepo) Delete(ctx context.Context, id uint, userID uint) error {
-	if m.shouldFail {
-		return errors.New("db delete error")
-	}
-	if addr, ok := m.addresses[id]; ok && addr.UserID == userID {
-		delete(m.addresses, id)
-		return nil
-	}
-	return gorm.ErrRecordNotFound
+func (m *MockAddressRepository) Delete(ctx context.Context, id uint) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
 }
 
-func (m *mockAddressRepo) ResetPrimaryStatus(ctx context.Context, userID uint) error {
-	if m.shouldFail {
-		return errors.New("db reset primary error")
-	}
-	for _, addr := range m.addresses {
-		if addr.UserID == userID {
-			addr.IsPrimary = false
-		}
-	}
-	return nil
+func (m *MockAddressRepository) CountByUserID(ctx context.Context, userID uint) (int64, error) {
+	args := m.Called(ctx, userID)
+	return args.Get(0).(int64), args.Error(1)
 }
 
-func (m *mockAddressRepo) CountByUserID(ctx context.Context, userID uint) (int64, error) {
-	if m.shouldFail {
-		return 0, errors.New("db count error")
-	}
-	var count int64
-	for _, addr := range m.addresses {
-		if addr.UserID == userID {
-			count++
-		}
-	}
-	return count, nil
+func (m *MockAddressRepository) ResetPrimaryStatus(ctx context.Context, userID uint) error {
+	args := m.Called(ctx, userID)
+	return args.Error(0)
 }
 
-type mockAddressTxManager struct {
-	shouldFail bool
+func (m *MockAddressRepository) SetPrimary(ctx context.Context, userID, addressID uint) error {
+	args := m.Called(ctx, userID, addressID)
+	return args.Error(0)
 }
 
-func newMockAddressTxManager() *mockAddressTxManager {
-	return &mockAddressTxManager{}
+func setupGormMock(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+
+	gormDB, err := gorm.Open(postgres.New(postgres.Config{
+		Conn:                 db,
+		PreferSimpleProtocol: true,
+	}), &gorm.Config{
+		SkipDefaultTransaction: true,
+	})
+	assert.NoError(t, err)
+
+	return gormDB, mock
 }
 
-func (m *mockAddressTxManager) WithTransaction(ctx context.Context, fn func(txCtx context.Context) error) error {
-	if m.shouldFail {
-		return errors.New("transaction failed")
-	}
-	return fn(ctx)
-}
+func TestAddressUsecase_CreateAddress(t *testing.T) {
+	ctx := context.Background()
+	userID := uint(10)
 
-func setupAddressUsecase() (usecase.AddressUsecase, *mockAddressRepo, *mockAddressTxManager) {
-	addressRepo := newMockAddressRepo()
-	txManager := newMockAddressTxManager()
-	uc := usecase.NewAddressUsecase(addressRepo, txManager)
-	return uc, addressRepo, txManager
-}
-
-// ============================================================================
-// CREATE ADDRESS TESTS
-// ============================================================================
-
-func TestCreateAddress_FirstAddress_AutoPrimary(t *testing.T) {
-	uc, _, _ := setupAddressUsecase()
-
-	subdistrict := "Gayamprit"
-	input := usecase.CreateAddressInput{
-		UserID:          1,
+	sampleInput := usecase.CreateAddressInput{
 		ReceiverName:    "Budi Santoso",
-		Phone:           "081234567890",
-		AddressLine:     "Jl. Merbabu No. 12",
-		DestinationID:   26895,
-		ProvinceName:    "Jawa Tengah",
-		CityName:        "Klaten",
-		DistrictName:    "Klaten Selatan",
-		SubdistrictName: &subdistrict,
-		PostalCode:      "57411",
+		Phone:           "08123456789",
+		AddressLine:     "Jl. Pemuda No. 45",
+		BiteshipAreaID:  "IDNP6IDNC148IDND843IDZ12250",
+		ProvinceName:    "DKI Jakarta",
+		CityName:        "Jakarta Selatan",
+		DistrictName:    "Kebayoran Baru",
+		SubdistrictName: "Kramat Pela",
+		PostalCode:      "12250",
 		IsPrimary:       false,
 	}
 
-	result, err := uc.Create(context.Background(), input)
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Equal(t, uint(1), result.ID)
-	assert.Equal(t, 26895, result.DestinationID)
-	assert.Equal(t, "Klaten Selatan", result.DistrictName)
-	assert.True(t, result.IsPrimary)
+	t.Run("success create first address (automatically promoted to primary)", func(t *testing.T) {
+		gormDB, sqlMock := setupGormMock(t)
+		mockRepo := new(MockAddressRepository)
+		uc := usecase.NewAddressUsecase(gormDB, mockRepo)
+
+		sqlMock.ExpectBegin()
+		sqlMock.ExpectCommit()
+
+		mockRepo.On("CountByUserID", ctx, userID).Return(int64(0), nil).Once()
+		mockRepo.On("WithTx", mock.Anything).Return(mockRepo).Once()
+		mockRepo.On("Create", ctx, mock.MatchedBy(func(addr *entity.Address) bool {
+			return addr.UserID == userID && addr.IsPrimary == true && addr.BiteshipAreaID == sampleInput.BiteshipAreaID
+		})).Return(nil).Once()
+
+		result, err := uc.CreateAddress(ctx, userID, sampleInput)
+		assert.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.True(t, result.IsPrimary)
+		assert.Equal(t, sampleInput.ReceiverName, result.ReceiverName)
+		mockRepo.AssertExpectations(t)
+		assert.NoError(t, sqlMock.ExpectationsWereMet())
+	})
+
+	t.Run("success create additional address with is_primary true (resets old primary)", func(t *testing.T) {
+		gormDB, sqlMock := setupGormMock(t)
+		mockRepo := new(MockAddressRepository)
+		uc := usecase.NewAddressUsecase(gormDB, mockRepo)
+
+		sqlMock.ExpectBegin()
+		sqlMock.ExpectCommit()
+
+		inputPrimary := sampleInput
+		inputPrimary.IsPrimary = true
+
+		mockRepo.On("CountByUserID", ctx, userID).Return(int64(2), nil).Once()
+		mockRepo.On("WithTx", mock.Anything).Return(mockRepo).Once()
+		mockRepo.On("ResetPrimaryStatus", ctx, userID).Return(nil).Once()
+		mockRepo.On("Create", ctx, mock.MatchedBy(func(addr *entity.Address) bool {
+			return addr.UserID == userID && addr.IsPrimary == true
+		})).Return(nil).Once()
+
+		result, err := uc.CreateAddress(ctx, userID, inputPrimary)
+		assert.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.True(t, result.IsPrimary)
+		mockRepo.AssertExpectations(t)
+		assert.NoError(t, sqlMock.ExpectationsWereMet())
+	})
+
+	t.Run("failed when maximum address quota reached (limit 5)", func(t *testing.T) {
+		gormDB, _ := setupGormMock(t)
+		mockRepo := new(MockAddressRepository)
+		uc := usecase.NewAddressUsecase(gormDB, mockRepo)
+
+		mockRepo.On("CountByUserID", ctx, userID).Return(int64(5), nil).Once()
+
+		result, err := uc.CreateAddress(ctx, userID, sampleInput)
+		assert.ErrorIs(t, err, entity.ErrAddressLimitReached)
+		assert.Nil(t, result)
+		mockRepo.AssertExpectations(t)
+	})
+
+	t.Run("failed on counting error", func(t *testing.T) {
+		gormDB, _ := setupGormMock(t)
+		mockRepo := new(MockAddressRepository)
+		uc := usecase.NewAddressUsecase(gormDB, mockRepo)
+
+		mockRepo.On("CountByUserID", ctx, userID).Return(int64(0), errors.New("db connection failure")).Once()
+
+		result, err := uc.CreateAddress(ctx, userID, sampleInput)
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		mockRepo.AssertExpectations(t)
+	})
 }
 
-func TestCreateAddress_SecondAddress_SetAsNewPrimary(t *testing.T) {
-	uc, repo, _ := setupAddressUsecase()
+func TestAddressUsecase_GetAddressByID(t *testing.T) {
+	ctx := context.Background()
+	gormDB, _ := setupGormMock(t)
+	mockRepo := new(MockAddressRepository)
+	uc := usecase.NewAddressUsecase(gormDB, mockRepo)
+	userID := uint(10)
+	addressID := uint(1)
 
-	addr1 := &entity.UserAddress{
-		UserID:        1,
-		ReceiverName:  "Alamat Pertama",
-		DestinationID: 26895,
-		IsPrimary:     true,
+	t.Run("success get address by id", func(t *testing.T) {
+		existing := &entity.Address{
+			UserID:          userID,
+			ReceiverName:    "Budi Santoso",
+			AddressLine:     "Jl. Pemuda No. 45",
+			BiteshipAreaID:  "IDNP6IDNC148IDND843IDZ12250",
+			CityName:        "Jakarta Selatan",
+			DistrictName:    "Kebayoran Baru",
+			SubdistrictName: "Kramat Pela",
+			PostalCode:      "12250",
+		}
+		existing.ID = addressID
+
+		mockRepo.On("FindByID", ctx, addressID).Return(existing, nil).Once()
+
+		res, err := uc.GetAddressByID(ctx, userID, addressID)
+		assert.NoError(t, err)
+		assert.NotNil(t, res)
+		assert.Equal(t, addressID, res.ID)
+		assert.Equal(t, "Jl. Pemuda No. 45", res.AddressLine)
+		mockRepo.AssertExpectations(t)
+	})
+
+	t.Run("error address not found", func(t *testing.T) {
+		mockRepo.On("FindByID", ctx, addressID).Return(nil, nil).Once()
+
+		res, err := uc.GetAddressByID(ctx, userID, addressID)
+		assert.ErrorIs(t, err, entity.ErrAddressNotFound)
+		assert.Nil(t, res)
+		mockRepo.AssertExpectations(t)
+	})
+
+	t.Run("error unauthorized different user", func(t *testing.T) {
+		existing := &entity.Address{
+			UserID: uint(999),
+		}
+		existing.ID = addressID
+
+		mockRepo.On("FindByID", ctx, addressID).Return(existing, nil).Once()
+
+		res, err := uc.GetAddressByID(ctx, userID, addressID)
+		assert.ErrorIs(t, err, entity.ErrUnauthorizedAddress)
+		assert.Nil(t, res)
+		mockRepo.AssertExpectations(t)
+	})
+}
+
+func TestAddressUsecase_GetUserAddresses(t *testing.T) {
+	ctx := context.Background()
+	gormDB, _ := setupGormMock(t)
+	mockRepo := new(MockAddressRepository)
+	uc := usecase.NewAddressUsecase(gormDB, mockRepo)
+	userID := uint(10)
+
+	t.Run("success get list of addresses in compact format", func(t *testing.T) {
+		addr1 := entity.Address{
+			UserID:       userID,
+			ReceiverName: "Rumah",
+			Phone:        "08123456789",
+			CityName:     "Jakarta Selatan",
+			DistrictName: "Kebayoran Baru",
+			IsPrimary:    true,
+		}
+		addr1.ID = 1
+
+		addr2 := entity.Address{
+			UserID:       userID,
+			ReceiverName: "Kantor",
+			Phone:        "08987654321",
+			CityName:     "Jakarta Pusat",
+			DistrictName: "Menteng",
+			IsPrimary:    false,
+		}
+		addr2.ID = 2
+
+		addresses := []entity.Address{addr1, addr2}
+		mockRepo.On("FindByUserID", ctx, userID).Return(addresses, nil).Once()
+
+		results, err := uc.GetUserAddresses(ctx, userID)
+		assert.NoError(t, err)
+		assert.Len(t, results, 2)
+		assert.Equal(t, uint(1), results[0].ID)
+		assert.Equal(t, "Rumah", results[0].ReceiverName)
+		assert.Equal(t, "Jakarta Selatan", results[0].CityName)
+		assert.True(t, results[0].IsPrimary)
+		assert.Equal(t, uint(2), results[1].ID)
+		assert.Equal(t, "Kantor", results[1].ReceiverName)
+		assert.False(t, results[1].IsPrimary)
+		mockRepo.AssertExpectations(t)
+	})
+}
+
+func TestAddressUsecase_GetPrimaryAddress(t *testing.T) {
+	ctx := context.Background()
+	gormDB, _ := setupGormMock(t)
+	mockRepo := new(MockAddressRepository)
+	uc := usecase.NewAddressUsecase(gormDB, mockRepo)
+	userID := uint(10)
+
+	t.Run("success get primary address", func(t *testing.T) {
+		primaryAddr := &entity.Address{
+			UserID:       userID,
+			ReceiverName: "Rumah",
+			IsPrimary:    true,
+		}
+		primaryAddr.ID = 1
+
+		mockRepo.On("FindPrimaryByUserID", ctx, userID).Return(primaryAddr, nil).Once()
+
+		res, err := uc.GetPrimaryAddress(ctx, userID)
+		assert.NoError(t, err)
+		assert.NotNil(t, res)
+		assert.True(t, res.IsPrimary)
+		mockRepo.AssertExpectations(t)
+	})
+
+	t.Run("error primary address not found", func(t *testing.T) {
+		mockRepo.On("FindPrimaryByUserID", ctx, userID).Return(nil, nil).Once()
+
+		res, err := uc.GetPrimaryAddress(ctx, userID)
+		assert.ErrorIs(t, err, entity.ErrAddressNotFound)
+		assert.Nil(t, res)
+		mockRepo.AssertExpectations(t)
+	})
+}
+
+func TestAddressUsecase_UpdateAddress(t *testing.T) {
+	ctx := context.Background()
+	userID := uint(10)
+	addressID := uint(1)
+
+	updateInput := usecase.UpdateAddressInput{
+		ReceiverName:    "Budi Baru",
+		Phone:           "089988776655",
+		AddressLine:     "Jl. Sudirman No. 1",
+		BiteshipAreaID:  "IDNP6IDNC148IDND843IDZ12250",
+		ProvinceName:    "DKI Jakarta",
+		CityName:        "Jakarta Pusat",
+		DistrictName:    "Tanah Abang",
+		SubdistrictName: "Kebon Kacang",
+		PostalCode:      "10250",
+		IsPrimary:       true,
 	}
-	_ = repo.Create(context.Background(), addr1)
 
-	input := usecase.CreateAddressInput{
-		UserID:        1,
-		ReceiverName:  "Alamat Kedua",
-		Phone:         "081234567891",
-		AddressLine:   "Jl. Pemuda No. 45",
-		DestinationID: 26896,
-		ProvinceName:  "Jawa Tengah",
-		CityName:      "Klaten",
-		DistrictName:  "Klaten Tengah",
-		PostalCode:    "57411",
-		IsPrimary:     true,
-	}
+	t.Run("success update address and promote to primary", func(t *testing.T) {
+		gormDB, sqlMock := setupGormMock(t)
+		mockRepo := new(MockAddressRepository)
+		uc := usecase.NewAddressUsecase(gormDB, mockRepo)
 
-	result, err := uc.Create(context.Background(), input)
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Equal(t, 26896, result.DestinationID)
-	assert.True(t, result.IsPrimary)
-	assert.False(t, repo.addresses[addr1.ID].IsPrimary)
+		sqlMock.ExpectBegin()
+		sqlMock.ExpectCommit()
+
+		existing := &entity.Address{
+			UserID:    userID,
+			IsPrimary: false,
+		}
+		existing.ID = addressID
+
+		mockRepo.On("FindByID", ctx, addressID).Return(existing, nil).Once()
+		mockRepo.On("WithTx", mock.Anything).Return(mockRepo).Once()
+		mockRepo.On("ResetPrimaryStatus", ctx, userID).Return(nil).Once()
+		mockRepo.On("Update", ctx, mock.MatchedBy(func(addr *entity.Address) bool {
+			return addr.ID == addressID && addr.ReceiverName == updateInput.ReceiverName && addr.IsPrimary == true
+		})).Return(nil).Once()
+
+		res, err := uc.UpdateAddress(ctx, userID, addressID, updateInput)
+		assert.NoError(t, err)
+		assert.NotNil(t, res)
+		assert.Equal(t, updateInput.ReceiverName, res.ReceiverName)
+		assert.True(t, res.IsPrimary)
+		mockRepo.AssertExpectations(t)
+		assert.NoError(t, sqlMock.ExpectationsWereMet())
+	})
+
+	t.Run("error address not found on update", func(t *testing.T) {
+		gormDB, _ := setupGormMock(t)
+		mockRepo := new(MockAddressRepository)
+		uc := usecase.NewAddressUsecase(gormDB, mockRepo)
+
+		mockRepo.On("FindByID", ctx, addressID).Return(nil, nil).Once()
+
+		res, err := uc.UpdateAddress(ctx, userID, addressID, updateInput)
+		assert.ErrorIs(t, err, entity.ErrAddressNotFound)
+		assert.Nil(t, res)
+		mockRepo.AssertExpectations(t)
+	})
+
+	t.Run("error unauthorized on update", func(t *testing.T) {
+		gormDB, _ := setupGormMock(t)
+		mockRepo := new(MockAddressRepository)
+		uc := usecase.NewAddressUsecase(gormDB, mockRepo)
+
+		existing := &entity.Address{
+			UserID: uint(999),
+		}
+		existing.ID = addressID
+
+		mockRepo.On("FindByID", ctx, addressID).Return(existing, nil).Once()
+
+		res, err := uc.UpdateAddress(ctx, userID, addressID, updateInput)
+		assert.ErrorIs(t, err, entity.ErrUnauthorizedAddress)
+		assert.Nil(t, res)
+		mockRepo.AssertExpectations(t)
+	})
 }
 
-func TestCreateAddress_LimitReached_Fail(t *testing.T) {
-	uc, repo, _ := setupAddressUsecase()
+func TestAddressUsecase_DeleteAddress(t *testing.T) {
+	ctx := context.Background()
+	gormDB, _ := setupGormMock(t)
+	mockRepo := new(MockAddressRepository)
+	uc := usecase.NewAddressUsecase(gormDB, mockRepo)
+	userID := uint(10)
+	addressID := uint(2)
 
-	for i := 1; i <= 5; i++ {
-		_ = repo.Create(context.Background(), &entity.UserAddress{
-			UserID:        1,
-			ReceiverName:  "Alamat Test",
-			DestinationID: 26895,
-		})
-	}
+	t.Run("success delete non-primary address", func(t *testing.T) {
+		existing := &entity.Address{
+			UserID:    userID,
+			IsPrimary: false,
+		}
+		existing.ID = addressID
 
-	input := usecase.CreateAddressInput{
-		UserID:        1,
-		ReceiverName:  "Alamat Ke-6",
-		Phone:         "081234567890",
-		AddressLine:   "Jl. Merbabu No. 12",
-		DestinationID: 26895,
-		ProvinceName:  "Jawa Tengah",
-		CityName:      "Klaten",
-		DistrictName:  "Klaten Selatan",
-		PostalCode:    "57411",
-	}
+		mockRepo.On("FindByID", ctx, addressID).Return(existing, nil).Once()
+		mockRepo.On("Delete", ctx, addressID).Return(nil).Once()
 
-	result, err := uc.Create(context.Background(), input)
-	assert.Nil(t, result)
-	assert.Error(t, err)
-	assert.Equal(t, entity.ErrAddressLimitReached, err)
+		err := uc.DeleteAddress(ctx, userID, addressID)
+		assert.NoError(t, err)
+		mockRepo.AssertExpectations(t)
+	})
+
+	t.Run("error cannot delete primary address", func(t *testing.T) {
+		existing := &entity.Address{
+			UserID:    userID,
+			IsPrimary: true,
+		}
+		existing.ID = addressID
+
+		mockRepo.On("FindByID", ctx, addressID).Return(existing, nil).Once()
+
+		err := uc.DeleteAddress(ctx, userID, addressID)
+		assert.ErrorIs(t, err, entity.ErrPrimaryAddressDelete)
+		mockRepo.AssertExpectations(t)
+	})
 }
 
-func TestCreateAddress_CountError_Fail(t *testing.T) {
-	uc, repo, _ := setupAddressUsecase()
-	repo.shouldFail = true
+func TestAddressUsecase_SetPrimaryAddress(t *testing.T) {
+	ctx := context.Background()
+	gormDB, _ := setupGormMock(t)
+	mockRepo := new(MockAddressRepository)
+	uc := usecase.NewAddressUsecase(gormDB, mockRepo)
+	userID := uint(10)
+	addressID := uint(3)
 
-	input := usecase.CreateAddressInput{UserID: 1}
-	result, err := uc.Create(context.Background(), input)
-	assert.Nil(t, result)
-	assert.Equal(t, entity.ErrFailedFetchAddress, err)
-}
+	t.Run("success set primary address", func(t *testing.T) {
+		mockRepo.On("SetPrimary", ctx, userID, addressID).Return(nil).Once()
 
-// ============================================================================
-// GET ALL BY USER TESTS
-// ============================================================================
-
-func TestGetAllByUser_Success(t *testing.T) {
-	uc, repo, _ := setupAddressUsecase()
-
-	_ = repo.Create(context.Background(), &entity.UserAddress{UserID: 1, ReceiverName: "User 1 - Alamat 1", DestinationID: 26895})
-	_ = repo.Create(context.Background(), &entity.UserAddress{UserID: 1, ReceiverName: "User 1 - Alamat 2", DestinationID: 26896})
-	_ = repo.Create(context.Background(), &entity.UserAddress{UserID: 2, ReceiverName: "User 2 - Alamat 1", DestinationID: 26897})
-
-	res, err := uc.GetAllByUser(context.Background(), 1)
-	assert.NoError(t, err)
-	assert.Len(t, res, 2)
-}
-
-func TestGetAllByUser_Empty(t *testing.T) {
-	uc, _, _ := setupAddressUsecase()
-
-	res, err := uc.GetAllByUser(context.Background(), 99)
-	assert.NoError(t, err)
-	assert.Empty(t, res)
-}
-
-func TestGetAllByUser_DBError(t *testing.T) {
-	uc, repo, _ := setupAddressUsecase()
-	repo.shouldFail = true
-
-	res, err := uc.GetAllByUser(context.Background(), 1)
-	assert.Nil(t, res)
-	assert.Equal(t, entity.ErrFailedFetchAddress, err)
-}
-
-// ============================================================================
-// GET BY ID TESTS
-// ============================================================================
-
-func TestGetByID_Success(t *testing.T) {
-	uc, repo, _ := setupAddressUsecase()
-
-	addr := &entity.UserAddress{
-		UserID:        1,
-		ReceiverName:  "Andi",
-		DestinationID: 26895,
-		DistrictName:  "Klaten Selatan",
-	}
-	_ = repo.Create(context.Background(), addr)
-
-	res, err := uc.GetByID(context.Background(), addr.ID, 1)
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
-	assert.Equal(t, "Andi", res.ReceiverName)
-	assert.Equal(t, 26895, res.DestinationID)
-	assert.Equal(t, "Klaten Selatan", res.DistrictName)
-}
-
-func TestGetByID_NotFound_WrongUser(t *testing.T) {
-	uc, repo, _ := setupAddressUsecase()
-
-	addr := &entity.UserAddress{UserID: 1, ReceiverName: "Andi", DestinationID: 26895}
-	_ = repo.Create(context.Background(), addr)
-
-	res, err := uc.GetByID(context.Background(), addr.ID, 2)
-	assert.Nil(t, res)
-	assert.Equal(t, entity.ErrAddressNotFound, err)
-}
-
-// ============================================================================
-// UPDATE ADDRESS TESTS
-// ============================================================================
-
-func TestUpdateAddress_Success(t *testing.T) {
-	uc, repo, _ := setupAddressUsecase()
-
-	addr := &entity.UserAddress{
-		UserID:        1,
-		ReceiverName:  "Nama Lama",
-		DestinationID: 26895,
-		IsPrimary:     false,
-	}
-	_ = repo.Create(context.Background(), addr)
-
-	input := usecase.UpdateAddressInput{
-		ID:            addr.ID,
-		UserID:        1,
-		ReceiverName:  "Nama Baru",
-		Phone:         "089999999",
-		AddressLine:   "Jalan Baru",
-		DestinationID: 30000,
-		ProvinceName:  "Jawa Timur",
-		CityName:      "Surabaya",
-		DistrictName:  "Wonokromo",
-		PostalCode:    "60111",
-		IsPrimary:     false,
-	}
-
-	res, err := uc.Update(context.Background(), input)
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
-	assert.Equal(t, "Nama Baru", res.ReceiverName)
-	assert.Equal(t, "Surabaya", res.CityName)
-	assert.Equal(t, "Wonokromo", res.DistrictName)
-	assert.Equal(t, 30000, res.DestinationID)
-}
-
-func TestUpdateAddress_NotFound(t *testing.T) {
-	uc, _, _ := setupAddressUsecase()
-
-	input := usecase.UpdateAddressInput{
-		ID:     999,
-		UserID: 1,
-	}
-
-	res, err := uc.Update(context.Background(), input)
-	assert.Nil(t, res)
-	assert.Equal(t, entity.ErrAddressNotFound, err)
-}
-
-// ============================================================================
-// SET PRIMARY TESTS
-// ============================================================================
-
-func TestSetPrimary_Success(t *testing.T) {
-	uc, repo, _ := setupAddressUsecase()
-
-	addr1 := &entity.UserAddress{UserID: 1, IsPrimary: true, DestinationID: 26895}
-	addr2 := &entity.UserAddress{UserID: 1, IsPrimary: false, DestinationID: 26896}
-	_ = repo.Create(context.Background(), addr1)
-	_ = repo.Create(context.Background(), addr2)
-
-	err := uc.SetPrimary(context.Background(), addr2.ID, 1)
-	assert.NoError(t, err)
-
-	assert.False(t, repo.addresses[addr1.ID].IsPrimary)
-	assert.True(t, repo.addresses[addr2.ID].IsPrimary)
-}
-
-func TestSetPrimary_AlreadyPrimary_NoAction(t *testing.T) {
-	uc, repo, _ := setupAddressUsecase()
-
-	addr := &entity.UserAddress{UserID: 1, IsPrimary: true, DestinationID: 26895}
-	_ = repo.Create(context.Background(), addr)
-
-	err := uc.SetPrimary(context.Background(), addr.ID, 1)
-	assert.NoError(t, err)
-	assert.True(t, repo.addresses[addr.ID].IsPrimary)
-}
-
-// ============================================================================
-// DELETE ADDRESS TESTS
-// ============================================================================
-
-func TestDeleteAddress_Success_NonPrimary(t *testing.T) {
-	uc, repo, _ := setupAddressUsecase()
-
-	addrPrimary := &entity.UserAddress{UserID: 1, IsPrimary: true, DestinationID: 26895}
-	addrSecondary := &entity.UserAddress{UserID: 1, IsPrimary: false, DestinationID: 26896}
-	_ = repo.Create(context.Background(), addrPrimary)
-	_ = repo.Create(context.Background(), addrSecondary)
-
-	err := uc.Delete(context.Background(), addrSecondary.ID, 1)
-	assert.NoError(t, err)
-	assert.Nil(t, repo.addresses[addrSecondary.ID])
-	assert.NotNil(t, repo.addresses[addrPrimary.ID])
-}
-
-func TestDeleteAddress_Block_PrimaryWhenOthersExist(t *testing.T) {
-	uc, repo, _ := setupAddressUsecase()
-
-	addr1 := &entity.UserAddress{UserID: 1, IsPrimary: true, DestinationID: 26895}
-	addr2 := &entity.UserAddress{UserID: 1, IsPrimary: false, DestinationID: 26896}
-	_ = repo.Create(context.Background(), addr1)
-	_ = repo.Create(context.Background(), addr2)
-
-	err := uc.Delete(context.Background(), addr1.ID, 1)
-	assert.Error(t, err)
-	assert.Equal(t, entity.ErrCannotDeletePrimaryAddress, err)
-	assert.NotNil(t, repo.addresses[addr1.ID])
-}
-
-func TestDeleteAddress_Allow_PrimaryWhenOnlyOneLeft(t *testing.T) {
-	uc, repo, _ := setupAddressUsecase()
-
-	addrOnly := &entity.UserAddress{UserID: 1, IsPrimary: true, DestinationID: 26895}
-	_ = repo.Create(context.Background(), addrOnly)
-
-	err := uc.Delete(context.Background(), addrOnly.ID, 1)
-	assert.NoError(t, err)
-	assert.Nil(t, repo.addresses[addrOnly.ID])
-}
-
-func TestDeleteAddress_NotFound(t *testing.T) {
-	uc, _, _ := setupAddressUsecase()
-
-	err := uc.Delete(context.Background(), 999, 1)
-	assert.Equal(t, entity.ErrAddressNotFound, err)
+		err := uc.SetPrimaryAddress(ctx, userID, addressID)
+		assert.NoError(t, err)
+		mockRepo.AssertExpectations(t)
+	})
 }

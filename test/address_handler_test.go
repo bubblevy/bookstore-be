@@ -1,16 +1,15 @@
 package test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
-	"time"
 
+	"github.com/bubblevy/bookstore/internal/delivery/http/dto"
 	"github.com/bubblevy/bookstore/internal/delivery/http/handler"
 	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/usecase"
@@ -20,466 +19,425 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// ============================================================================
-// MOCK ADDRESS USECASE
-// ============================================================================
-
 type MockAddressUsecase struct {
 	mock.Mock
 }
 
-func (m *MockAddressUsecase) Create(ctx context.Context, input usecase.CreateAddressInput) (*usecase.AddressResult, error) {
-	args := m.Called(ctx, input)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
+func (m *MockAddressUsecase) CreateAddress(ctx context.Context, userID uint, input usecase.CreateAddressInput) (*usecase.AddressResult, error) {
+	args := m.Called(ctx, userID, input)
+	if res := args.Get(0); res != nil {
+		return res.(*usecase.AddressResult), args.Error(1)
 	}
-	return args.Get(0).(*usecase.AddressResult), args.Error(1)
+	return nil, args.Error(1)
 }
 
-func (m *MockAddressUsecase) GetAllByUser(ctx context.Context, userID uint) ([]usecase.AddressListItem, error) {
+func (m *MockAddressUsecase) GetAddressByID(ctx context.Context, userID, addressID uint) (*usecase.AddressResult, error) {
+	args := m.Called(ctx, userID, addressID)
+	if res := args.Get(0); res != nil {
+		return res.(*usecase.AddressResult), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+func (m *MockAddressUsecase) GetUserAddresses(ctx context.Context, userID uint) ([]usecase.AddressListItemResult, error) {
 	args := m.Called(ctx, userID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
+	if res := args.Get(0); res != nil {
+		return res.([]usecase.AddressListItemResult), args.Error(1)
 	}
-	return args.Get(0).([]usecase.AddressListItem), args.Error(1)
+	return nil, args.Error(1)
 }
 
-func (m *MockAddressUsecase) GetByID(ctx context.Context, id uint, userID uint) (*usecase.AddressResult, error) {
-	args := m.Called(ctx, id, userID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
+func (m *MockAddressUsecase) GetPrimaryAddress(ctx context.Context, userID uint) (*usecase.AddressResult, error) {
+	args := m.Called(ctx, userID)
+	if res := args.Get(0); res != nil {
+		return res.(*usecase.AddressResult), args.Error(1)
 	}
-	return args.Get(0).(*usecase.AddressResult), args.Error(1)
+	return nil, args.Error(1)
 }
 
-func (m *MockAddressUsecase) Update(ctx context.Context, input usecase.UpdateAddressInput) (*usecase.AddressResult, error) {
-	args := m.Called(ctx, input)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
+func (m *MockAddressUsecase) UpdateAddress(ctx context.Context, userID, addressID uint, input usecase.UpdateAddressInput) (*usecase.AddressResult, error) {
+	args := m.Called(ctx, userID, addressID, input)
+	if res := args.Get(0); res != nil {
+		return res.(*usecase.AddressResult), args.Error(1)
 	}
-	return args.Get(0).(*usecase.AddressResult), args.Error(1)
+	return nil, args.Error(1)
 }
 
-func (m *MockAddressUsecase) Delete(ctx context.Context, id uint, userID uint) error {
-	args := m.Called(ctx, id, userID)
+func (m *MockAddressUsecase) DeleteAddress(ctx context.Context, userID, addressID uint) error {
+	args := m.Called(ctx, userID, addressID)
 	return args.Error(0)
 }
 
-func (m *MockAddressUsecase) SetPrimary(ctx context.Context, id uint, userID uint) error {
-	args := m.Called(ctx, id, userID)
+func (m *MockAddressUsecase) SetPrimaryAddress(ctx context.Context, userID, addressID uint) error {
+	args := m.Called(ctx, userID, addressID)
 	return args.Error(0)
 }
 
-// ============================================================================
-// SETUP TEST HELPER
-// ============================================================================
-
-func setupAddressApp(mockUC *MockAddressUsecase, authenticated bool) *fiber.App {
+func setupAddressTestApp(uc usecase.AddressUsecase, injectedUserID any) *fiber.App {
 	app := fiber.New()
 	validate := validator.New()
 
 	authMiddleware := func(c fiber.Ctx) error {
-		if !authenticated {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"code":    401,
-				"status":  false,
-				"message": "unauthorized",
-			})
+		if injectedUserID != nil {
+			c.Locals("user_id", injectedUserID)
+			return c.Next()
 		}
-		// Simulasi klaim token yang di-inject ke context locals
-		c.Locals("user_id", uint(1))
-		return c.Next()
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"code":    fiber.StatusUnauthorized,
+			"status":  false,
+			"message": "unauthorized",
+		})
 	}
 
 	api := app.Group("/api/v1")
-	handler.NewAddressHandler(api, mockUC, validate, authMiddleware)
-
+	handler.NewAddressHandler(api, uc, validate, authMiddleware)
 	return app
 }
 
-// ============================================================================
-// CREATE TESTS
-// ============================================================================
-
-func TestAddressHandler_Create_Success(t *testing.T) {
-	mockUC := new(MockAddressUsecase)
-	app := setupAddressApp(mockUC, true)
-
-	expectedInput := usecase.CreateAddressInput{
-		UserID:        1,
-		ReceiverName:  "Budi Santoso",
-		Phone:         "081234567890",
-		AddressLine:   "Jl. Mawar No. 10",
-		DestinationID: 101,
-		ProvinceName:  "Jawa Tengah",
-		CityName:      "Semarang",
-		DistrictName:  "Semarang Barat",
-		PostalCode:    "50149",
-		IsPrimary:     true,
+func TestAddressHandler_Create(t *testing.T) {
+	validReq := dto.CreateAddressRequest{
+		ReceiverName:    "Budi Santoso",
+		Phone:           "081234567890",
+		AddressLine:     "Jl. Pemuda No. 45, RT 01 / RW 03",
+		BiteshipAreaID:  "IDNP6IDNC148IDND843IDZ12250",
+		ProvinceName:    "DKI Jakarta",
+		CityName:        "Jakarta Selatan",
+		DistrictName:    "Kebayoran Baru",
+		SubdistrictName: "Kramat Pela",
+		PostalCode:      "12250",
+		IsPrimary:       true,
 	}
 
 	expectedResult := &usecase.AddressResult{
-		ID:            10,
-		ReceiverName:  "Budi Santoso",
-		Phone:         "081234567890",
-		AddressLine:   "Jl. Mawar No. 10",
-		DestinationID: 101,
-		ProvinceName:  "Jawa Tengah",
-		CityName:      "Semarang",
-		DistrictName:  "Semarang Barat",
-		PostalCode:    "50149",
-		IsPrimary:     true,
-		CreatedAt:     time.Now(),
-		UpdatedAt:     time.Now(),
+		ID:              1,
+		ReceiverName:    validReq.ReceiverName,
+		Phone:           validReq.Phone,
+		AddressLine:     validReq.AddressLine,
+		BiteshipAreaID:  validReq.BiteshipAreaID,
+		ProvinceName:    validReq.ProvinceName,
+		CityName:        validReq.CityName,
+		DistrictName:    validReq.DistrictName,
+		SubdistrictName: validReq.SubdistrictName,
+		PostalCode:      validReq.PostalCode,
+		IsPrimary:       true,
 	}
 
-	mockUC.On("Create", mock.Anything, expectedInput).Return(expectedResult, nil)
+	t.Run("success create address returns 201", func(t *testing.T) {
+		mockUC := new(MockAddressUsecase)
+		app := setupAddressTestApp(mockUC, uint(10))
 
-	payload := `{
-		"receiver_name": "Budi Santoso",
-		"phone": "081234567890",
-		"address_line": "Jl. Mawar No. 10",
-		"destination_id": 101,
-		"province_name": "Jawa Tengah",
-		"city_name": "Semarang",
-		"district_name": "Semarang Barat",
-		"postal_code": "50149",
-		"is_primary": true
-	}`
+		mockUC.On("CreateAddress", mock.Anything, uint(10), mock.MatchedBy(func(in usecase.CreateAddressInput) bool {
+			return in.ReceiverName == validReq.ReceiverName && in.BiteshipAreaID == validReq.BiteshipAreaID
+		})).Return(expectedResult, nil).Once()
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/addresses", strings.NewReader(payload))
-	req.Header.Set("Content-Type", "application/json")
+		body, _ := json.Marshal(validReq)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/addresses/", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusCreated, resp.StatusCode)
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusCreated, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
 
-	body, _ := io.ReadAll(resp.Body)
-	var res struct {
-		Code int                   `json:"code"`
-		Data usecase.AddressResult `json:"data"`
+	t.Run("unauthorized when no user_id in locals returns 401", func(t *testing.T) {
+		mockUC := new(MockAddressUsecase)
+		app := setupAddressTestApp(mockUC, nil)
+
+		body, _ := json.Marshal(validReq)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/addresses/", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+	})
+
+	t.Run("validation error on missing required field returns 400", func(t *testing.T) {
+		mockUC := new(MockAddressUsecase)
+		app := setupAddressTestApp(mockUC, uint(10))
+
+		invalidReq := validReq
+		invalidReq.ReceiverName = ""
+
+		body, _ := json.Marshal(invalidReq)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/addresses/", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("returns 400 when address limit reached", func(t *testing.T) {
+		mockUC := new(MockAddressUsecase)
+		app := setupAddressTestApp(mockUC, uint(10))
+
+		mockUC.On("CreateAddress", mock.Anything, uint(10), mock.Anything).
+			Return(nil, entity.ErrAddressLimitReached).Once()
+
+		body, _ := json.Marshal(validReq)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/addresses/", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
+}
+
+func TestAddressHandler_GetAll(t *testing.T) {
+	t.Run("success get all addresses returns 200 with compact list", func(t *testing.T) {
+		mockUC := new(MockAddressUsecase)
+		app := setupAddressTestApp(mockUC, uint(10))
+
+		results := []usecase.AddressListItemResult{
+			{ID: 1, ReceiverName: "Budi", Phone: "08123456789", CityName: "Jakarta Selatan", DistrictName: "Kebayoran Baru", IsPrimary: true},
+			{ID: 2, ReceiverName: "Kantor", Phone: "08987654321", CityName: "Jakarta Pusat", DistrictName: "Menteng", IsPrimary: false},
+		}
+
+		mockUC.On("GetUserAddresses", mock.Anything, uint(10)).Return(results, nil).Once()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/addresses/", nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
+
+	t.Run("error internal server on repository failure returns 500", func(t *testing.T) {
+		mockUC := new(MockAddressUsecase)
+		app := setupAddressTestApp(mockUC, uint(10))
+
+		mockUC.On("GetUserAddresses", mock.Anything, uint(10)).
+			Return(nil, errors.New("database connection broken")).Once()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/addresses/", nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
+}
+
+func TestAddressHandler_GetPrimary(t *testing.T) {
+	t.Run("success get primary returns 200", func(t *testing.T) {
+		mockUC := new(MockAddressUsecase)
+		app := setupAddressTestApp(mockUC, uint(10))
+
+		res := &usecase.AddressResult{
+			ID:           1,
+			ReceiverName: "Budi",
+			IsPrimary:    true,
+		}
+
+		mockUC.On("GetPrimaryAddress", mock.Anything, uint(10)).Return(res, nil).Once()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/addresses/primary", nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
+
+	t.Run("primary not found returns 404", func(t *testing.T) {
+		mockUC := new(MockAddressUsecase)
+		app := setupAddressTestApp(mockUC, uint(10))
+
+		mockUC.On("GetPrimaryAddress", mock.Anything, uint(10)).
+			Return(nil, entity.ErrAddressNotFound).Once()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/addresses/primary", nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
+}
+
+func TestAddressHandler_GetByID(t *testing.T) {
+	t.Run("success get by id returns 200 with full details", func(t *testing.T) {
+		mockUC := new(MockAddressUsecase)
+		app := setupAddressTestApp(mockUC, uint(10))
+
+		res := &usecase.AddressResult{
+			ID:           5,
+			ReceiverName: "Budi",
+			AddressLine:  "Jl. Pemuda No. 45",
+			CityName:     "Jakarta Selatan",
+		}
+
+		mockUC.On("GetAddressByID", mock.Anything, uint(10), uint(5)).Return(res, nil).Once()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/addresses/5", nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
+
+	t.Run("invalid id parameter returns 400", func(t *testing.T) {
+		mockUC := new(MockAddressUsecase)
+		app := setupAddressTestApp(mockUC, uint(10))
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/addresses/abc", nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("address not found returns 404", func(t *testing.T) {
+		mockUC := new(MockAddressUsecase)
+		app := setupAddressTestApp(mockUC, uint(10))
+
+		mockUC.On("GetAddressByID", mock.Anything, uint(10), uint(99)).
+			Return(nil, entity.ErrAddressNotFound).Once()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/addresses/99", nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
+
+	t.Run("unauthorized access to other user's address returns 403", func(t *testing.T) {
+		mockUC := new(MockAddressUsecase)
+		app := setupAddressTestApp(mockUC, uint(10))
+
+		mockUC.On("GetAddressByID", mock.Anything, uint(10), uint(88)).
+			Return(nil, entity.ErrUnauthorizedAddress).Once()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/addresses/88", nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
+}
+
+func TestAddressHandler_Update(t *testing.T) {
+	updateReq := dto.UpdateAddressRequest{
+		ReceiverName:    "Budi Updated",
+		Phone:           "089988776655",
+		AddressLine:     "Jl. Thamrin No. 88",
+		BiteshipAreaID:  "IDNP6IDNC148IDND843IDZ12250",
+		ProvinceName:    "DKI Jakarta",
+		CityName:        "Jakarta Pusat",
+		DistrictName:    "Menteng",
+		SubdistrictName: "Gondangdia",
+		PostalCode:      "10310",
+		IsPrimary:       false,
 	}
-	_ = json.Unmarshal(body, &res)
 
-	assert.Equal(t, 201, res.Code)
-	assert.Equal(t, uint(10), res.Data.ID)
-	assert.Equal(t, "Budi Santoso", res.Data.ReceiverName)
-	mockUC.AssertExpectations(t)
+	t.Run("success update address returns 200", func(t *testing.T) {
+		mockUC := new(MockAddressUsecase)
+		app := setupAddressTestApp(mockUC, uint(10))
+
+		updatedRes := &usecase.AddressResult{
+			ID:           1,
+			ReceiverName: updateReq.ReceiverName,
+			AddressLine:  updateReq.AddressLine,
+		}
+
+		mockUC.On("UpdateAddress", mock.Anything, uint(10), uint(1), mock.MatchedBy(func(in usecase.UpdateAddressInput) bool {
+			return in.ReceiverName == updateReq.ReceiverName && in.PostalCode == updateReq.PostalCode
+		})).Return(updatedRes, nil).Once()
+
+		body, _ := json.Marshal(updateReq)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/addresses/1", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
+
+	t.Run("update non-existing address returns 404", func(t *testing.T) {
+		mockUC := new(MockAddressUsecase)
+		app := setupAddressTestApp(mockUC, uint(10))
+
+		mockUC.On("UpdateAddress", mock.Anything, uint(10), uint(999), mock.Anything).
+			Return(nil, entity.ErrAddressNotFound).Once()
+
+		body, _ := json.Marshal(updateReq)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/addresses/999", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
 }
 
-func TestAddressHandler_Create_LimitReached(t *testing.T) {
-	mockUC := new(MockAddressUsecase)
-	app := setupAddressApp(mockUC, true)
+func TestAddressHandler_Delete(t *testing.T) {
+	t.Run("success delete non-primary returns 200", func(t *testing.T) {
+		mockUC := new(MockAddressUsecase)
+		app := setupAddressTestApp(mockUC, uint(10))
 
-	mockUC.On("Create", mock.Anything, mock.Anything).Return(nil, entity.ErrAddressLimitReached)
+		mockUC.On("DeleteAddress", mock.Anything, uint(10), uint(2)).Return(nil).Once()
 
-	payload := `{
-		"receiver_name": "Budi Santoso",
-		"phone": "081234567890",
-		"address_line": "Jl. Mawar No. 10",
-		"destination_id": 101,
-		"province_name": "Jawa Tengah",
-		"city_name": "Semarang",
-		"district_name": "Semarang Barat",
-		"postal_code": "50149"
-	}`
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/addresses/2", nil)
+		resp, err := app.Test(req)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/addresses", strings.NewReader(payload))
-	req.Header.Set("Content-Type", "application/json")
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
 
-	resp, err := app.Test(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-	mockUC.AssertExpectations(t)
+	t.Run("delete primary address returns 400 bad request", func(t *testing.T) {
+		mockUC := new(MockAddressUsecase)
+		app := setupAddressTestApp(mockUC, uint(10))
+
+		mockUC.On("DeleteAddress", mock.Anything, uint(10), uint(1)).
+			Return(entity.ErrPrimaryAddressDelete).Once()
+
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/addresses/1", nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
 }
 
-func TestAddressHandler_Create_InvalidPayload(t *testing.T) {
-	mockUC := new(MockAddressUsecase)
-	app := setupAddressApp(mockUC, true)
+func TestAddressHandler_SetPrimary(t *testing.T) {
+	t.Run("success set primary returns 200", func(t *testing.T) {
+		mockUC := new(MockAddressUsecase)
+		app := setupAddressTestApp(mockUC, uint(10))
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/addresses", strings.NewReader(`{invalid json`))
-	req.Header.Set("Content-Type", "application/json")
+		mockUC.On("SetPrimaryAddress", mock.Anything, uint(10), uint(3)).Return(nil).Once()
 
-	resp, err := app.Test(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-	mockUC.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
-}
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/addresses/3/primary", nil)
+		resp, err := app.Test(req)
 
-// ============================================================================
-// FIND ALL TESTS
-// ============================================================================
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
 
-func TestAddressHandler_FindAll_Success(t *testing.T) {
-	mockUC := new(MockAddressUsecase)
-	app := setupAddressApp(mockUC, true)
+	t.Run("set primary address not found returns 404", func(t *testing.T) {
+		mockUC := new(MockAddressUsecase)
+		app := setupAddressTestApp(mockUC, uint(10))
 
-	expected := []usecase.AddressListItem{
-		{ID: 1, ReceiverName: "Rumah", CityName: "Semarang", IsPrimary: true},
-		{ID: 2, ReceiverName: "Kantor", CityName: "Jakarta", IsPrimary: false},
-	}
+		mockUC.On("SetPrimaryAddress", mock.Anything, uint(10), uint(99)).
+			Return(entity.ErrAddressNotFound).Once()
 
-	mockUC.On("GetAllByUser", mock.Anything, uint(1)).Return(expected, nil)
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/addresses/99/primary", nil)
+		resp, err := app.Test(req)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/addresses", nil)
-	resp, err := app.Test(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-	body, _ := io.ReadAll(resp.Body)
-	var res struct {
-		Code int                       `json:"code"`
-		Data []usecase.AddressListItem `json:"data"`
-	}
-	_ = json.Unmarshal(body, &res)
-
-	assert.Equal(t, 200, res.Code)
-	assert.Len(t, res.Data, 2)
-	assert.Equal(t, "Rumah", res.Data[0].ReceiverName)
-	mockUC.AssertExpectations(t)
-}
-
-func TestAddressHandler_FindAll_InternalError(t *testing.T) {
-	mockUC := new(MockAddressUsecase)
-	app := setupAddressApp(mockUC, true)
-
-	mockUC.On("GetAllByUser", mock.Anything, uint(1)).Return(nil, errors.New("db query failed"))
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/addresses", nil)
-	resp, err := app.Test(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
-	mockUC.AssertExpectations(t)
-}
-
-// ============================================================================
-// FIND BY ID TESTS
-// ============================================================================
-
-func TestAddressHandler_FindByID_Success(t *testing.T) {
-	mockUC := new(MockAddressUsecase)
-	app := setupAddressApp(mockUC, true)
-
-	expected := &usecase.AddressResult{
-		ID:           5,
-		ReceiverName: "Rumah",
-		CityName:     "Semarang",
-	}
-
-	mockUC.On("GetByID", mock.Anything, uint(5), uint(1)).Return(expected, nil)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/addresses/5", nil)
-	resp, err := app.Test(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-	body, _ := io.ReadAll(resp.Body)
-	var res struct {
-		Code int                   `json:"code"`
-		Data usecase.AddressResult `json:"data"`
-	}
-	_ = json.Unmarshal(body, &res)
-
-	assert.Equal(t, 200, res.Code)
-	assert.Equal(t, uint(5), res.Data.ID)
-	mockUC.AssertExpectations(t)
-}
-
-func TestAddressHandler_FindByID_NotFound(t *testing.T) {
-	mockUC := new(MockAddressUsecase)
-	app := setupAddressApp(mockUC, true)
-
-	mockUC.On("GetByID", mock.Anything, uint(99), uint(1)).Return(nil, entity.ErrAddressNotFound)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/addresses/99", nil)
-	resp, err := app.Test(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
-	mockUC.AssertExpectations(t)
-}
-
-func TestAddressHandler_FindByID_InvalidParam(t *testing.T) {
-	mockUC := new(MockAddressUsecase)
-	app := setupAddressApp(mockUC, true)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/addresses/abc", nil)
-	resp, err := app.Test(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-	mockUC.AssertNotCalled(t, "GetByID", mock.Anything, mock.Anything, mock.Anything)
-}
-
-// ============================================================================
-// UPDATE TESTS
-// ============================================================================
-
-func TestAddressHandler_Update_Success(t *testing.T) {
-	mockUC := new(MockAddressUsecase)
-	app := setupAddressApp(mockUC, true)
-
-	expectedInput := usecase.UpdateAddressInput{
-		ID:            5,
-		UserID:        1,
-		ReceiverName:  "Budi Edit",
-		Phone:         "081234567899",
-		AddressLine:   "Jl. Melati Baru No. 1",
-		DestinationID: 102,
-		ProvinceName:  "Jawa Tengah",
-		CityName:      "Semarang",
-		DistrictName:  "Semarang Tengah",
-		PostalCode:    "50132",
-		IsPrimary:     false,
-	}
-
-	expectedResult := &usecase.AddressResult{
-		ID:           5,
-		ReceiverName: "Budi Edit",
-		Phone:        "081234567899",
-	}
-
-	mockUC.On("Update", mock.Anything, expectedInput).Return(expectedResult, nil)
-
-	payload := `{
-		"receiver_name": "Budi Edit",
-		"phone": "081234567899",
-		"address_line": "Jl. Melati Baru No. 1",
-		"destination_id": 102,
-		"province_name": "Jawa Tengah",
-		"city_name": "Semarang",
-		"district_name": "Semarang Tengah",
-		"postal_code": "50132",
-		"is_primary": false
-	}`
-
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/addresses/5", strings.NewReader(payload))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := app.Test(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-	body, _ := io.ReadAll(resp.Body)
-	var res struct {
-		Code int                   `json:"code"`
-		Data usecase.AddressResult `json:"data"`
-	}
-	_ = json.Unmarshal(body, &res)
-
-	assert.Equal(t, 200, res.Code)
-	assert.Equal(t, "Budi Edit", res.Data.ReceiverName)
-	mockUC.AssertExpectations(t)
-}
-
-func TestAddressHandler_Update_NotFound(t *testing.T) {
-	mockUC := new(MockAddressUsecase)
-	app := setupAddressApp(mockUC, true)
-
-	mockUC.On("Update", mock.Anything, mock.Anything).Return(nil, entity.ErrAddressNotFound)
-
-	payload := `{
-		"receiver_name": "Budi Edit",
-		"phone": "081234567899",
-		"address_line": "Jl. Melati Baru No. 1",
-		"destination_id": 102,
-		"province_name": "Jawa Tengah",
-		"city_name": "Semarang",
-		"district_name": "Semarang Tengah",
-		"postal_code": "50132"
-	}`
-
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/addresses/99", strings.NewReader(payload))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := app.Test(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
-	mockUC.AssertExpectations(t)
-}
-
-// ============================================================================
-// DELETE TESTS
-// ============================================================================
-
-func TestAddressHandler_Delete_Success(t *testing.T) {
-	mockUC := new(MockAddressUsecase)
-	app := setupAddressApp(mockUC, true)
-
-	mockUC.On("Delete", mock.Anything, uint(5), uint(1)).Return(nil)
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/addresses/5", nil)
-	resp, err := app.Test(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	mockUC.AssertExpectations(t)
-}
-
-func TestAddressHandler_Delete_CannotDeletePrimary(t *testing.T) {
-	mockUC := new(MockAddressUsecase)
-	app := setupAddressApp(mockUC, true)
-
-	mockUC.On("Delete", mock.Anything, uint(5), uint(1)).Return(entity.ErrCannotDeletePrimaryAddress)
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/addresses/5", nil)
-	resp, err := app.Test(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-	mockUC.AssertExpectations(t)
-}
-
-func TestAddressHandler_Delete_NotFound(t *testing.T) {
-	mockUC := new(MockAddressUsecase)
-	app := setupAddressApp(mockUC, true)
-
-	mockUC.On("Delete", mock.Anything, uint(99), uint(1)).Return(entity.ErrAddressNotFound)
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/addresses/99", nil)
-	resp, err := app.Test(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
-	mockUC.AssertExpectations(t)
-}
-
-// ============================================================================
-// SET PRIMARY TESTS
-// ============================================================================
-
-func TestAddressHandler_SetPrimary_Success(t *testing.T) {
-	mockUC := new(MockAddressUsecase)
-	app := setupAddressApp(mockUC, true)
-
-	mockUC.On("SetPrimary", mock.Anything, uint(5), uint(1)).Return(nil)
-
-	req := httptest.NewRequest(http.MethodPatch, "/api/v1/addresses/5/primary", nil)
-	resp, err := app.Test(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	mockUC.AssertExpectations(t)
-}
-
-func TestAddressHandler_SetPrimary_NotFound(t *testing.T) {
-	mockUC := new(MockAddressUsecase)
-	app := setupAddressApp(mockUC, true)
-
-	mockUC.On("SetPrimary", mock.Anything, uint(99), uint(1)).Return(entity.ErrAddressNotFound)
-
-	req := httptest.NewRequest(http.MethodPatch, "/api/v1/addresses/99/primary", nil)
-	resp, err := app.Test(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
-	mockUC.AssertExpectations(t)
-}
-
-// ============================================================================
-// UNAUTHORIZED TEST
-// ============================================================================
-
-func TestAddressHandler_Unauthorized(t *testing.T) {
-	mockUC := new(MockAddressUsecase)
-	// authenticated = false
-	app := setupAddressApp(mockUC, false)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/addresses", nil)
-	resp, err := app.Test(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
 }

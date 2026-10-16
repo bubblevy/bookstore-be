@@ -26,10 +26,10 @@ type AuthHandler struct {
 	frontendURL    string
 }
 
-func NewAuthHandler(r fiber.Router, u usecase.AuthUsecase, validate *validator.Validate, authMiddleware fiber.Handler, cfg config.AppConfig) {
+func NewAuthHandler(r fiber.Router, u usecase.AuthUsecase, v *validator.Validate, authMiddleware fiber.Handler, cfg config.AppConfig) {
 	h := &AuthHandler{
 		u:              u,
-		validate:       validate,
+		validate:       v,
 		authMiddleware: authMiddleware,
 		oauthConfig:    cfg.GoogleOAuth,
 		frontendURL:    cfg.SMTP.FrontendURL,

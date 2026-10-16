@@ -17,13 +17,13 @@ type CartHandler struct {
 	validate *validator.Validate
 }
 
-func NewCartHandler(router fiber.Router, uc usecase.CartUsecase, validate *validator.Validate, authMiddleware fiber.Handler) {
+func NewCartHandler(r fiber.Router, uc usecase.CartUsecase, v *validator.Validate, authMiddleware fiber.Handler) {
 	h := &CartHandler{
 		usecase:  uc,
-		validate: validate,
+		validate: v,
 	}
 
-	cartGroup := router.Group("/cart", authMiddleware)
+	cartGroup := r.Group("/cart", authMiddleware)
 	cartGroup.Get("/", h.GetCart)
 	cartGroup.Post("/items", h.AddItem)
 	cartGroup.Post("/selected", h.GetSelectedItems)

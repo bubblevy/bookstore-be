@@ -5,7 +5,6 @@ import (
 	"strconv"
 
 	"github.com/bubblevy/bookstore/internal/delivery/http/dto"
-	"github.com/bubblevy/bookstore/internal/delivery/http/middleware"
 	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/usecase"
 	"github.com/bubblevy/bookstore/pkg/response"
@@ -14,46 +13,63 @@ import (
 )
 
 type AddressHandler struct {
-	u        usecase.AddressUsecase
+	usecase  usecase.AddressUsecase
 	validate *validator.Validate
 }
 
-func NewAddressHandler(r fiber.Router, u usecase.AddressUsecase, validate *validator.Validate, authMiddleware fiber.Handler) {
+func NewAddressHandler(r fiber.Router, uc usecase.AddressUsecase, v *validator.Validate, authMiddleware fiber.Handler) {
 	h := &AddressHandler{
-		u:        u,
-		validate: validate,
+		usecase:  uc,
+		validate: v,
 	}
 
-	routes := r.Group("/addresses", authMiddleware)
-	routes.Post("/", middleware.RateLimit(middleware.StandardRateLimit), h.Create)
-	routes.Get("/", middleware.RateLimit(middleware.StandardRateLimit), h.FindAll)
-	routes.Get("/:id", middleware.RateLimit(middleware.StandardRateLimit), h.FindByID)
-	routes.Put("/:id", middleware.RateLimit(middleware.StandardRateLimit), h.Update)
-	routes.Delete("/:id", middleware.RateLimit(middleware.StandardRateLimit), h.Delete)
-	routes.Patch("/:id/primary", middleware.RateLimit(middleware.StandardRateLimit), h.SetPrimary)
+	addr := r.Group("/addresses", authMiddleware)
+	addr.Post("/", h.Create)
+	addr.Get("/", h.GetAll)
+	addr.Get("/primary", h.GetPrimary)
+	addr.Get("/:id", h.GetByID)
+	addr.Put("/:id", h.Update)
+	addr.Delete("/:id", h.Delete)
+	addr.Patch("/:id/primary", h.SetPrimary)
+}
+
+func (h *AddressHandler) getUserID(c fiber.Ctx) (uint, error) {
+	val := c.Locals("user_id")
+	if val == nil {
+		return 0, fiber.ErrUnauthorized
+	}
+	switch v := val.(type) {
+	case uint:
+		return v, nil
+	case int:
+		return uint(v), nil
+	case float64:
+		return uint(v), nil
+	default:
+		return 0, fiber.ErrUnauthorized
+	}
 }
 
 func (h *AddressHandler) Create(c fiber.Ctx) error {
-	var req dto.CreateAddressRequest
-	if err := c.Bind().Body(&req); err != nil {
-		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", nil)
-	}
-
-	if err := h.validate.Struct(req); err != nil {
-		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", response.FormatValidationErrors(err))
-	}
-
-	userID, ok := c.Locals("user_id").(uint)
-	if !ok {
+	userID, err := h.getUserID(c)
+	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}
 
+	var req dto.CreateAddressRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "invalid request body", nil)
+	}
+
+	if err := h.validate.Struct(req); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "validation error", response.FormatValidationErrors(err))
+	}
+
 	input := usecase.CreateAddressInput{
-		UserID:          userID,
 		ReceiverName:    req.ReceiverName,
 		Phone:           req.Phone,
 		AddressLine:     req.AddressLine,
-		DestinationID:   req.DestinationID,
+		BiteshipAreaID:  req.BiteshipAreaID,
 		ProvinceName:    req.ProvinceName,
 		CityName:        req.CityName,
 		DistrictName:    req.DistrictName,
@@ -62,83 +78,99 @@ func (h *AddressHandler) Create(c fiber.Ctx) error {
 		IsPrimary:       req.IsPrimary,
 	}
 
-	res, err := h.u.Create(c.Context(), input)
+	res, err := h.usecase.CreateAddress(c.Context(), userID, input)
 	if err != nil {
 		if errors.Is(err, entity.ErrAddressLimitReached) {
 			return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
 		}
-
 		return response.Error(c, fiber.StatusInternalServerError, err.Error(), nil)
 	}
 
 	return response.Success(c, fiber.StatusCreated, "address created successfully", res)
 }
 
-func (h *AddressHandler) FindAll(c fiber.Ctx) error {
-	userID, ok := c.Locals("user_id").(uint)
-	if !ok {
+func (h *AddressHandler) GetAll(c fiber.Ctx) error {
+	userID, err := h.getUserID(c)
+	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}
 
-	res, err := h.u.GetAllByUser(c.Context(), userID)
+	results, err := h.usecase.GetUserAddresses(c.Context(), userID)
 	if err != nil {
 		return response.Error(c, fiber.StatusInternalServerError, err.Error(), nil)
 	}
 
-	return response.Success(c, fiber.StatusOK, "addresses retrieved successfully", res)
+	return response.Success(c, fiber.StatusOK, "addresses retrieved successfully", results)
 }
 
-func (h *AddressHandler) FindByID(c fiber.Ctx) error {
-	userID, ok := c.Locals("user_id").(uint)
-	if !ok {
+func (h *AddressHandler) GetByID(c fiber.Ctx) error {
+	userID, err := h.getUserID(c)
+	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}
 
-	idParam := c.Params("id")
-	id, err := strconv.ParseUint(idParam, 10, 32)
+	id, err := strconv.ParseUint(c.Params("id"), 10, 32)
 	if err != nil {
-		return response.Error(c, fiber.StatusBadRequest, "invalid address id parameter", nil)
+		return response.Error(c, fiber.StatusBadRequest, "invalid address id", nil)
 	}
 
-	res, err := h.u.GetByID(c.Context(), uint(id), userID)
+	res, err := h.usecase.GetAddressByID(c.Context(), userID, uint(id))
 	if err != nil {
-		if errors.Is(err, entity.ErrAddressNotFound) {
+		switch {
+		case errors.Is(err, entity.ErrAddressNotFound):
 			return response.Error(c, fiber.StatusNotFound, err.Error(), nil)
+		case errors.Is(err, entity.ErrUnauthorizedAddress):
+			return response.Error(c, fiber.StatusForbidden, err.Error(), nil)
+		default:
+			return response.Error(c, fiber.StatusInternalServerError, err.Error(), nil)
 		}
-		return response.Error(c, fiber.StatusInternalServerError, err.Error(), nil)
 	}
 
 	return response.Success(c, fiber.StatusOK, "address retrieved successfully", res)
 }
 
-func (h *AddressHandler) Update(c fiber.Ctx) error {
-	userID, ok := c.Locals("user_id").(uint)
-	if !ok {
+func (h *AddressHandler) GetPrimary(c fiber.Ctx) error {
+	userID, err := h.getUserID(c)
+	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}
 
-	idParam := c.Params("id")
-	id, err := strconv.ParseUint(idParam, 10, 32)
+	res, err := h.usecase.GetPrimaryAddress(c.Context(), userID)
 	if err != nil {
-		return response.Error(c, fiber.StatusBadRequest, "invalid address id parameter", nil)
+		if errors.Is(err, entity.ErrAddressNotFound) {
+			return response.Error(c, fiber.StatusNotFound, "primary address not found", nil)
+		}
+		return response.Error(c, fiber.StatusInternalServerError, err.Error(), nil)
+	}
+
+	return response.Success(c, fiber.StatusOK, "primary address retrieved successfully", res)
+}
+
+func (h *AddressHandler) Update(c fiber.Ctx) error {
+	userID, err := h.getUserID(c)
+	if err != nil {
+		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
+	}
+
+	id, err := strconv.ParseUint(c.Params("id"), 10, 32)
+	if err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "invalid address id", nil)
 	}
 
 	var req dto.UpdateAddressRequest
 	if err := c.Bind().Body(&req); err != nil {
-		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", nil)
+		return response.Error(c, fiber.StatusBadRequest, "invalid request body", nil)
 	}
 
 	if err := h.validate.Struct(req); err != nil {
-		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", response.FormatValidationErrors(err))
+		return response.Error(c, fiber.StatusBadRequest, "validation error", response.FormatValidationErrors(err))
 	}
 
 	input := usecase.UpdateAddressInput{
-		ID:              uint(id),
-		UserID:          userID,
 		ReceiverName:    req.ReceiverName,
 		Phone:           req.Phone,
 		AddressLine:     req.AddressLine,
-		DestinationID:   req.DestinationID,
+		BiteshipAreaID:  req.BiteshipAreaID,
 		ProvinceName:    req.ProvinceName,
 		CityName:        req.CityName,
 		DistrictName:    req.DistrictName,
@@ -147,56 +179,62 @@ func (h *AddressHandler) Update(c fiber.Ctx) error {
 		IsPrimary:       req.IsPrimary,
 	}
 
-	res, err := h.u.Update(c.Context(), input)
+	res, err := h.usecase.UpdateAddress(c.Context(), userID, uint(id), input)
 	if err != nil {
-		if errors.Is(err, entity.ErrAddressNotFound) {
+		switch {
+		case errors.Is(err, entity.ErrAddressNotFound):
 			return response.Error(c, fiber.StatusNotFound, err.Error(), nil)
+		case errors.Is(err, entity.ErrUnauthorizedAddress):
+			return response.Error(c, fiber.StatusForbidden, err.Error(), nil)
+		default:
+			return response.Error(c, fiber.StatusInternalServerError, err.Error(), nil)
 		}
-		return response.Error(c, fiber.StatusInternalServerError, err.Error(), nil)
 	}
 
 	return response.Success(c, fiber.StatusOK, "address updated successfully", res)
 }
 
 func (h *AddressHandler) Delete(c fiber.Ctx) error {
-	userID, ok := c.Locals("user_id").(uint)
-	if !ok {
+	userID, err := h.getUserID(c)
+	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}
 
-	idParam := c.Params("id")
-	id, err := strconv.ParseUint(idParam, 10, 32)
+	id, err := strconv.ParseUint(c.Params("id"), 10, 32)
 	if err != nil {
-		return response.Error(c, fiber.StatusBadRequest, "invalid address id parameter", nil)
+		return response.Error(c, fiber.StatusBadRequest, "invalid address id", nil)
 	}
 
-	if err := h.u.Delete(c.Context(), uint(id), userID); err != nil {
-		if errors.Is(err, entity.ErrAddressNotFound) {
+	err = h.usecase.DeleteAddress(c.Context(), userID, uint(id))
+	if err != nil {
+		switch {
+		case errors.Is(err, entity.ErrAddressNotFound):
 			return response.Error(c, fiber.StatusNotFound, err.Error(), nil)
-		}
-
-		if errors.Is(err, entity.ErrCannotDeletePrimaryAddress) {
+		case errors.Is(err, entity.ErrUnauthorizedAddress):
+			return response.Error(c, fiber.StatusForbidden, err.Error(), nil)
+		case errors.Is(err, entity.ErrPrimaryAddressDelete):
 			return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
+		default:
+			return response.Error(c, fiber.StatusInternalServerError, err.Error(), nil)
 		}
-		return response.Error(c, fiber.StatusInternalServerError, err.Error(), nil)
 	}
 
 	return response.Success(c, fiber.StatusOK, "address deleted successfully", nil)
 }
 
 func (h *AddressHandler) SetPrimary(c fiber.Ctx) error {
-	userID, ok := c.Locals("user_id").(uint)
-	if !ok {
+	userID, err := h.getUserID(c)
+	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}
 
-	idParam := c.Params("id")
-	id, err := strconv.ParseUint(idParam, 10, 32)
+	id, err := strconv.ParseUint(c.Params("id"), 10, 32)
 	if err != nil {
-		return response.Error(c, fiber.StatusBadRequest, "invalid address id parameter", nil)
+		return response.Error(c, fiber.StatusBadRequest, "invalid address id", nil)
 	}
 
-	if err := h.u.SetPrimary(c.Context(), uint(id), userID); err != nil {
+	err = h.usecase.SetPrimaryAddress(c.Context(), userID, uint(id))
+	if err != nil {
 		if errors.Is(err, entity.ErrAddressNotFound) {
 			return response.Error(c, fiber.StatusNotFound, err.Error(), nil)
 		}

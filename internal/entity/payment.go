@@ -1,24 +1,41 @@
 package entity
 
 import (
+	"errors"
 	"time"
+)
 
-	"gorm.io/datatypes"
-	"gorm.io/gorm"
+type PaymentStatus string
+
+const (
+	PaymentStatusPending    PaymentStatus = "pending"
+	PaymentStatusSettlement PaymentStatus = "settlement"
+	PaymentStatusExpire     PaymentStatus = "expire"
+	PaymentStatusCancel     PaymentStatus = "cancel"
+	PaymentStatusDeny       PaymentStatus = "deny"
+	PaymentStatusRefund     PaymentStatus = "refund"
+)
+
+var (
+	ErrInvalidPaymentMethod = errors.New("unsupported or invalid payment method")
+	ErrMidtransChargeFailed = errors.New("midtrans charge request failed")
 )
 
 type Payment struct {
-	gorm.Model
-	OrderID                uint           `gorm:"not null;index" json:"order_id"`
-	MidtransTransactionID  *string        `gorm:"type:varchar(100);index" json:"midtrans_transaction_id,omitempty"`
-	GrossAmount            float64        `gorm:"type:numeric(12,2);not null" json:"gross_amount"`
-	PaymentType            *string        `gorm:"type:varchar(50)" json:"payment_type,omitempty"`            // qris, bank_transfer, gopay, dll.
-	TransactionStatus      string         `gorm:"type:varchar(50);not null;index" json:"transaction_status"` // capture, settlement, pending, deny, expire, cancel
-	FraudStatus            *string        `gorm:"type:varchar(50)" json:"fraud_status,omitempty"`            // accept, challenge, deny
-	SnapToken              *string        `gorm:"type:varchar(255)" json:"snap_token,omitempty"`
-	SnapRedirectURL        *string        `gorm:"type:text" json:"snap_redirect_url,omitempty"`
-	PaymentResponsePayload datatypes.JSON `gorm:"type:jsonb" json:"payment_response_payload,omitempty"` // Webhook notification dump
-	PaidAt                 *time.Time     `json:"paid_at,omitempty"`
+	ID                    uint          `gorm:"primaryKey" json:"id"`
+	OrderID               uint          `gorm:"not null" json:"order_id"`
+	MidtransTransactionID *string       `gorm:"type:varchar(100)" json:"midtrans_transaction_id,omitempty"`
+	PaymentType           string        `gorm:"type:varchar(50);not null" json:"payment_type"`
+	Bank                  *string       `gorm:"type:varchar(30)" json:"bank,omitempty"`
+	VANumber              *string       `gorm:"type:varchar(100)" json:"va_number,omitempty"`
+	BillKey               *string       `gorm:"type:varchar(100)" json:"bill_key,omitempty"`
+	BillerCode            *string       `gorm:"type:varchar(100)" json:"biller_code,omitempty"`
+	QRURL                 *string       `gorm:"type:text" json:"qr_url,omitempty"`
+	Status                PaymentStatus `gorm:"type:payment_status;not null;default:'pending'" json:"status"`
+	RawResponse           *string       `gorm:"type:jsonb" json:"raw_response,omitempty"`
+	PaidAt                *time.Time    `json:"paid_at,omitempty"`
+	CreatedAt             time.Time     `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
+	UpdatedAt             time.Time     `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
 }
 
 func (Payment) TableName() string {

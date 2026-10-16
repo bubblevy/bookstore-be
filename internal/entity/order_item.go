@@ -1,17 +1,18 @@
 package entity
 
-import "gorm.io/gorm"
+import "time"
 
 type OrderItem struct {
-	gorm.Model
-	OrderID     uint    `gorm:"not null;index" json:"order_id"`
-	BookID      uint    `gorm:"not null" json:"book_id"`
-	Quantity    int     `gorm:"not null" json:"quantity"`
-	Price       float64 `gorm:"type:numeric(12,2);not null" json:"price"` // Snapshot price at the time of checkout
-	WeightGrams int     `gorm:"not null" json:"weight_grams"`             // Snapshot weight at the time of checkout
-
-	// Relasi (Belongs To)
-	Book *Book `gorm:"foreignKey:BookID" json:"book,omitempty"`
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	OrderID     uint      `gorm:"not null" json:"order_id"`
+	BookID      uint      `gorm:"not null" json:"book_id"`
+	Title       string    `gorm:"type:varchar(255);not null" json:"title"`
+	CoverImage  *string   `gorm:"type:varchar(255)" json:"cover_image,omitempty"`
+	Price       float64   `gorm:"type:numeric(15,2);not null" json:"price"`
+	WeightGrams int       `gorm:"not null" json:"weight_grams"`
+	Quantity    int       `gorm:"not null" json:"quantity"`
+	Subtotal    float64   `gorm:"type:numeric(15,2);not null" json:"subtotal"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 func (OrderItem) TableName() string {

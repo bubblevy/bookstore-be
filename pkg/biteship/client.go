@@ -1,0 +1,340 @@
+package biteship
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+)
+
+type Client interface {
+	SearchArea(ctx context.Context, keyword string) ([]AreaItem, error)
+	GetCouriers(ctx context.Context) ([]CourierDetail, error)
+	CalculateRatesByAreaID(ctx context.Context, destAreaID, couriers string, items []RateItem) ([]ShippingRatePricing, error)
+	CreateOrderByAreaID(ctx context.Context, req CreateOrderByAreaIDRequest) (*OrderResponse, error)
+	GetOrderByID(ctx context.Context, orderID string) (*OrderResponse, error)
+	CancelOrder(ctx context.Context, orderID string, reason string) (*CancelOrderResponse, error)
+	TrackByID(ctx context.Context, trackingID string) (*TrackingDetailResult, error)
+	TrackWaybill(ctx context.Context, waybillID, courierCode string) (*TrackingDetailResult, error)
+}
+
+type client struct {
+	apiKey       string
+	baseURL      string
+	originAreaID string
+	httpClient   *http.Client
+}
+
+func NewClient(apiKey, baseURL, originAreaID string) Client {
+	endpoint := strings.TrimRight(baseURL, "/")
+	if endpoint == "" {
+		endpoint = "https://api.biteship.com"
+	}
+	return &client{
+		apiKey:       apiKey,
+		baseURL:      endpoint,
+		originAreaID: originAreaID,
+		httpClient:   &http.Client{Timeout: 20 * time.Second},
+	}
+}
+
+func (c *client) doRequest(ctx context.Context, method, endpoint string, body interface{}, target interface{}) error {
+	var bodyReader io.Reader
+	if body != nil {
+		raw, err := json.Marshal(body)
+		if err != nil {
+			return err
+		}
+		bodyReader = bytes.NewReader(raw)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, endpoint, bodyReader)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", c.apiKey)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		var errObj struct {
+			Success bool   `json:"success"`
+			Error   string `json:"error"`
+			Message string `json:"message"`
+		}
+		if jsonErr := json.Unmarshal(respBytes, &errObj); jsonErr == nil {
+			if errObj.Error != "" {
+				return errors.New(errObj.Error)
+			}
+			if errObj.Message != "" {
+				return errors.New(errObj.Message)
+			}
+		}
+		return errors.New(string(respBytes))
+	}
+
+	if target != nil {
+		if err := json.Unmarshal(respBytes, target); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// AREAS & COURIERS
+type AreaItem struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	AdminDiv1  string `json:"administrative_division_level_1_name"`
+	AdminDiv2  string `json:"administrative_division_level_2_name"`
+	AdminDiv3  string `json:"administrative_division_level_3_name"`
+	AdminDiv4  string `json:"administrative_division_level_4_name"`
+	PostalCode int    `json:"postal_code"`
+}
+
+type areaResponse struct {
+	Success bool       `json:"success"`
+	Areas   []AreaItem `json:"areas"`
+}
+
+func (c *client) SearchArea(ctx context.Context, keyword string) ([]AreaItem, error) {
+	endpoint := fmt.Sprintf("%s/v1/maps/areas?countries=ID&input=%s&type=single", c.baseURL, url.QueryEscape(keyword))
+	var res areaResponse
+	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &res); err != nil {
+		return nil, err
+	}
+	return res.Areas, nil
+}
+
+type CourierDetail struct {
+	AvailableForCashOnDelivery  bool   `json:"available_for_cash_on_delivery"`
+	AvailableForProofOfDelivery bool   `json:"available_for_proof_of_delivery"`
+	AvailableForInstantWaybill  bool   `json:"available_for_instant_waybill"`
+	CouriersName                string `json:"courier_name"`
+	CourierCode                 string `json:"courier_code"`
+	CourierServiceName          string `json:"courier_service_name"`
+	CourierServiceCode          string `json:"courier_service_code"`
+	Tier                        string `json:"tier"`
+	Description                 string `json:"description"`
+	ServiceType                 string `json:"service_type"`
+}
+
+type courierListResponse struct {
+	Success  bool            `json:"success"`
+	Couriers []CourierDetail `json:"couriers"`
+}
+
+func (c *client) GetCouriers(ctx context.Context) ([]CourierDetail, error) {
+	endpoint := fmt.Sprintf("%s/v1/couriers", c.baseURL)
+	var res courierListResponse
+	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &res); err != nil {
+		return nil, err
+	}
+	return res.Couriers, nil
+}
+
+// RATES
+type RateItem struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Category    string `json:"category,omitempty"`
+	Value       int64  `json:"value"`
+	Length      int    `json:"length"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
+	Weight      int    `json:"weight"`
+	Quantity    int    `json:"quantity"`
+}
+
+type ShippingRatePricing struct {
+	CourierName        string `json:"courier_name"`
+	CourierCode        string `json:"courier_code"`
+	CourierServiceCode string `json:"courier_service_code"`
+	CourierServiceName string `json:"courier_service_name"`
+	Duration           string `json:"duration"`
+	Price              int64  `json:"price"`
+	Type               string `json:"type"`
+}
+
+type rateResponse struct {
+	Success bool                  `json:"success"`
+	Pricing []ShippingRatePricing `json:"pricing"`
+}
+
+func (c *client) CalculateRatesByAreaID(ctx context.Context, destAreaID, couriers string, items []RateItem) ([]ShippingRatePricing, error) {
+	endpoint := fmt.Sprintf("%s/v1/rates/couriers", c.baseURL)
+	body := map[string]interface{}{
+		"origin_area_id":      c.originAreaID,
+		"destination_area_id": destAreaID,
+		"couriers":            couriers,
+		"items":               items,
+	}
+	var res rateResponse
+	if err := c.doRequest(ctx, http.MethodPost, endpoint, body, &res); err != nil {
+		return nil, err
+	}
+	return res.Pricing, nil
+}
+
+// ORDERS
+type CreateOrderByAreaIDRequest struct {
+	ShipperContactName      string      `json:"shipper_contact_name,omitempty"`
+	ShipperContactPhone     string      `json:"shipper_contact_phone,omitempty"`
+	ShipperContactEmail     string      `json:"shipper_contact_email,omitempty"`
+	ShipperOrganization     string      `json:"shipper_organization,omitempty"`
+	OriginContactName       string      `json:"origin_contact_name"`
+	OriginContactPhone      string      `json:"origin_contact_phone"`
+	OriginAddress           string      `json:"origin_address"`
+	OriginNote              string      `json:"origin_note,omitempty"`
+	OriginAreaID            string      `json:"origin_area_id,omitempty"`
+	DestinationContactName  string      `json:"destination_contact_name"`
+	DestinationContactPhone string      `json:"destination_contact_phone"`
+	DestinationContactEmail string      `json:"destination_contact_email,omitempty"`
+	DestinationAddress      string      `json:"destination_address"`
+	DestinationNote         string      `json:"destination_note,omitempty"`
+	DestinationAreaID       string      `json:"destination_area_id"`
+	CourierCompany          string      `json:"courier_company"`
+	CourierType             string      `json:"courier_type"`
+	CourierInsurance        int64       `json:"courier_insurance,omitempty"`
+	DeliveryType            string      `json:"delivery_type"`
+	OrderNote               string      `json:"order_note,omitempty"`
+	Metadata                interface{} `json:"metadata,omitempty"`
+	Items                   []RateItem  `json:"items"`
+}
+
+type OrderResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	ID      string `json:"id"`
+	Courier struct {
+		TrackingID  string `json:"tracking_id"`
+		WaybillID   string `json:"waybill_id"`
+		Company     string `json:"company"`
+		Type        string `json:"type"`
+		Link        string `json:"link"`
+		TrackingURL string `json:"tracking_url"`
+	} `json:"courier"`
+	Origin struct {
+		ContactName string `json:"contact_name"`
+		Address     string `json:"address"`
+		PostalCode  int    `json:"postal_code"`
+	} `json:"origin"`
+	Destination struct {
+		ContactName string `json:"contact_name"`
+		Address     string `json:"address"`
+		PostalCode  int    `json:"postal_code"`
+	} `json:"destination"`
+	Price  int64  `json:"price"`
+	Status string `json:"status"`
+}
+
+type CancelOrderResponse struct {
+	Success      bool   `json:"success"`
+	Message      string `json:"message"`
+	ID           string `json:"id"`
+	Status       string `json:"status"`
+	Cancellation struct {
+		Reason string `json:"reason"`
+	} `json:"cancellation"`
+}
+
+func (c *client) CreateOrderByAreaID(ctx context.Context, req CreateOrderByAreaIDRequest) (*OrderResponse, error) {
+	endpoint := fmt.Sprintf("%s/v1/orders", c.baseURL)
+	if req.OriginAreaID == "" {
+		req.OriginAreaID = c.originAreaID
+	}
+	var res OrderResponse
+	if err := c.doRequest(ctx, http.MethodPost, endpoint, req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *client) GetOrderByID(ctx context.Context, orderID string) (*OrderResponse, error) {
+	endpoint := fmt.Sprintf("%s/v1/orders/%s", c.baseURL, orderID)
+	var res OrderResponse
+	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *client) CancelOrder(ctx context.Context, orderID string, reason string) (*CancelOrderResponse, error) {
+	endpoint := fmt.Sprintf("%s/v1/orders/%s/cancel", c.baseURL, orderID)
+	body := map[string]string{
+		"reason": reason,
+	}
+	var res CancelOrderResponse
+	if err := c.doRequest(ctx, http.MethodPost, endpoint, body, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+// TRACKING
+type TrackingHistory struct {
+	Note      string `json:"note"`
+	UpdatedAt string `json:"updated_at"`
+	Status    string `json:"status"`
+}
+
+type TrackingDetailResult struct {
+	Success     bool              `json:"success"`
+	Message     string            `json:"message"`
+	WaybillID   string            `json:"waybill_id"`
+	CourierCode string            `json:"courier_code"`
+	CourierName string            `json:"courier_name"`
+	Status      string            `json:"status"`
+	History     []TrackingHistory `json:"history"`
+}
+
+func (c *client) TrackByID(ctx context.Context, trackingID string) (*TrackingDetailResult, error) {
+	endpoint := fmt.Sprintf("%s/v1/trackings/%s", c.baseURL, trackingID)
+	var res TrackingDetailResult
+	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *client) TrackWaybill(ctx context.Context, waybillID, courierCode string) (*TrackingDetailResult, error) {
+	endpoint := fmt.Sprintf("%s/v1/trackings/%s/couriers/%s", c.baseURL, waybillID, courierCode)
+	var res TrackingDetailResult
+	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+// WEBHOOK PAYLOAD
+type WebhookTrackingPayload struct {
+	Event             string                 `json:"event"`
+	CourierTrackingID string                 `json:"courier_tracking_id"`
+	OrderID           string                 `json:"order_id"`
+	WaybillID         string                 `json:"waybill_id"`
+	CourierCode       string                 `json:"courier_code"`
+	Status            string                 `json:"status"`
+	Note              string                 `json:"note"`
+	UpdatedAt         time.Time              `json:"updated_at"`
+	Metadata          map[string]interface{} `json:"metadata"`
+}

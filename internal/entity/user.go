@@ -54,7 +54,7 @@ type User struct {
 
 	// one to many relationship
 	Sessions  []UserSession `gorm:"foreignKey:UserID"`
-	Addresses []UserAddress `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"addresses,omitempty"`
+	Addresses []Address     `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"addresses,omitempty"`
 	Orders    []Order       `gorm:"foreignKey:UserID" json:"orders,omitempty"`
 }
 

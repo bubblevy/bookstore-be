@@ -9,9 +9,10 @@ import (
 	"github.com/bubblevy/bookstore/internal/delivery/http/middleware"
 	"github.com/bubblevy/bookstore/internal/infrastructure/pgsql"
 	"github.com/bubblevy/bookstore/internal/usecase"
+	"github.com/bubblevy/bookstore/pkg/biteship"
 	"github.com/bubblevy/bookstore/pkg/email"
 	"github.com/bubblevy/bookstore/pkg/jwt"
-	"github.com/bubblevy/bookstore/pkg/rajaongkir"
+	"github.com/bubblevy/bookstore/pkg/payment"
 	"github.com/bubblevy/bookstore/pkg/validator"
 
 	"github.com/gofiber/fiber/v3"
@@ -67,6 +68,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	adminMiddleware := middleware.AdminMiddleware()
 	emailSender := email.NewSMTPEmailSender(cfg.SMTP)
 	txManager := pgsql.NewTransactionManager(db)
+	midtransSvc := payment.NewMidtransService(cfg.Midtrans.ServerKey, cfg.Midtrans.IsProduction)
 
 	userRepo := pgsql.NewUserRepository(db)
 	sessionRepo := pgsql.NewSessionRepository(db)
@@ -85,12 +87,11 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 
 	// address routes
 	addressRepo := pgsql.NewAddressRepository(db)
-	addressUsecase := usecase.NewAddressUsecase(addressRepo, txManager)
+	addressUsecase := usecase.NewAddressUsecase(db, addressRepo)
 	handler.NewAddressHandler(api, addressUsecase, validate, authMiddleware)
 
-	// shipping routes
-	roClient := rajaongkir.NewClient(cfg.RajaOngkir)
-	handler.NewShippingHandler(api, roClient, validate, authMiddleware)
+	// biteship
+	biteshipClient := biteship.NewClient(cfg.Biteship.APIKey, cfg.Biteship.BaseURL, cfg.Biteship.OriginAreaID)
 
 	// category routes
 	categoryRepo := pgsql.NewCategoryRepository(db)
@@ -121,4 +122,14 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	cartRepo := pgsql.NewCartRepository(db)
 	cartUsecase := usecase.NewCartUsecase(cartRepo, bookRepo)
 	handler.NewCartHandler(api, cartUsecase, validate, authMiddleware)
+
+	// order routes
+	orderRepo := pgsql.NewOrderRepository(db)
+	checkoutUsecase := usecase.NewCheckoutUsecase(db, orderRepo, cartRepo, addressRepo, discountRepo, biteshipClient, midtransSvc)
+	handler.NewCheckoutHandler(api, checkoutUsecase, validate, authMiddleware)
+
+	// shipping routes
+	shipmentRepo := pgsql.NewShipmentRepository(db)
+	shipmentUseCase := usecase.NewShippingUsecase(db, orderRepo, shipmentRepo, biteshipClient, cfg.Biteship.ToStoreShippingConfig())
+	handler.NewShippingHandler(api, shipmentUseCase, authMiddleware, adminMiddleware)
 }

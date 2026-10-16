@@ -19,13 +19,7 @@ type BookHandler struct {
 	validate *validator.Validate
 }
 
-func NewBookHandler(
-	r fiber.Router,
-	uc usecase.BookUsecase,
-	v *validator.Validate,
-	authMiddleware fiber.Handler,
-	adminMiddleware fiber.Handler,
-) {
+func NewBookHandler(r fiber.Router, uc usecase.BookUsecase, v *validator.Validate, authMiddleware fiber.Handler, adminMiddleware fiber.Handler) {
 	h := &BookHandler{
 		usecase:  uc,
 		validate: v,

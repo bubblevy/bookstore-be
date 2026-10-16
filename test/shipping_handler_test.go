@@ -1,123 +1,70 @@
 package test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
+	"time"
 
-	"github.com/bubblevy/bookstore/config"
 	"github.com/bubblevy/bookstore/internal/delivery/http/handler"
-	"github.com/bubblevy/bookstore/pkg/rajaongkir"
-	"github.com/go-playground/validator/v10"
+	"github.com/bubblevy/bookstore/internal/entity"
+	"github.com/bubblevy/bookstore/internal/usecase"
+	"github.com/bubblevy/bookstore/pkg/biteship"
 	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
-// ============================================================================
-// RAJAONGKIR CLIENT UNIT TESTS (MOCK HTTP SERVER)
-// ============================================================================
-
-func TestRajaOngkirClient_SearchDestination_Success(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/destination/domestic-destination", r.URL.Path)
-		assert.Equal(t, "welahan", r.URL.Query().Get("search"))
-		assert.Equal(t, "mock-api-key", r.Header.Get("key"))
-
-		resp := rajaongkir.BaseResponse[[]rajaongkir.DomesticDestination]{
-			Data: []rajaongkir.DomesticDestination{
-				{
-					ID:          65216,
-					Label:       "KALIPUCANG WETAN, WELAHAN, JEPARA, JAWA TENGAH, 59464",
-					Subdistrict: "KALIPUCANG WETAN",
-					District:    "WELAHAN",
-					City:        "JEPARA",
-					Province:    "JAWA TENGAH",
-					ZipCode:     "59464",
-				},
-			},
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(resp)
-	}))
-	defer mockServer.Close()
-
-	client := rajaongkir.NewClient(config.RajaOngkirConfig{
-		APIKey:   "mock-api-key",
-		BaseURL:  mockServer.URL,
-		OriginID: 65216,
-	})
-
-	results, err := client.SearchDestination(context.Background(), "welahan", 10, 0)
-	assert.NoError(t, err)
-	assert.Len(t, results, 1)
-	assert.Equal(t, 65216, results[0].ID)
-	assert.Equal(t, "WELAHAN", results[0].District)
+type MockShippingUsecase struct {
+	mock.Mock
 }
 
-func TestRajaOngkirClient_CalculateCost_Success(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/calculate/domestic-cost", r.URL.Path)
-		assert.Equal(t, "POST", r.Method)
-		assert.Equal(t, "application/x-www-form-urlencoded", r.Header.Get("Content-Type"))
-
-		_ = r.ParseForm()
-		assert.Equal(t, "65216", r.Form.Get("origin"))
-		assert.Equal(t, "19601", r.Form.Get("destination"))
-		assert.Equal(t, "1200", r.Form.Get("weight"))
-
-		resp := rajaongkir.BaseResponse[[]rajaongkir.ShippingCostResult]{
-			Data: []rajaongkir.ShippingCostResult{
-				{
-					Name:        "Jalur Nugraha Ekakurir (JNE)",
-					Code:        "jne",
-					Service:     "REG",
-					Description: "Layanan Reguler",
-					Cost:        18000,
-					ETD:         "2-3",
-				},
-			},
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(resp)
-	}))
-	defer mockServer.Close()
-
-	client := rajaongkir.NewClient(config.RajaOngkirConfig{
-		APIKey:   "mock-api-key",
-		BaseURL:  mockServer.URL,
-		OriginID: 65216,
-	})
-
-	req := rajaongkir.CalculateDomesticCostRequest{
-		DestinationID: 19601,
-		WeightGrams:   1200,
+func (m *MockShippingUsecase) SearchAreas(ctx context.Context, keyword string) ([]biteship.AreaItem, error) {
+	args := m.Called(ctx, keyword)
+	if res := args.Get(0); res != nil {
+		return res.([]biteship.AreaItem), args.Error(1)
 	}
-
-	results, err := client.CalculateCost(context.Background(), req)
-	assert.NoError(t, err)
-	assert.Len(t, results, 1)
-	assert.Equal(t, "jne", results[0].Code)
-	assert.Equal(t, 18000, results[0].Cost)
+	return nil, args.Error(1)
 }
 
-// ============================================================================
-// SHIPPING HTTP HANDLER TESTS
-// ============================================================================
+func (m *MockShippingUsecase) GetCouriers(ctx context.Context) ([]biteship.CourierDetail, error) {
+	args := m.Called(ctx)
+	if res := args.Get(0); res != nil {
+		return res.([]biteship.CourierDetail), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
 
-func setupShippingApp(mockServerURL string, authenticated bool) *fiber.App {
+func (m *MockShippingUsecase) FulfillOrder(ctx context.Context, orderID uint, orderNote string) (*usecase.FulfillOrderResult, error) {
+	args := m.Called(ctx, orderID, orderNote)
+	if res := args.Get(0); res != nil {
+		return res.(*usecase.FulfillOrderResult), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+func (m *MockShippingUsecase) GetOrderTracking(ctx context.Context, userID, orderID uint) (*biteship.TrackingDetailResult, error) {
+	args := m.Called(ctx, userID, orderID)
+	if res := args.Get(0); res != nil {
+		return res.(*biteship.TrackingDetailResult), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+func (m *MockShippingUsecase) HandleWebhook(ctx context.Context, payload biteship.WebhookTrackingPayload) error {
+	return m.Called(ctx, payload).Error(0)
+}
+
+func setupShippingHandlerApp(mockUC *MockShippingUsecase, authenticated, isAdmin bool) *fiber.App {
 	app := fiber.New()
-	validate := validator.New()
 
 	authMiddleware := func(c fiber.Ctx) error {
 		if !authenticated {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"code":    401,
+				"code":    fiber.StatusUnauthorized,
 				"status":  false,
 				"message": "unauthorized",
 			})
@@ -126,131 +73,166 @@ func setupShippingApp(mockServerURL string, authenticated bool) *fiber.App {
 		return c.Next()
 	}
 
-	client := rajaongkir.NewClient(config.RajaOngkirConfig{
-		APIKey:   "mock-key",
-		BaseURL:  mockServerURL,
-		OriginID: 65216,
-	})
+	adminMiddleware := func(c fiber.Ctx) error {
+		if !isAdmin {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"code":    fiber.StatusForbidden,
+				"status":  false,
+				"message": "forbidden",
+			})
+		}
+		return c.Next()
+	}
 
-	api := app.Group("/api/v1")
-	handler.NewShippingHandler(api, client, validate, authMiddleware)
+	handler.NewShippingHandler(app, mockUC, authMiddleware, adminMiddleware)
 	return app
 }
 
-func TestShippingHandler_SearchDestinations_Success(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := rajaongkir.BaseResponse[[]rajaongkir.DomesticDestination]{
-			Data: []rajaongkir.DomesticDestination{
-				{
-					ID:       65216,
-					Label:    "KALIPUCANG WETAN, WELAHAN, JEPARA, JAWA TENGAH, 59464",
-					District: "WELAHAN",
-				},
-			},
+func TestShippingHandler_SearchAreas(t *testing.T) {
+	t.Run("success search areas returns 200", func(t *testing.T) {
+		mockUC := new(MockShippingUsecase)
+		app := setupShippingHandlerApp(mockUC, false, false)
+
+		areas := []biteship.AreaItem{
+			{ID: "IDNP6IDNC148", Name: "Kebayoran Baru", PostalCode: 12190},
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(resp)
-	}))
-	defer mockServer.Close()
+		mockUC.On("SearchAreas", mock.Anything, "kebayoran").Return(areas, nil).Once()
 
-	// Public endpoint: tetap jalan walau authenticated = false
-	app := setupShippingApp(mockServer.URL, false)
+		req := httptest.NewRequest(http.MethodGet, "/shipping/areas?search=kebayoran", nil)
+		resp, err := app.Test(req)
 
-	req := httptest.NewRequest("GET", "/api/v1/shipping/destinations?search=welahan", nil)
-	resp, err := app.Test(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
 
-	body, _ := io.ReadAll(resp.Body)
-	var res struct {
-		Code    int                              `json:"code"`
-		Status  bool                             `json:"status"`
-		Message string                           `json:"message"`
-		Data    []rajaongkir.DomesticDestination `json:"data"`
-	}
-	err = json.Unmarshal(body, &res)
-	assert.NoError(t, err)
-	assert.Equal(t, 200, res.Code)
-	assert.True(t, res.Status)
-	assert.Len(t, res.Data, 1)
-	assert.Equal(t, 65216, res.Data[0].ID)
+	t.Run("error when search keyword too short returns 400", func(t *testing.T) {
+		mockUC := new(MockShippingUsecase)
+		app := setupShippingHandlerApp(mockUC, false, false)
+
+		req := httptest.NewRequest(http.MethodGet, "/shipping/areas?search=ke", nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	})
 }
 
-func TestShippingHandler_SearchDestinations_QueryTooShort(t *testing.T) {
-	app := setupShippingApp("http://dummy-url", false)
+func TestShippingHandler_FulfillOrder(t *testing.T) {
+	t.Run("success admin fulfill order returns 200", func(t *testing.T) {
+		mockUC := new(MockShippingUsecase)
+		app := setupShippingHandlerApp(mockUC, true, true)
 
-	req := httptest.NewRequest("GET", "/api/v1/shipping/destinations?search=we", nil)
-	resp, err := app.Test(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-}
-
-func TestShippingHandler_CheckCost_Success(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := rajaongkir.BaseResponse[[]rajaongkir.ShippingCostResult]{
-			Data: []rajaongkir.ShippingCostResult{
-				{
-					Code:    "jne",
-					Service: "REG",
-					Cost:    15000,
-					ETD:     "2-3",
-				},
-			},
+		orderID := uint(5)
+		waybill := "WAYBILL123"
+		expectedRes := &usecase.FulfillOrderResult{
+			ShipmentID:      1,
+			OrderID:         orderID,
+			BiteshipOrderID: "biteship-123",
+			WaybillNumber:   &waybill,
+			Status:          entity.ShippingStatusAllocated,
+			Courier:         "jne",
+			CourierService:  "reg",
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(resp)
-	}))
-	defer mockServer.Close()
 
-	// Protected endpoint: authenticated = true
-	app := setupShippingApp(mockServer.URL, true)
+		mockUC.On("FulfillOrder", mock.Anything, orderID, "Handle with care").
+			Return(expectedRes, nil).Once()
 
-	reqBody := `{"destination_id": 19601, "weight_grams": 1000}`
-	req := httptest.NewRequest("POST", "/api/v1/shipping/cost", strings.NewReader(reqBody))
-	req.Header.Set("Content-Type", "application/json")
+		body := []byte(`{"order_note":"Handle with care"}`)
+		req := httptest.NewRequest(http.MethodPost, "/admin/orders/5/fulfill", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
 
-	body, _ := io.ReadAll(resp.Body)
-	var res struct {
-		Code    int                             `json:"code"`
-		Status  bool                            `json:"status"`
-		Message string                          `json:"message"`
-		Data    []rajaongkir.ShippingCostResult `json:"data"`
-	}
-	err = json.Unmarshal(body, &res)
-	assert.NoError(t, err)
-	assert.Equal(t, 200, res.Code)
-	assert.True(t, res.Status)
-	assert.Len(t, res.Data, 1)
-	assert.Equal(t, 15000, res.Data[0].Cost)
+	t.Run("failed when non-admin user tries fulfill returns 403", func(t *testing.T) {
+		mockUC := new(MockShippingUsecase)
+		app := setupShippingHandlerApp(mockUC, true, false) // Not admin
+
+		req := httptest.NewRequest(http.MethodPost, "/admin/orders/5/fulfill", nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
+	})
+
+	t.Run("invalid order id param returns 400", func(t *testing.T) {
+		mockUC := new(MockShippingUsecase)
+		app := setupShippingHandlerApp(mockUC, true, true)
+
+		req := httptest.NewRequest(http.MethodPost, "/admin/orders/abc/fulfill", nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	})
 }
 
-func TestShippingHandler_CheckCost_Unauthorized(t *testing.T) {
-	// authenticated = false
-	app := setupShippingApp("http://dummy-url", false)
+func TestShippingHandler_TrackOrder(t *testing.T) {
+	t.Run("success track order returns 200", func(t *testing.T) {
+		mockUC := new(MockShippingUsecase)
+		app := setupShippingHandlerApp(mockUC, true, false)
 
-	reqBody := `{"destination_id": 19601, "weight_grams": 1000}`
-	req := httptest.NewRequest("POST", "/api/v1/shipping/cost", strings.NewReader(reqBody))
-	req.Header.Set("Content-Type", "application/json")
+		orderID := uint(10)
+		expected := &biteship.TrackingDetailResult{
+			Success:   true,
+			WaybillID: "WAYBILL123",
+			Status:    "in_transit",
+		}
+		mockUC.On("GetOrderTracking", mock.Anything, uint(1), orderID).
+			Return(expected, nil).Once()
 
-	resp, err := app.Test(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+		req := httptest.NewRequest(http.MethodGet, "/orders/10/tracking", nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
+
+	t.Run("order not found returns 404", func(t *testing.T) {
+		mockUC := new(MockShippingUsecase)
+		app := setupShippingHandlerApp(mockUC, true, false)
+
+		orderID := uint(99)
+		mockUC.On("GetOrderTracking", mock.Anything, uint(1), orderID).
+			Return(nil, entity.ErrOrderNotFound).Once()
+
+		req := httptest.NewRequest(http.MethodGet, "/orders/99/tracking", nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
 }
 
-func TestShippingHandler_CheckCost_ValidationError(t *testing.T) {
-	app := setupShippingApp("http://dummy-url", true)
+func TestShippingHandler_HandleWebhook(t *testing.T) {
+	t.Run("success handle webhook returns 200", func(t *testing.T) {
+		mockUC := new(MockShippingUsecase)
+		app := setupShippingHandlerApp(mockUC, false, false)
 
-	reqBody := `{"destination_id": 0, "weight_grams": 1000}`
-	req := httptest.NewRequest("POST", "/api/v1/shipping/cost", strings.NewReader(reqBody))
-	req.Header.Set("Content-Type", "application/json")
+		mockUC.On("HandleWebhook", mock.Anything, mock.MatchedBy(func(p biteship.WebhookTrackingPayload) bool {
+			return p.OrderID == "biteship-123" && p.Status == "delivered"
+		})).Return(nil).Once()
 
-	resp, err := app.Test(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		payload := biteship.WebhookTrackingPayload{
+			OrderID:   "biteship-123",
+			Status:    "delivered",
+			WaybillID: "WAYBILL123",
+			UpdatedAt: time.Now(),
+		}
+		body, _ := json.Marshal(payload)
+
+		req := httptest.NewRequest(http.MethodPost, "/shipping/webhook", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
 }

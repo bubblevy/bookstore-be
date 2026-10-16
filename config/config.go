@@ -3,19 +3,44 @@ package config
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
+	"github.com/bubblevy/bookstore/internal/usecase"
 	"github.com/bubblevy/bookstore/pkg/email"
 	"github.com/joho/godotenv"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
 
-type RajaOngkirConfig struct {
-	APIKey   string
-	BaseURL  string
-	OriginID int
+type BiteshipConfig struct {
+	APIKey        string
+	BaseURL       string
+	OriginAreaID  string
+	WebhookSecret string
+	ShipperName   string
+	ShipperPhone  string
+	ShipperEmail  string
+	OriginName    string
+	OriginPhone   string
+	OriginAddr    string
+}
+
+func (b BiteshipConfig) ToStoreShippingConfig() usecase.StoreShippingConfig {
+	return usecase.StoreShippingConfig{
+		ShipperName:  b.ShipperName,
+		ShipperPhone: b.ShipperPhone,
+		ShipperEmail: b.ShipperEmail,
+		OriginName:   b.OriginName,
+		OriginPhone:  b.OriginPhone,
+		OriginAddr:   b.OriginAddr,
+		OriginAreaID: b.OriginAreaID,
+	}
+}
+
+type MidtransConfig struct {
+	ServerKey    string
+	ClientKey    string
+	IsProduction bool
 }
 
 type AppConfig struct {
@@ -25,17 +50,15 @@ type AppConfig struct {
 	SMTP        email.SMTPConfig
 	AppEnv      string
 	GoogleOAuth *oauth2.Config
-	RajaOngkir  RajaOngkirConfig
+	Biteship    BiteshipConfig
+	Midtrans    MidtransConfig
 }
 
 func LoadConfig() AppConfig {
 	if err := godotenv.Load(); err != nil {
-		// ignore - env vars might already be set in production
 		fmt.Fprintln(os.Stderr, "environment variable failed to load or .env file not found")
 		os.Exit(1)
 	}
-
-	originCityID, _ := strconv.Atoi(os.Getenv("RAJAONGKIR_ORIGIN_CITY_ID"))
 
 	cfg := AppConfig{
 		BaseURL:   os.Getenv("BASE_URL"),
@@ -64,56 +87,60 @@ func LoadConfig() AppConfig {
 			},
 			Endpoint: google.Endpoint,
 		},
-		RajaOngkir: RajaOngkirConfig{
-			APIKey:   os.Getenv("RAJAONGKIR_API_KEY"),
-			BaseURL:  os.Getenv("RAJAONGKIR_BASE_URL"),
-			OriginID: originCityID,
+		Biteship: BiteshipConfig{
+			APIKey:        os.Getenv("BITESHIP_API_KEY"),
+			BaseURL:       getEnv("BITESHIP_BASE_URL", "https://api.biteship.com"),
+			OriginAreaID:  os.Getenv("BITESHIP_ORIGIN_AREA_ID"),
+			WebhookSecret: os.Getenv("BITESHIP_WEBHOOK_SECRET"),
+			ShipperName:   getEnv("STORE_SHIPPER_NAME", "Admin Bookstore"),
+			ShipperPhone:  os.Getenv("STORE_SHIPPER_PHONE"),
+			ShipperEmail:  os.Getenv("STORE_SHIPPER_EMAIL"),
+			OriginName:    getEnv("STORE_ORIGIN_NAME", "Gudang Utama Bookstore"),
+			OriginPhone:   os.Getenv("STORE_ORIGIN_PHONE"),
+			OriginAddr:    os.Getenv("STORE_ORIGIN_ADDRESS"),
+		},
+		Midtrans: MidtransConfig{
+			ServerKey:    os.Getenv("MIDTRANS_SERVER_KEY"),
+			ClientKey:    os.Getenv("MIDTRANS_CLIENT_KEY"),
+			IsProduction: getEnvBool("MIDTRANS_IS_PRODUCTION", false),
 		},
 	}
 
-	if cfg.RajaOngkir.BaseURL == "" {
-		cfg.RajaOngkir.BaseURL = "https://api.rajaongkir.com/starter"
-	}
-	cfg.RajaOngkir.BaseURL = strings.TrimSuffix(cfg.RajaOngkir.BaseURL, "/")
+	cfg.Biteship.BaseURL = strings.TrimSuffix(cfg.Biteship.BaseURL, "/")
 
-	// validate required fields
 	if cfg.SMTP.AppName == "" || cfg.JWTSecret == "" || cfg.BaseURL == "" {
 		fmt.Fprintln(os.Stderr, "fatal: required environment variables are missing: APP_NAME, JWT_SECRET, BASE_URL")
 		os.Exit(1)
 	}
 
-	// JWTSecret must be at least 32 bytes for HS256
 	if len(cfg.JWTSecret) < 32 {
 		fmt.Fprintln(os.Stderr, "fatal: JWT_SECRET must be at least 32 characters long")
 		os.Exit(1)
 	}
 
-	// validate SMTP config
-	if cfg.SMTP.Host == "" || cfg.SMTP.Port == "" || cfg.SMTP.AuthUser == "" || cfg.SMTP.AuthPass == "" || cfg.SMTP.FromEmail == "" {
-		fmt.Fprintln(os.Stderr, "fatal: SMTP configuration is incomplete: SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, EMAIL_FROM_ADDRESS are required")
+	if cfg.Biteship.APIKey == "" || cfg.Biteship.OriginAreaID == "" {
+		fmt.Fprintln(os.Stderr, "fatal: BITESHIP_API_KEY and BITESHIP_ORIGIN_AREA_ID are required")
 		os.Exit(1)
 	}
 
-	// validate Google OAuth config
-	if cfg.GoogleOAuth.ClientID == "" || cfg.GoogleOAuth.ClientSecret == "" || cfg.GoogleOAuth.RedirectURL == "" {
-		fmt.Fprintln(os.Stderr, "fatal: Google OAuth configuration is incomplete: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URL are required")
+	if cfg.Biteship.OriginAddr == "" || cfg.Biteship.ShipperPhone == "" {
+		fmt.Fprintln(os.Stderr, "fatal: STORE_ORIGIN_ADDRESS and STORE_SHIPPER_PHONE are required for shipping fulfillment")
 		os.Exit(1)
 	}
 
-	// validate RajaOngkir config
-	if cfg.RajaOngkir.APIKey == "" || cfg.RajaOngkir.OriginID <= 0 {
-		fmt.Fprintln(os.Stderr, "fatal: RajaOngkir configuration is incomplete: RAJAONGKIR_API_KEY and valid RAJAONGKIR_ORIGIN_CITY_ID are required")
-		os.Exit(1)
-	}
-
-	// normalize FrontendURL (remove trailing slash)
 	cfg.SMTP.FrontendURL = strings.TrimSuffix(cfg.SMTP.FrontendURL, "/")
-
 	if cfg.Port == "" {
 		cfg.Port = "8080"
 	}
 
 	return cfg
+}
+
+func getEnv(key, fallback string) string {
+	if val := os.Getenv(key); val != "" {
+		return val
+	}
+	return fallback
 }
 
 func getEnvBool(key string, defaultVal bool) bool {

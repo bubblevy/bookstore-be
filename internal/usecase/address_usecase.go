@@ -7,304 +7,243 @@ import (
 
 	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/repository"
-	"github.com/bubblevy/bookstore/pkg/logger"
+	"gorm.io/gorm"
 )
 
 type CreateAddressInput struct {
-	UserID          uint
 	ReceiverName    string
 	Phone           string
 	AddressLine     string
-	DestinationID   int
+	BiteshipAreaID  string
 	ProvinceName    string
 	CityName        string
 	DistrictName    string
-	SubdistrictName *string
+	SubdistrictName string
 	PostalCode      string
 	IsPrimary       bool
 }
 
 type UpdateAddressInput struct {
-	ID              uint
-	UserID          uint
 	ReceiverName    string
 	Phone           string
 	AddressLine     string
-	DestinationID   int
+	BiteshipAreaID  string
 	ProvinceName    string
 	CityName        string
 	DistrictName    string
-	SubdistrictName *string
+	SubdistrictName string
 	PostalCode      string
 	IsPrimary       bool
 }
 
-type AddressListItem struct {
+type AddressListItemResult struct {
 	ID           uint   `json:"id"`
 	ReceiverName string `json:"receiver_name"`
 	Phone        string `json:"phone"`
-	AddressLine  string `json:"address_line"`
 	CityName     string `json:"city_name"`
-	ProvinceName string `json:"province_name"`
-	PostalCode   string `json:"postal_code"`
+	DistrictName string `json:"district_name"`
 	IsPrimary    bool   `json:"is_primary"`
 }
 
 type AddressResult struct {
-	ID              uint       `json:"id"`
-	ReceiverName    string     `json:"receiver_name"`
-	Phone           string     `json:"phone"`
-	AddressLine     string     `json:"address_line"`
-	DestinationID   int        `json:"destination_id"`
-	ProvinceName    string     `json:"province_name"`
-	CityName        string     `json:"city_name"`
-	DistrictName    string     `json:"district_name"`
-	SubdistrictName *string    `json:"subdistrict_name,omitempty"`
-	PostalCode      string     `json:"postal_code"`
-	IsPrimary       bool       `json:"is_primary"`
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
-	DeletedAt       *time.Time `json:"deleted_at,omitempty"`
+	ID              uint      `json:"id"`
+	ReceiverName    string    `json:"receiver_name"`
+	Phone           string    `json:"phone"`
+	AddressLine     string    `json:"address_line"`
+	BiteshipAreaID  string    `json:"biteship_area_id"`
+	ProvinceName    string    `json:"province_name"`
+	CityName        string    `json:"city_name"`
+	DistrictName    string    `json:"district_name"`
+	SubdistrictName string    `json:"subdistrict_name"`
+	PostalCode      string    `json:"postal_code"`
+	IsPrimary       bool      `json:"is_primary"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 type AddressUsecase interface {
-	Create(ctx context.Context, i CreateAddressInput) (*AddressResult, error)
-	GetByID(ctx context.Context, id uint, userID uint) (*AddressResult, error)
-	GetAllByUser(ctx context.Context, userID uint) ([]AddressListItem, error)
-	Update(ctx context.Context, i UpdateAddressInput) (*AddressResult, error)
-	Delete(ctx context.Context, id uint, userID uint) error
-	SetPrimary(ctx context.Context, id uint, userID uint) error
+	CreateAddress(ctx context.Context, userID uint, input CreateAddressInput) (*AddressResult, error)
+	GetAddressByID(ctx context.Context, userID, addressID uint) (*AddressResult, error)
+	GetUserAddresses(ctx context.Context, userID uint) ([]AddressListItemResult, error)
+	GetPrimaryAddress(ctx context.Context, userID uint) (*AddressResult, error)
+	UpdateAddress(ctx context.Context, userID, addressID uint, input UpdateAddressInput) (*AddressResult, error)
+	DeleteAddress(ctx context.Context, userID, addressID uint) error
+	SetPrimaryAddress(ctx context.Context, userID, addressID uint) error
 }
 
 type addressUsecase struct {
+	db          *gorm.DB
 	addressRepo repository.AddressRepository
-	txManager   repository.TransactionManager
 }
 
-func NewAddressUsecase(addressRepo repository.AddressRepository, txManager repository.TransactionManager) AddressUsecase {
+func NewAddressUsecase(db *gorm.DB, addressRepo repository.AddressRepository) AddressUsecase {
 	return &addressUsecase{
+		db:          db,
 		addressRepo: addressRepo,
-		txManager:   txManager,
 	}
 }
 
-func (u *addressUsecase) Create(ctx context.Context, i CreateAddressInput) (*AddressResult, error) {
-	count, err := u.addressRepo.CountByUserID(ctx, i.UserID)
+func (u *addressUsecase) CreateAddress(ctx context.Context, userID uint, input CreateAddressInput) (*AddressResult, error) {
+	count, err := u.addressRepo.CountByUserID(ctx, userID)
 	if err != nil {
-		logger.Error("create address failed - count error", "user_id", i.UserID, "error", err)
-		return nil, entity.ErrFailedFetchAddress
+		return nil, fmt.Errorf("failed counting user addresses: %w", err)
 	}
 
-	if count >= 5 {
-		logger.Warn("create address failed - limit reached", "user_id", i.UserID, "current_count", count)
+	const maxAddresses = 5
+	if count >= maxAddresses {
 		return nil, entity.ErrAddressLimitReached
 	}
 
-	isPrimary := i.IsPrimary
 	if count == 0 {
-		isPrimary = true
+		input.IsPrimary = true
 	}
 
-	address := &entity.UserAddress{
-		UserID:          i.UserID,
-		ReceiverName:    i.ReceiverName,
-		Phone:           i.Phone,
-		AddressLine:     i.AddressLine,
-		DestinationID:   i.DestinationID,
-		ProvinceName:    i.ProvinceName,
-		CityName:        i.CityName,
-		DistrictName:    i.DistrictName,
-		SubdistrictName: i.SubdistrictName,
-		PostalCode:      i.PostalCode,
-		IsPrimary:       isPrimary,
+	addr := &entity.Address{
+		UserID:          userID,
+		ReceiverName:    input.ReceiverName,
+		Phone:           input.Phone,
+		AddressLine:     input.AddressLine,
+		BiteshipAreaID:  input.BiteshipAreaID,
+		ProvinceName:    input.ProvinceName,
+		CityName:        input.CityName,
+		DistrictName:    input.DistrictName,
+		SubdistrictName: input.SubdistrictName,
+		PostalCode:      input.PostalCode,
+		IsPrimary:       input.IsPrimary,
 	}
 
-	err = u.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		if isPrimary && count > 0 {
-			if err := u.addressRepo.ResetPrimaryStatus(txCtx, i.UserID); err != nil {
-				logger.Error("create address failed - reset primary status error", "user_id", i.UserID, "error", err)
+	err = u.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		repoTx := u.addressRepo.WithTx(tx)
+		if input.IsPrimary && count > 0 {
+			if err := repoTx.ResetPrimaryStatus(ctx, userID); err != nil {
 				return err
 			}
 		}
-
-		if err := u.addressRepo.Create(txCtx, address); err != nil {
-			logger.Error("create address failed - insert error", "user_id", i.UserID, "error", err)
-			return err
-		}
-		return nil
+		return repoTx.Create(ctx, addr)
 	})
-
 	if err != nil {
-		return nil, fmt.Errorf("failed to create address: %w", err)
+		return nil, err
 	}
 
-	logger.Info("address created", "address_id", address.ID, "user_id", i.UserID)
-	res := toAddressResult(address)
-	return &res, nil
+	return toAddressResult(addr), nil
 }
 
-func (u *addressUsecase) GetByID(ctx context.Context, id uint, userID uint) (*AddressResult, error) {
-	addr, err := u.addressRepo.FindByIDAndUserID(ctx, id, userID)
+func (u *addressUsecase) GetAddressByID(ctx context.Context, userID, addressID uint) (*AddressResult, error) {
+	addr, err := u.addressRepo.FindByID(ctx, addressID)
 	if err != nil {
-		logger.Error("get address failed - db error", "address_id", id, "user_id", userID, "error", err)
-		return nil, entity.ErrFailedFetchAddress
+		return nil, err
 	}
 	if addr == nil {
-		logger.Warn("get address failed - not found", "address_id", id, "user_id", userID)
 		return nil, entity.ErrAddressNotFound
 	}
+	if addr.UserID != userID {
+		return nil, entity.ErrUnauthorizedAddress
+	}
 
-	res := toAddressResult(addr)
-	return &res, nil
+	return toAddressResult(addr), nil
 }
 
-func (u *addressUsecase) GetAllByUser(ctx context.Context, userID uint) ([]AddressListItem, error) {
+func (u *addressUsecase) GetUserAddresses(ctx context.Context, userID uint) ([]AddressListItemResult, error) {
 	addresses, err := u.addressRepo.FindByUserID(ctx, userID)
 	if err != nil {
-		logger.Error("get all addresses failed - db error", "user_id", userID, "error", err)
-		return nil, entity.ErrFailedFetchAddress
+		return nil, err
 	}
 
-	res := make([]AddressListItem, 0, len(addresses))
-	for _, a := range addresses {
-		res = append(res, AddressListItem{
-			ID:           a.ID,
-			ReceiverName: a.ReceiverName,
-			Phone:        a.Phone,
-			AddressLine:  a.AddressLine,
-			CityName:     a.CityName,
-			ProvinceName: a.ProvinceName,
-			PostalCode:   a.PostalCode,
-			IsPrimary:    a.IsPrimary,
-		})
+	results := make([]AddressListItemResult, len(addresses))
+	for i := range addresses {
+		results[i] = AddressListItemResult{
+			ID:           addresses[i].ID,
+			ReceiverName: addresses[i].ReceiverName,
+			Phone:        addresses[i].Phone,
+			CityName:     addresses[i].CityName,
+			DistrictName: addresses[i].DistrictName,
+			IsPrimary:    addresses[i].IsPrimary,
+		}
 	}
-	return res, nil
+
+	return results, nil
 }
 
-func (u *addressUsecase) Update(ctx context.Context, i UpdateAddressInput) (*AddressResult, error) {
-	addr, err := u.addressRepo.FindByIDAndUserID(ctx, i.ID, i.UserID)
+func (u *addressUsecase) GetPrimaryAddress(ctx context.Context, userID uint) (*AddressResult, error) {
+	addr, err := u.addressRepo.FindPrimaryByUserID(ctx, userID)
 	if err != nil {
-		logger.Error("update address failed - db error", "address_id", i.ID, "user_id", i.UserID, "error", err)
-		return nil, entity.ErrFailedFetchAddress
+		return nil, err
 	}
 	if addr == nil {
-		logger.Warn("update address failed - not found", "address_id", i.ID, "user_id", i.UserID)
 		return nil, entity.ErrAddressNotFound
 	}
 
-	addr.ReceiverName = i.ReceiverName
-	addr.Phone = i.Phone
-	addr.AddressLine = i.AddressLine
-	addr.DestinationID = i.DestinationID
-	addr.ProvinceName = i.ProvinceName
-	addr.CityName = i.CityName
-	addr.DistrictName = i.DistrictName
-	addr.SubdistrictName = i.SubdistrictName
-	addr.PostalCode = i.PostalCode
+	return toAddressResult(addr), nil
+}
 
-	err = u.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		if i.IsPrimary && !addr.IsPrimary {
-			if err := u.addressRepo.ResetPrimaryStatus(txCtx, i.UserID); err != nil {
-				logger.Error("update address failed - reset primary status error", "user_id", i.UserID, "error", err)
+func (u *addressUsecase) UpdateAddress(ctx context.Context, userID, addressID uint, input UpdateAddressInput) (*AddressResult, error) {
+	addr, err := u.addressRepo.FindByID(ctx, addressID)
+	if err != nil {
+		return nil, err
+	}
+	if addr == nil {
+		return nil, entity.ErrAddressNotFound
+	}
+	if addr.UserID != userID {
+		return nil, entity.ErrUnauthorizedAddress
+	}
+
+	addr.ReceiverName = input.ReceiverName
+	addr.Phone = input.Phone
+	addr.AddressLine = input.AddressLine
+	addr.BiteshipAreaID = input.BiteshipAreaID
+	addr.ProvinceName = input.ProvinceName
+	addr.CityName = input.CityName
+	addr.DistrictName = input.DistrictName
+	addr.SubdistrictName = input.SubdistrictName
+	addr.PostalCode = input.PostalCode
+
+	err = u.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		repoTx := u.addressRepo.WithTx(tx)
+		if input.IsPrimary && !addr.IsPrimary {
+			if err := repoTx.ResetPrimaryStatus(ctx, userID); err != nil {
 				return err
 			}
 			addr.IsPrimary = true
 		}
-
-		if err := u.addressRepo.Update(txCtx, addr); err != nil {
-			logger.Error("update address failed - save error", "address_id", i.ID, "error", err)
-			return err
-		}
-		return nil
+		return repoTx.Update(ctx, addr)
 	})
-
 	if err != nil {
-		return nil, fmt.Errorf("failed to update address: %w", err)
+		return nil, err
 	}
 
-	logger.Info("address updated", "address_id", i.ID, "user_id", i.UserID)
-	res := toAddressResult(addr)
-	return &res, nil
+	return toAddressResult(addr), nil
 }
 
-func (u *addressUsecase) Delete(ctx context.Context, id uint, userID uint) error {
-	addr, err := u.addressRepo.FindByIDAndUserID(ctx, id, userID)
+func (u *addressUsecase) DeleteAddress(ctx context.Context, userID, addressID uint) error {
+	addr, err := u.addressRepo.FindByID(ctx, addressID)
 	if err != nil {
-		logger.Error("delete address failed - db error", "address_id", id, "user_id", userID, "error", err)
-		return entity.ErrFailedFetchAddress
+		return err
 	}
 	if addr == nil {
-		logger.Warn("delete address failed - not found", "address_id", id, "user_id", userID)
 		return entity.ErrAddressNotFound
 	}
-
-	count, err := u.addressRepo.CountByUserID(ctx, userID)
-	if err != nil {
-		logger.Error("delete address failed - count error", "user_id", userID, "error", err)
-		return entity.ErrFailedFetchAddress
+	if addr.UserID != userID {
+		return entity.ErrUnauthorizedAddress
 	}
-
-	if addr.IsPrimary && count > 1 {
-		logger.Warn("delete address failed - cannot delete primary address", "address_id", id, "user_id", userID)
-		return entity.ErrCannotDeletePrimaryAddress
-	}
-
-	if err := u.addressRepo.Delete(ctx, id, userID); err != nil {
-		logger.Error("delete address failed - delete error", "address_id", id, "error", err)
-		return entity.ErrFailedDeleteAddress
-	}
-
-	logger.Info("address deleted", "address_id", id, "user_id", userID)
-	return nil
-}
-
-func (u *addressUsecase) SetPrimary(ctx context.Context, id uint, userID uint) error {
-	addr, err := u.addressRepo.FindByIDAndUserID(ctx, id, userID)
-	if err != nil {
-		logger.Error("set primary address failed - db error", "address_id", id, "user_id", userID, "error", err)
-		return entity.ErrFailedFetchAddress
-	}
-	if addr == nil {
-		logger.Warn("set primary address failed - not found", "address_id", id, "user_id", userID)
-		return entity.ErrAddressNotFound
-	}
-
 	if addr.IsPrimary {
-		return nil
+		return entity.ErrPrimaryAddressDelete
 	}
 
-	err = u.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		if err := u.addressRepo.ResetPrimaryStatus(txCtx, userID); err != nil {
-			logger.Error("set primary address failed - reset primary error", "user_id", userID, "error", err)
-			return err
-		}
-		addr.IsPrimary = true
-		if err := u.addressRepo.Update(txCtx, addr); err != nil {
-			logger.Error("set primary address failed - save error", "address_id", id, "error", err)
-			return err
-		}
-		return nil
-	})
-
-	if err != nil {
-		return fmt.Errorf("failed to set primary address: %w", err)
-	}
-
-	logger.Info("primary address updated", "address_id", id, "user_id", userID)
-	return nil
+	return u.addressRepo.Delete(ctx, addressID)
 }
 
-func toAddressResult(a *entity.UserAddress) AddressResult {
-	var deletedAt *time.Time
-	if a.DeletedAt.Valid {
-		deletedAt = &a.DeletedAt.Time
-	}
-	return AddressResult{
+func (u *addressUsecase) SetPrimaryAddress(ctx context.Context, userID, addressID uint) error {
+	return u.addressRepo.SetPrimary(ctx, userID, addressID)
+}
+
+func toAddressResult(a *entity.Address) *AddressResult {
+	return &AddressResult{
 		ID:              a.ID,
 		ReceiverName:    a.ReceiverName,
 		Phone:           a.Phone,
 		AddressLine:     a.AddressLine,
-		DestinationID:   a.DestinationID,
+		BiteshipAreaID:  a.BiteshipAreaID,
 		ProvinceName:    a.ProvinceName,
 		CityName:        a.CityName,
 		DistrictName:    a.DistrictName,
@@ -313,6 +252,5 @@ func toAddressResult(a *entity.UserAddress) AddressResult {
 		IsPrimary:       a.IsPrimary,
 		CreatedAt:       a.CreatedAt,
 		UpdatedAt:       a.UpdatedAt,
-		DeletedAt:       deletedAt,
 	}
 }
