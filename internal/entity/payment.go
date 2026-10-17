@@ -17,8 +17,9 @@ const (
 )
 
 var (
-	ErrInvalidPaymentMethod = errors.New("unsupported or invalid payment method")
-	ErrMidtransChargeFailed = errors.New("midtrans charge request failed")
+	ErrInvalidPaymentMethod    = errors.New("unsupported or invalid payment method")
+	ErrMidtransChargeFailed    = errors.New("midtrans charge request failed")
+	ErrInvalidWebhookSignature = errors.New("invalid payment webhook signature")
 )
 
 type Payment struct {

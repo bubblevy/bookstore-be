@@ -14,7 +14,6 @@ import (
 	"github.com/bubblevy/bookstore/pkg/jwt"
 	"github.com/bubblevy/bookstore/pkg/payment"
 	"github.com/bubblevy/bookstore/pkg/validator"
-
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/helmet"
 	"github.com/gofiber/fiber/v3/middleware/recover"
@@ -61,7 +60,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 		})
 	})
 
-	// init dependencies
+	// init dependencies & services
 	jwtService := jwt.NewJWTService(cfg.JWTSecret)
 	validate := validator.NewValidator()
 	authMiddleware := middleware.AuthMiddleware(jwtService)
@@ -77,7 +76,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	// start background session cleanup (every 6 hours)
 	authUsecase.StartSessionCleanup(context.Background(), 6*time.Hour)
 
-	// routing
+	// routing group
 	api := app.Group("/api/v1")
 	api.Get("/static/*", static.New("./public"))
 
@@ -90,7 +89,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	addressUsecase := usecase.NewAddressUsecase(db, addressRepo)
 	handler.NewAddressHandler(api, addressUsecase, validate, authMiddleware)
 
-	// biteship
+	// biteship clients & webhook auth
 	webhookBiteshipAuth := middleware.BiteshipWebhookAuth(cfg.Biteship.WebhookSecret)
 	biteshipClient := biteship.NewClient(cfg.Biteship.APIKey, cfg.Biteship.BaseURL, cfg.Biteship.OriginAreaID)
 
@@ -124,13 +123,18 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	cartUsecase := usecase.NewCartUsecase(cartRepo, bookRepo)
 	handler.NewCartHandler(api, cartUsecase, validate, authMiddleware)
 
-	// order routes
+	// checkout & order routes
+	checkoutRepo := pgsql.NewCheckoutRepository(db)
 	orderRepo := pgsql.NewOrderRepository(db)
-	checkoutUsecase := usecase.NewCheckoutUsecase(db, orderRepo, cartRepo, addressRepo, discountRepo, biteshipClient, midtransSvc)
+
+	checkoutUsecase := usecase.NewCheckoutUsecase(db, checkoutRepo, orderRepo, addressRepo, discountUsecase, discountRepo, biteshipClient, midtransSvc)
 	handler.NewCheckoutHandler(api, checkoutUsecase, validate, authMiddleware)
+
+	orderUsecase := usecase.NewOrderUsecase(orderRepo)
+	handler.NewOrderHandler(api, orderUsecase, authMiddleware)
 
 	// shipping routes
 	shipmentRepo := pgsql.NewShipmentRepository(db)
-	shipmentUseCase := usecase.NewShippingUsecase(db, orderRepo, shipmentRepo, biteshipClient, cfg.Biteship.ToStoreShippingConfig())
-	handler.NewShippingHandler(api, shipmentUseCase, authMiddleware, adminMiddleware, webhookBiteshipAuth)
+	shipmentUseCase := usecase.NewShippingUsecase(db, orderRepo, shipmentRepo, checkoutRepo, addressRepo, biteshipClient, cfg.Biteship.ToStoreShippingConfig())
+	handler.NewShippingHandler(api, shipmentUseCase, validate, authMiddleware, adminMiddleware, webhookBiteshipAuth)
 }

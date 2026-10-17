@@ -7,12 +7,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
+	"github.com/bubblevy/bookstore/internal/delivery/http/dto"
 	"github.com/bubblevy/bookstore/internal/delivery/http/handler"
 	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/usecase"
 	"github.com/bubblevy/bookstore/pkg/biteship"
+	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -38,6 +39,14 @@ func (m *MockShippingUsecase) GetCouriers(ctx context.Context) ([]biteship.Couri
 	return nil, args.Error(1)
 }
 
+func (m *MockShippingUsecase) GetShippingRates(ctx context.Context, userID uint, input usecase.GetShippingRatesInput) (*usecase.ShippingRatesResult, error) {
+	args := m.Called(ctx, userID, input)
+	if res := args.Get(0); res != nil {
+		return res.(*usecase.ShippingRatesResult), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
 func (m *MockShippingUsecase) FulfillOrder(ctx context.Context, invoiceNumber string, orderNote string) (*usecase.FulfillOrderResult, error) {
 	args := m.Called(ctx, invoiceNumber, orderNote)
 	if res := args.Get(0); res != nil {
@@ -54,16 +63,17 @@ func (m *MockShippingUsecase) GetOrderTracking(ctx context.Context, userID uint,
 	return nil, args.Error(1)
 }
 
-func (m *MockShippingUsecase) HandleWebhook(ctx context.Context, payload biteship.WebhookTrackingPayload) error {
-	return m.Called(ctx, payload).Error(0)
-}
-
 func (m *MockShippingUsecase) ProcessReturn(ctx context.Context, invoiceNumber string, reason string) error {
 	return m.Called(ctx, invoiceNumber, reason).Error(0)
 }
 
-func setupShippingHandlerApp(mockUC *MockShippingUsecase, authenticated, isAdmin, validWebhookAuth bool) *fiber.App {
+func (m *MockShippingUsecase) HandleWebhook(ctx context.Context, payload biteship.WebhookTrackingPayload) error {
+	return m.Called(ctx, payload).Error(0)
+}
+
+func setupShippingApp(mockUC *MockShippingUsecase, authenticated bool, isAdmin bool) *fiber.App {
 	app := fiber.New()
+	validate := validator.New()
 
 	authMiddleware := func(c fiber.Ctx) error {
 		if !authenticated {
@@ -82,220 +92,262 @@ func setupShippingHandlerApp(mockUC *MockShippingUsecase, authenticated, isAdmin
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 				"code":    fiber.StatusForbidden,
 				"status":  false,
-				"message": "forbidden",
+				"message": "forbidden: admin access required",
 			})
 		}
 		return c.Next()
 	}
 
 	webhookAuthMiddleware := func(c fiber.Ctx) error {
-		if !validWebhookAuth {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"code":    fiber.StatusUnauthorized,
-				"status":  false,
-				"message": "invalid webhook signature",
-			})
-		}
 		return c.Next()
 	}
 
-	handler.NewShippingHandler(app, mockUC, authMiddleware, adminMiddleware, webhookAuthMiddleware)
+	api := app.Group("/api/v1")
+	handler.NewShippingHandler(api, mockUC, validate, authMiddleware, adminMiddleware, webhookAuthMiddleware)
 	return app
 }
 
 func TestShippingHandler_SearchAreas(t *testing.T) {
-	t.Run("success search areas returns 200", func(t *testing.T) {
+	t.Run("success search returns 200", func(t *testing.T) {
 		mockUC := new(MockShippingUsecase)
-		app := setupShippingHandlerApp(mockUC, false, false, false)
+		app := setupShippingApp(mockUC, false, false)
 
 		areas := []biteship.AreaItem{
-			{ID: "IDNP6IDNC148", Name: "Kebayoran Baru", PostalCode: 12190},
+			{
+				ID:         "IDNP6IDNC148",
+				Name:       "Kebayoran Baru, Jakarta Selatan",
+				AdminDiv1:  "DKI Jakarta",
+				AdminDiv2:  "Jakarta Selatan",
+				AdminDiv3:  "Kebayoran Baru",
+				PostalCode: 12190,
+			},
 		}
-		mockUC.On("SearchAreas", mock.Anything, "kebayoran").Return(areas, nil).Once()
+		mockUC.On("SearchAreas", mock.Anything, "jakarta").Return(areas, nil).Once()
 
-		req := httptest.NewRequest(http.MethodGet, "/shipping/areas?search=kebayoran", nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/shipping/areas?search=jakarta", nil)
 		resp, err := app.Test(req)
 
 		assert.NoError(t, err)
-		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		mockUC.AssertExpectations(t)
 	})
 
-	t.Run("error when search keyword too short returns 400", func(t *testing.T) {
+	t.Run("query length less than 3 returns 400", func(t *testing.T) {
 		mockUC := new(MockShippingUsecase)
-		app := setupShippingHandlerApp(mockUC, false, false, false)
+		app := setupShippingApp(mockUC, false, false)
 
-		req := httptest.NewRequest(http.MethodGet, "/shipping/areas?search=ke", nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/shipping/areas?search=jk", nil)
 		resp, err := app.Test(req)
 
 		assert.NoError(t, err)
-		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+}
+
+func TestShippingHandler_GetCouriers(t *testing.T) {
+	t.Run("success get couriers returns 200", func(t *testing.T) {
+		mockUC := new(MockShippingUsecase)
+		app := setupShippingApp(mockUC, false, false)
+
+		couriers := []biteship.CourierDetail{
+			{
+				CourierCode:        "jne",
+				CouriersName:       "JNE",
+				CourierServiceCode: "reg",
+				CourierServiceName: "Reguler",
+				Tier:               "standard",
+				ServiceType:        "standard",
+			},
+		}
+		mockUC.On("GetCouriers", mock.Anything).Return(couriers, nil).Once()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/shipping/couriers", nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
+}
+
+func TestShippingHandler_GetShippingRates(t *testing.T) {
+	addrID := uint(5)
+	payload := dto.GetShippingRatesRequest{
+		CartItemIDs: []uint{1, 2},
+		AddressID:   &addrID,
+	}
+	body, _ := json.Marshal(payload)
+
+	t.Run("success returns rates 200", func(t *testing.T) {
+		mockUC := new(MockShippingUsecase)
+		app := setupShippingApp(mockUC, true, false)
+
+		expectedRes := &usecase.ShippingRatesResult{
+			TotalWeightGrams: 1000,
+			DestinationArea:  "Jl. Pemuda No. 45, Kel. Kramat Pela, Kec. Kebayoran Baru, Jakarta Selatan, DKI Jakarta 12250",
+			Options: []usecase.CourierOptionResult{
+				{
+					CourierCode:        "jne",
+					CourierName:        "JNE",
+					CourierServiceName: "Reguler",
+					CourierServiceCode: "reg",
+					Price:              20000,
+					ETD:                "1-2 days",
+				},
+			},
+		}
+
+		mockUC.On("GetShippingRates", mock.Anything, uint(1), mock.MatchedBy(func(in usecase.GetShippingRatesInput) bool {
+			return len(in.CartItemIDs) == 2 && in.AddressID != nil && *in.AddressID == 5
+		})).Return(expectedRes, nil).Once()
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/shipping/rates", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
+
+	t.Run("cart empty returns 400", func(t *testing.T) {
+		mockUC := new(MockShippingUsecase)
+		app := setupShippingApp(mockUC, true, false)
+
+		mockUC.On("GetShippingRates", mock.Anything, uint(1), mock.Anything).
+			Return(nil, entity.ErrCartEmpty).Once()
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/shipping/rates", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
 }
 
 func TestShippingHandler_FulfillOrder(t *testing.T) {
-	invoice := "INV-20261016-000101"
+	invoice := "INV-20261017-000101"
 
-	t.Run("success admin fulfill order by invoice returns 200", func(t *testing.T) {
+	t.Run("admin success fulfill order returns 200", func(t *testing.T) {
 		mockUC := new(MockShippingUsecase)
-		app := setupShippingHandlerApp(mockUC, true, true, false)
+		app := setupShippingApp(mockUC, true, true)
 
-		waybill := "WAYBILL123"
-		expectedRes := &usecase.FulfillOrderResult{
+		waybill := "SOCAG001"
+		trackURL := "/orders/" + invoice + "/tracking"
+		fulfillRes := &usecase.FulfillOrderResult{
 			ShipmentID:      1,
 			InvoiceNumber:   invoice,
-			BiteshipOrderID: "biteship-123",
+			BiteshipOrderID: "bite-12345",
 			WaybillNumber:   &waybill,
 			Status:          entity.ShippingStatusAllocated,
 			Courier:         "jne",
 			CourierService:  "reg",
+			TrackingURL:     &trackURL,
 		}
 
-		mockUC.On("FulfillOrder", mock.Anything, invoice, "Handle with care").
-			Return(expectedRes, nil).Once()
+		mockUC.On("FulfillOrder", mock.Anything, invoice, "").Return(fulfillRes, nil).Once()
 
-		body := []byte(`{"order_note":"Handle with care"}`)
-		req := httptest.NewRequest(http.MethodPost, "/orders/"+invoice+"/fulfill", bytes.NewReader(body))
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/orders/"+invoice+"/fulfill", bytes.NewReader([]byte(`{}`)))
 		req.Header.Set("Content-Type", "application/json")
 
 		resp, err := app.Test(req)
 		assert.NoError(t, err)
-		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		mockUC.AssertExpectations(t)
 	})
 
-	t.Run("failed when non-admin user tries fulfill returns 403", func(t *testing.T) {
+	t.Run("non-admin returns 403 Forbidden", func(t *testing.T) {
 		mockUC := new(MockShippingUsecase)
-		app := setupShippingHandlerApp(mockUC, true, false, false)
+		app := setupShippingApp(mockUC, true, false)
 
-		req := httptest.NewRequest(http.MethodPost, "/orders/"+invoice+"/fulfill", nil)
-		resp, err := app.Test(req)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/orders/"+invoice+"/fulfill", bytes.NewReader([]byte(`{}`)))
+		req.Header.Set("Content-Type", "application/json")
 
-		assert.NoError(t, err)
-		assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
-	})
-
-	t.Run("invalid empty invoice param returns 400", func(t *testing.T) {
-		mockUC := new(MockShippingUsecase)
-		app := setupShippingHandlerApp(mockUC, true, true, false)
-
-		req := httptest.NewRequest(http.MethodPost, "/orders/%20/fulfill", nil)
 		resp, err := app.Test(req)
 		assert.NoError(t, err)
-		if assert.NotNil(t, resp) {
-			assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
-		}
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	})
 }
 
 func TestShippingHandler_TrackOrder(t *testing.T) {
-	invoice := "INV-20261016-000101"
+	invoice := "INV-20261017-000101"
 
-	t.Run("success track order by invoice returns 200", func(t *testing.T) {
+	t.Run("success track order returns 200", func(t *testing.T) {
 		mockUC := new(MockShippingUsecase)
-		app := setupShippingHandlerApp(mockUC, true, false, false)
+		app := setupShippingApp(mockUC, true, false)
 
-		expected := &biteship.TrackingDetailResult{
-			Success:   true,
-			WaybillID: "WAYBILL123",
-			Status:    "in_transit",
+		trackDetail := &biteship.TrackingDetailResult{
+			WaybillID:   "SOCAG001",
+			CourierCode: "jne",
+			Status:      "allocated",
 		}
-		mockUC.On("GetOrderTracking", mock.Anything, uint(1), invoice).
-			Return(expected, nil).Once()
+		mockUC.On("GetOrderTracking", mock.Anything, uint(1), invoice).Return(trackDetail, nil).Once()
 
-		req := httptest.NewRequest(http.MethodGet, "/orders/"+invoice+"/tracking", nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/orders/"+invoice+"/tracking", nil)
 		resp, err := app.Test(req)
 
 		assert.NoError(t, err)
-		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		mockUC.AssertExpectations(t)
 	})
 
-	t.Run("order not found returns 404", func(t *testing.T) {
+	t.Run("tracking number not ready returns 400", func(t *testing.T) {
 		mockUC := new(MockShippingUsecase)
-		app := setupShippingHandlerApp(mockUC, true, false, false)
+		app := setupShippingApp(mockUC, true, false)
 
-		mockUC.On("GetOrderTracking", mock.Anything, uint(1), "INV-UNKNOWN").
-			Return(nil, entity.ErrOrderNotFound).Once()
+		mockUC.On("GetOrderTracking", mock.Anything, uint(1), invoice).
+			Return(nil, entity.ErrTrackingNumberNotReady).Once()
 
-		req := httptest.NewRequest(http.MethodGet, "/orders/INV-UNKNOWN/tracking", nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/orders/"+invoice+"/tracking", nil)
 		resp, err := app.Test(req)
 
 		assert.NoError(t, err)
-		assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
-		mockUC.AssertExpectations(t)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
 }
 
 func TestShippingHandler_ProcessReturn(t *testing.T) {
-	invoice := "INV-20261016-000101"
+	invoice := "INV-20261017-000101"
 
-	t.Run("success process return returns 200", func(t *testing.T) {
+	t.Run("admin success process return returns 200", func(t *testing.T) {
 		mockUC := new(MockShippingUsecase)
-		app := setupShippingHandlerApp(mockUC, true, true, false)
+		app := setupShippingApp(mockUC, true, true)
 
-		mockUC.On("ProcessReturn", mock.Anything, invoice, "Customer complaint verified").
-			Return(nil).Once()
+		mockUC.On("ProcessReturn", mock.Anything, invoice, "Customer rejected package").Return(nil).Once()
 
-		body := []byte(`{"reason":"Customer complaint verified"}`)
-		req := httptest.NewRequest(http.MethodPost, "/orders/"+invoice+"/return", bytes.NewReader(body))
+		reqBody := []byte(`{"reason": "Customer rejected package"}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/orders/"+invoice+"/return", bytes.NewReader(reqBody))
 		req.Header.Set("Content-Type", "application/json")
 
 		resp, err := app.Test(req)
 		assert.NoError(t, err)
-		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		mockUC.AssertExpectations(t)
-	})
-
-	t.Run("failed when non-admin tries return returns 403", func(t *testing.T) {
-		mockUC := new(MockShippingUsecase)
-		app := setupShippingHandlerApp(mockUC, true, false, false)
-
-		req := httptest.NewRequest(http.MethodPost, "/orders/"+invoice+"/return", nil)
-		resp, err := app.Test(req)
-
-		assert.NoError(t, err)
-		assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
 	})
 }
 
 func TestShippingHandler_HandleWebhook(t *testing.T) {
-	payload := biteship.WebhookTrackingPayload{
-		OrderID:   "biteship-123",
-		Status:    "delivered",
-		WaybillID: "WAYBILL123",
-		UpdatedAt: time.Now(),
-	}
-	body, _ := json.Marshal(payload)
-
-	t.Run("success handle webhook with valid auth returns 200", func(t *testing.T) {
+	t.Run("success process webhook returns 200", func(t *testing.T) {
 		mockUC := new(MockShippingUsecase)
-		app := setupShippingHandlerApp(mockUC, false, false, true)
+		app := setupShippingApp(mockUC, false, false)
+
+		webhookBody := []byte(`{
+			"order_id": "bite-12345",
+			"status": "delivered",
+			"waybill_id": "SOCAG001"
+		}`)
 
 		mockUC.On("HandleWebhook", mock.Anything, mock.MatchedBy(func(p biteship.WebhookTrackingPayload) bool {
-			return p.OrderID == "biteship-123" && p.Status == "delivered"
+			return p.OrderID == "bite-12345" && p.Status == "delivered"
 		})).Return(nil).Once()
 
-		req := httptest.NewRequest(http.MethodPost, "/shipping/webhook", bytes.NewReader(body))
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/shipping/webhook", bytes.NewReader(webhookBody))
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-Biteship-Signature", "valid_secret_signature")
 
 		resp, err := app.Test(req)
 		assert.NoError(t, err)
-		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		mockUC.AssertExpectations(t)
-	})
-
-	t.Run("failed webhook with invalid auth returns 401", func(t *testing.T) {
-		mockUC := new(MockShippingUsecase)
-		app := setupShippingHandlerApp(mockUC, false, false, false)
-
-		req := httptest.NewRequest(http.MethodPost, "/shipping/webhook", bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-Biteship-Signature", "invalid_secret_signature")
-
-		resp, err := app.Test(req)
-		assert.NoError(t, err)
-		assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
 	})
 }

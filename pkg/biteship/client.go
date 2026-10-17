@@ -167,13 +167,23 @@ type RateItem struct {
 }
 
 type ShippingRatePricing struct {
-	CourierName        string `json:"courier_name"`
-	CourierCode        string `json:"courier_code"`
-	CourierServiceCode string `json:"courier_service_code"`
-	CourierServiceName string `json:"courier_service_name"`
-	Duration           string `json:"duration"`
-	Price              int64  `json:"price"`
-	Type               string `json:"type"`
+	AvailableForCashOnDelivery   bool     `json:"available_for_cash_on_delivery"`
+	AvailableForProofOfDelivery  bool     `json:"available_for_proof_of_delivery"`
+	AvailableForInstantWaybillID bool     `json:"available_for_instant_waybill_id"`
+	AvailableCollectionMethod    []string `json:"available_collection_method"`
+	Company                      string   `json:"company"`
+	CourierName                  string   `json:"courier_name"`
+	CourierCode                  string   `json:"courier_code"`
+	CourierServiceName           string   `json:"courier_service_name"`
+	CourierServiceCode           string   `json:"courier_service_code"`
+	Description                  string   `json:"description"`
+	Duration                     string   `json:"duration"`
+	ShipmentDurationRange        string   `json:"shipment_duration_range"`
+	ShipmentDurationUnit         string   `json:"shipment_duration_unit"`
+	ServiceType                  string   `json:"service_type"`
+	ShippingType                 string   `json:"shipping_type"`
+	Price                        int64    `json:"price"`
+	Type                         string   `json:"type"`
 }
 
 type rateResponse struct {
@@ -326,7 +336,6 @@ func (c *client) TrackByID(ctx context.Context, trackingID string) (*TrackingDet
 	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &res); err != nil {
 		return nil, err
 	}
-
 	if res.CourierCode == "" {
 		res.CourierCode = res.Courier.Company
 	}
@@ -342,7 +351,6 @@ func (c *client) TrackWaybill(ctx context.Context, waybillID, courierCode string
 	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &res); err != nil {
 		return nil, err
 	}
-
 	if res.CourierCode == "" {
 		res.CourierCode = res.Courier.Company
 		if res.CourierCode == "" {
@@ -355,7 +363,6 @@ func (c *client) TrackWaybill(ctx context.Context, waybillID, courierCode string
 			res.CourierName = strings.ToUpper(courierCode)
 		}
 	}
-
 	return &res, nil
 }
 

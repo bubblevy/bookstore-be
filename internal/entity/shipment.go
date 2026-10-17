@@ -16,6 +16,7 @@ const (
 	ShippingStatusPicked          ShippingStatus = "picked"
 	ShippingStatusDroppingOff     ShippingStatus = "dropping_off"
 	ShippingStatusInTransit       ShippingStatus = "in_transit"
+	ShippingStatusReturnInTransit ShippingStatus = "return_in_transit"
 	ShippingStatusDelivered       ShippingStatus = "delivered"
 	ShippingStatusRejected        ShippingStatus = "rejected"
 	ShippingStatusCourierNotFound ShippingStatus = "courier_not_found"
@@ -32,11 +33,12 @@ var (
 	ErrInvalidWebhookPayload  = errors.New("invalid webhook payload")
 	ErrInvalidOrderIdentifier = errors.New("no valid order identifier found in webhook payload")
 	ErrDispatchCourierFailed  = errors.New("failed to dispatch pickup request to courier provider")
+	ErrShippingRateFailed     = errors.New("failed to retrieve shipping rates from courier")
 )
 
 type Shipment struct {
 	ID                 uint           `gorm:"primaryKey" json:"id"`
-	OrderID            uint           `gorm:"uniqueIndex;not null" json:"order_id"`
+	OrderID            uint           `gorm:"not null;uniqueIndex" json:"order_id"`
 	BiteshipOrderID    string         `gorm:"size:100;uniqueIndex;not null" json:"biteship_order_id"`
 	BiteshipTrackingID *string        `gorm:"size:100" json:"biteship_tracking_id,omitempty"`
 	WaybillNumber      *string        `gorm:"size:100;index" json:"waybill_number,omitempty"`

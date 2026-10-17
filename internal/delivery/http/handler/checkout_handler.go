@@ -56,7 +56,6 @@ func (h *CheckoutHandler) PreviewCheckout(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", nil)
 	}
-
 	if err := h.validate.Struct(req); err != nil {
 		return response.Error(c, fiber.StatusBadRequest, "validation error", response.FormatValidationErrors(err))
 	}
@@ -72,7 +71,23 @@ func (h *CheckoutHandler) PreviewCheckout(c fiber.Ctx) error {
 
 	res, err := h.usecase.PreviewCheckout(c.Context(), userID, input)
 	if err != nil {
-		return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
+		switch {
+		case errors.Is(err, entity.ErrCartEmpty),
+			errors.Is(err, entity.ErrInsufficientStock),
+			errors.Is(err, entity.ErrDiscountNotFound),
+			errors.Is(err, entity.ErrDiscountInactive),
+			errors.Is(err, entity.ErrDiscountNotStarted),
+			errors.Is(err, entity.ErrDiscountExpired),
+			errors.Is(err, entity.ErrDiscountQuotaExhaust),
+			errors.Is(err, entity.ErrDiscountMinPurchase),
+			errors.Is(err, entity.ErrDiscountNotApplicable),
+			errors.Is(err, entity.ErrDiscountBookNotFound):
+			return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
+		case errors.Is(err, entity.ErrAddressNotFound):
+			return response.Error(c, fiber.StatusNotFound, err.Error(), nil)
+		default:
+			return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
+		}
 	}
 
 	itemsResp := make([]dto.CheckoutItemPreview, len(res.Items))
@@ -102,6 +117,20 @@ func (h *CheckoutHandler) PreviewCheckout(c fiber.Ctx) error {
 		TotalPayment:     res.TotalPayment,
 	}
 
+	if res.Address != nil {
+		respData.Address = &dto.AddressPreviewResponse{
+			ID:              res.Address.ID,
+			ReceiverName:    res.Address.ReceiverName,
+			Phone:           res.Address.Phone,
+			AddressLine:     res.Address.AddressLine,
+			ProvinceName:    res.Address.ProvinceName,
+			CityName:        res.Address.CityName,
+			DistrictName:    res.Address.DistrictName,
+			SubdistrictName: res.Address.SubdistrictName,
+			PostalCode:      res.Address.PostalCode,
+		}
+	}
+
 	return response.Success(c, fiber.StatusOK, "checkout preview calculated successfully", respData)
 }
 
@@ -115,7 +144,6 @@ func (h *CheckoutHandler) CreateOrder(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", nil)
 	}
-
 	if err := h.validate.Struct(req); err != nil {
 		return response.Error(c, fiber.StatusBadRequest, "validation error", response.FormatValidationErrors(err))
 	}
@@ -135,11 +163,12 @@ func (h *CheckoutHandler) CreateOrder(c fiber.Ctx) error {
 		case errors.Is(err, entity.ErrCartEmpty),
 			errors.Is(err, entity.ErrInsufficientStock),
 			errors.Is(err, entity.ErrDiscountNotFound),
-			errors.Is(err, entity.ErrDiscountNotApplicable),
 			errors.Is(err, entity.ErrDiscountExpired),
-			errors.Is(err, entity.ErrDiscountQuotaExhaust):
+			errors.Is(err, entity.ErrDiscountQuotaExhaust),
+			errors.Is(err, entity.ErrDiscountMinPurchase),
+			errors.Is(err, entity.ErrDiscountNotApplicable):
 			return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
-		case errors.Is(err, entity.ErrCartItemNotFound):
+		case errors.Is(err, entity.ErrAddressNotFound), errors.Is(err, entity.ErrCartItemNotFound):
 			return response.Error(c, fiber.StatusNotFound, err.Error(), nil)
 		case errors.Is(err, entity.ErrMidtransChargeFailed):
 			return response.Error(c, fiber.StatusBadGateway, err.Error(), nil)

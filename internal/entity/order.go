@@ -18,12 +18,14 @@ const (
 )
 
 var (
-	ErrOrderNotFound          = errors.New("order not found")
-	ErrOrderAlreadyPaid       = errors.New("order has already been paid")
-	ErrOrderCannotBeCancelled = errors.New("order cannot be cancelled in its current state")
-	ErrPaymentExpired         = errors.New("payment deadline has passed")
-	ErrOrderNotPaid           = errors.New("order is not paid yet or already processed")
-	ErrOrderAlreadyFulfilled  = errors.New("order shipment has already been processed")
+	ErrOrderNotFound           = errors.New("order not found")
+	ErrOrderAlreadyPaid        = errors.New("order has already been paid")
+	ErrOrderCannotBeCancelled  = errors.New("order cannot be cancelled in its current state")
+	ErrPaymentExpired          = errors.New("payment deadline has passed")
+	ErrOrderNotPaid            = errors.New("order is not paid yet or already processed")
+	ErrOrderAlreadyFulfilled   = errors.New("order shipment has already been processed")
+	ErrOrderInvalidReturnState = errors.New("only shipped or completed orders can be returned")
+	ErrOrderAlreadyReturned    = errors.New("order is already marked as returned")
 )
 
 type Order struct {
@@ -55,10 +57,13 @@ type Order struct {
 	PaidAt                 *time.Time  `json:"paid_at,omitempty"`
 	CancelledAt            *time.Time  `json:"cancelled_at,omitempty"`
 	CancellationReason     *string     `gorm:"type:text" json:"cancellation_reason,omitempty"`
+	ReturnedAt             *time.Time  `json:"returned_at,omitempty"`
+	ReturnReason           *string     `gorm:"type:text" json:"return_reason,omitempty"`
 	CreatedAt              time.Time   `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
 	UpdatedAt              time.Time   `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
 	Items                  []OrderItem `gorm:"foreignKey:OrderID;constraint:OnDelete:CASCADE" json:"items"`
 	Payment                *Payment    `gorm:"foreignKey:OrderID;constraint:OnDelete:CASCADE" json:"payment,omitempty"`
+	Shipment               *Shipment   `gorm:"foreignKey:OrderID" json:"shipment,omitempty"`
 }
 
 func (Order) TableName() string {

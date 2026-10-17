@@ -13,7 +13,8 @@ CREATE TYPE shipping_status AS ENUM (
     'cancelled',
     'returned',
     'on_hold',
-    'disposed'
+    'disposed',
+    'return_in_transit'
 );
 
 CREATE TABLE IF NOT EXISTS shipments (

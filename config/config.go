@@ -14,29 +14,31 @@ import (
 )
 
 type BiteshipConfig struct {
-	APIKey           string
-	BaseURL          string
-	OriginAreaID     string
-	OriginPostalCode int
-	WebhookSecret    string
-	ShipperName      string
-	ShipperPhone     string
-	ShipperEmail     string
-	OriginName       string
-	OriginPhone      string
-	OriginAddr       string
+	APIKey            string
+	BaseURL           string
+	OriginAreaID      string
+	OriginPostalCode  int
+	WebhookSecret     string
+	AvailableCouriers string
+	ShipperName       string
+	ShipperPhone      string
+	ShipperEmail      string
+	OriginName        string
+	OriginPhone       string
+	OriginAddr        string
 }
 
 func (b BiteshipConfig) ToStoreShippingConfig() usecase.StoreShippingConfig {
 	return usecase.StoreShippingConfig{
-		ShipperName:      b.ShipperName,
-		ShipperPhone:     b.ShipperPhone,
-		ShipperEmail:     b.ShipperEmail,
-		OriginName:       b.OriginName,
-		OriginPhone:      b.OriginPhone,
-		OriginAddr:       b.OriginAddr,
-		OriginAreaID:     b.OriginAreaID,
-		OriginPostalCode: b.OriginPostalCode,
+		ShipperName:       b.ShipperName,
+		ShipperPhone:      b.ShipperPhone,
+		ShipperEmail:      b.ShipperEmail,
+		OriginName:        b.OriginName,
+		OriginPhone:       b.OriginPhone,
+		OriginAddr:        b.OriginAddr,
+		OriginAreaID:      b.OriginAreaID,
+		OriginPostalCode:  b.OriginPostalCode,
+		AvailableCouriers: b.AvailableCouriers,
 	}
 }
 
@@ -61,6 +63,11 @@ func LoadConfig() AppConfig {
 	if err := godotenv.Load(); err != nil {
 		fmt.Fprintln(os.Stderr, "environment variable failed to load or .env file not found")
 		os.Exit(1)
+	}
+
+	couriers := os.Getenv("BITESHIP_AVAILABLE_COURIERS")
+	if couriers == "" {
+		couriers = "jne,sicepat,jnt,anteraja,tiki,pos"
 	}
 
 	cfg := AppConfig{
@@ -91,17 +98,18 @@ func LoadConfig() AppConfig {
 			Endpoint: google.Endpoint,
 		},
 		Biteship: BiteshipConfig{
-			APIKey:           os.Getenv("BITESHIP_API_KEY"),
-			BaseURL:          getEnv("BITESHIP_BASE_URL", "https://api.biteship.com"),
-			OriginAreaID:     os.Getenv("BITESHIP_ORIGIN_AREA_ID"),
-			OriginPostalCode: getEnvInt("BITESHIP_ORIGIN_POSTAL_CODE", 59464),
-			WebhookSecret:    os.Getenv("BITESHIP_WEBHOOK_SECRET"),
-			ShipperName:      getEnv("STORE_SHIPPER_NAME", "Admin Bookstore"),
-			ShipperPhone:     os.Getenv("STORE_SHIPPER_PHONE"),
-			ShipperEmail:     os.Getenv("STORE_SHIPPER_EMAIL"),
-			OriginName:       getEnv("STORE_ORIGIN_NAME", "Gudang Utama Bookstore"),
-			OriginPhone:      os.Getenv("STORE_ORIGIN_PHONE"),
-			OriginAddr:       os.Getenv("STORE_ORIGIN_ADDRESS"),
+			APIKey:            os.Getenv("BITESHIP_API_KEY"),
+			BaseURL:           getEnv("BITESHIP_BASE_URL", "https://api.biteship.com"),
+			OriginAreaID:      os.Getenv("BITESHIP_ORIGIN_AREA_ID"),
+			OriginPostalCode:  getEnvInt("BITESHIP_ORIGIN_POSTAL_CODE", 59464),
+			WebhookSecret:     os.Getenv("BITESHIP_WEBHOOK_SECRET"),
+			AvailableCouriers: couriers,
+			ShipperName:       getEnv("STORE_SHIPPER_NAME", "Admin Bookstore"),
+			ShipperPhone:      os.Getenv("STORE_SHIPPER_PHONE"),
+			ShipperEmail:      os.Getenv("STORE_SHIPPER_EMAIL"),
+			OriginName:        getEnv("STORE_ORIGIN_NAME", "Gudang Utama Bookstore"),
+			OriginPhone:       os.Getenv("STORE_ORIGIN_PHONE"),
+			OriginAddr:        os.Getenv("STORE_ORIGIN_ADDRESS"),
 		},
 		Midtrans: MidtransConfig{
 			ServerKey:    os.Getenv("MIDTRANS_SERVER_KEY"),

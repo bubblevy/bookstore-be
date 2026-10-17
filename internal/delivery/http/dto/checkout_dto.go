@@ -21,18 +21,31 @@ type CheckoutItemPreview struct {
 	Subtotal    float64 `json:"subtotal"`
 }
 
+type AddressPreviewResponse struct {
+	ID              uint   `json:"id"`
+	ReceiverName    string `json:"receiver_name"`
+	Phone           string `json:"phone"`
+	AddressLine     string `json:"address_line"`
+	ProvinceName    string `json:"province_name"`
+	CityName        string `json:"city_name"`
+	DistrictName    string `json:"district_name"`
+	SubdistrictName string `json:"subdistrict_name"`
+	PostalCode      string `json:"postal_code"`
+}
+
 type CheckoutPreviewResponse struct {
-	Items            []CheckoutItemPreview `json:"items"`
-	ItemsSubtotal    float64               `json:"items_subtotal"`
-	TotalWeightGrams int                   `json:"total_weight_grams"`
-	Courier          string                `json:"courier"`
-	CourierService   string                `json:"courier_service"`
-	ShippingCost     float64               `json:"shipping_cost"`
-	DiscountCode     *string               `json:"discount_code,omitempty"`
-	DiscountAmount   float64               `json:"discount_amount"`
-	PaymentMethod    string                `json:"payment_method"`
-	AdminFee         float64               `json:"admin_fee"`
-	TotalPayment     float64               `json:"total_payment"`
+	Address          *AddressPreviewResponse `json:"address,omitempty"`
+	Items            []CheckoutItemPreview   `json:"items"`
+	ItemsSubtotal    float64                 `json:"items_subtotal"`
+	TotalWeightGrams int                     `json:"total_weight_grams"`
+	Courier          string                  `json:"courier"`
+	CourierService   string                  `json:"courier_service"`
+	ShippingCost     float64                 `json:"shipping_cost"`
+	DiscountCode     *string                 `json:"discount_code,omitempty"`
+	DiscountAmount   float64                 `json:"discount_amount"`
+	PaymentMethod    string                  `json:"payment_method"`
+	AdminFee         float64                 `json:"admin_fee"`
+	TotalPayment     float64                 `json:"total_payment"`
 }
 
 type CreateOrderRequest struct {

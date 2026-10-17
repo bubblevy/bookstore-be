@@ -2,8 +2,8 @@ package usecase
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -12,22 +12,7 @@ import (
 	"github.com/bubblevy/bookstore/pkg/biteship"
 	"github.com/bubblevy/bookstore/pkg/payment"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
-
-// =========================================================================
-// DTO & TYPES
-// =========================================================================
-
-type CheckoutItemInfo struct {
-	BookID      uint    `json:"book_id"`
-	Title       string  `json:"title"`
-	CoverImage  *string `json:"cover_image,omitempty"`
-	Price       float64 `json:"price"`
-	Quantity    int     `json:"quantity"`
-	WeightGrams int     `json:"weight_grams"`
-	Subtotal    float64 `json:"subtotal"`
-}
 
 type PreviewCheckoutInput struct {
 	CartItemIDs    []uint
@@ -39,17 +24,19 @@ type PreviewCheckoutInput struct {
 }
 
 type PreviewCheckoutResult struct {
-	Items            []CheckoutItemInfo `json:"items"`
-	ItemsSubtotal    float64            `json:"items_subtotal"`
-	TotalWeightGrams int                `json:"total_weight_grams"`
-	Courier          string             `json:"courier"`
-	CourierService   string             `json:"courier_service"`
-	ShippingCost     float64            `json:"shipping_cost"`
-	DiscountCode     *string            `json:"discount_code,omitempty"`
-	DiscountAmount   float64            `json:"discount_amount"`
-	PaymentMethod    string             `json:"payment_method"`
-	AdminFee         float64            `json:"admin_fee"`
-	TotalPayment     float64            `json:"total_payment"`
+	Address          *entity.Address
+	Items            []entity.OrderItem
+	ItemsSubtotal    float64
+	TotalWeightGrams int
+	Courier          string
+	CourierService   string
+	ShippingCost     float64
+	DiscountCode     *string
+	DiscountAmount   float64
+	PaymentMethod    string
+	AdminFee         float64
+	TotalPayment     float64
+	DiscountID       *uint
 }
 
 type CreateOrderInput struct {
@@ -61,21 +48,19 @@ type CreateOrderInput struct {
 	PaymentMethod  string
 }
 
-type PaymentInfoResult struct {
-	PaymentType string  `json:"payment_type"`
-	Bank        *string `json:"bank,omitempty"`
-	VANumber    *string `json:"va_number,omitempty"`
-	BillKey     *string `json:"bill_key,omitempty"`
-	BillerCode  *string `json:"biller_code,omitempty"`
-	QRURL       *string `json:"qr_url,omitempty"`
-}
-
 type CreateOrderResult struct {
-	InvoiceNumber   string            `json:"invoice_number"`
-	Status          string            `json:"status"`
-	TotalAmount     float64           `json:"total_amount"`
-	PaymentDeadline time.Time         `json:"payment_deadline"`
-	PaymentInfo     PaymentInfoResult `json:"payment_info"`
+	InvoiceNumber   string
+	Status          string
+	TotalAmount     float64
+	PaymentDeadline time.Time
+	PaymentInfo     struct {
+		PaymentType string
+		Bank        *string
+		VANumber    *string
+		BillKey     *string
+		BillerCode  *string
+		QRURL       *string
+	}
 }
 
 type MidtransWebhookInput struct {
@@ -100,464 +85,315 @@ type CheckoutUsecase interface {
 }
 
 type checkoutUsecase struct {
-	db           *gorm.DB
-	orderRepo    repository.OrderRepository
-	cartRepo     repository.CartRepository
-	addressRepo  repository.AddressRepository
-	discountRepo repository.DiscountRepository
-	biteship     biteship.Client
-	midtransSvc  payment.MidtransService
+	db              *gorm.DB
+	checkoutRepo    repository.CheckoutRepository
+	orderRepo       repository.OrderRepository
+	addressRepo     repository.AddressRepository
+	discountUsecase DiscountUsecase
+	discountRepo    repository.DiscountRepository
+	biteshipSvc     biteship.Client
+	midtransSvc     payment.MidtransService
 }
 
 func NewCheckoutUsecase(
 	db *gorm.DB,
+	checkoutRepo repository.CheckoutRepository,
 	orderRepo repository.OrderRepository,
-	cartRepo repository.CartRepository,
 	addressRepo repository.AddressRepository,
+	discountUsecase DiscountUsecase,
 	discountRepo repository.DiscountRepository,
-	biteship biteship.Client,
+	biteshipSvc biteship.Client,
 	midtransSvc payment.MidtransService,
 ) CheckoutUsecase {
 	return &checkoutUsecase{
-		db:           db,
-		orderRepo:    orderRepo,
-		cartRepo:     cartRepo,
-		addressRepo:  addressRepo,
-		discountRepo: discountRepo,
-		biteship:     biteship,
-		midtransSvc:  midtransSvc,
+		db:              db,
+		checkoutRepo:    checkoutRepo,
+		orderRepo:       orderRepo,
+		addressRepo:     addressRepo,
+		discountUsecase: discountUsecase,
+		discountRepo:    discountRepo,
+		biteshipSvc:     biteshipSvc,
+		midtransSvc:     midtransSvc,
 	}
 }
 
-// =========================================================================
-// HELPER: CALCULATE BREAKDOWN
-// =========================================================================
-
-type checkoutCalculation struct {
-	Address           *entity.Address
-	CartID            uint
-	Books             []entity.Book
-	QtyMap            map[uint]int
-	Items             []CheckoutItemInfo
-	ItemsSubtotal     float64
-	TotalWeightGrams  int
-	ShippingCost      float64
-	Discount          *entity.Discount
-	DiscountDeduction float64
-	AdminFee          float64
-	FinalTotal        float64
-}
-
-func (u *checkoutUsecase) calculateAdminFee(paymentMethod string, subtotal float64) float64 {
-	switch strings.ToLower(strings.TrimSpace(paymentMethod)) {
-	case "bca_va", "bni_va", "bri_va", "permata_va", "echannel":
-		return 4000
-	case "qris", "gopay":
-		return float64(int64(subtotal * 0.007))
-	default:
-		return 0
-	}
-}
-
-func (u *checkoutUsecase) calculateBreakdown(
-	ctx context.Context,
-	tx *gorm.DB,
-	userID uint,
-	cartItemIDs []uint,
-	addressID *uint,
-	courier string,
-	courierService string,
-	discountCode *string,
-	paymentMethod string,
-	lockForUpdate bool,
-) (*checkoutCalculation, error) {
-	if len(cartItemIDs) == 0 {
+func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, input PreviewCheckoutInput) (*PreviewCheckoutResult, error) {
+	if len(input.CartItemIDs) == 0 {
 		return nil, entity.ErrCartEmpty
 	}
 
-	var addr *entity.Address
+	// 1. Fetch destination address snapshot
+	var address *entity.Address
 	var err error
-
-	// 1. Validasi Alamat Penerima
-	if addressID != nil && *addressID > 0 {
-		addr, err = u.addressRepo.FindByID(ctx, *addressID)
-		if err != nil {
-			return nil, fmt.Errorf("failed fetching address: %w", err)
-		}
-		if addr == nil || addr.UserID != userID {
-			return nil, errors.New("shipping address not found")
-		}
+	if input.AddressID != nil && *input.AddressID > 0 {
+		address, err = u.addressRepo.FindByID(ctx, *input.AddressID)
 	} else {
-		// Otomatis pakai primary address jika tidak dikirim
-		addr, err = u.addressRepo.FindPrimaryByUserID(ctx, userID)
-		if err != nil {
-			return nil, fmt.Errorf("failed fetching primary address: %w", err)
-		}
-		if addr == nil {
-			return nil, errors.New("primary shipping address not found, please set an address first")
-		}
+		address, err = u.addressRepo.FindPrimaryByUserID(ctx, userID)
+	}
+	if err != nil || address == nil || address.UserID != userID {
+		return nil, entity.ErrAddressNotFound
 	}
 
-	// 2. Ambil Keranjang User
-	var cart entity.Cart
-	if err := tx.Where("user_id = ?", userID).First(&cart).Error; err != nil {
-		return nil, fmt.Errorf("failed finding cart: %w", err)
-	}
-
-	// 3. Ambil Item Keranjang yang Dicentang
-	var cartItems []entity.CartItem
-	if err := tx.Where("cart_id = ? AND id IN ?", cart.ID, cartItemIDs).Find(&cartItems).Error; err != nil {
+	// 2. Fetch cart items with book details
+	cartItems, err := u.checkoutRepo.GetCartItemsWithBooks(ctx, userID, input.CartItemIDs)
+	if err != nil {
 		return nil, err
 	}
-	if len(cartItems) != len(cartItemIDs) {
+	if len(cartItems) == 0 {
 		return nil, entity.ErrCartItemNotFound
 	}
 
-	bookIDs := make([]uint, 0, len(cartItems))
-	qtyMap := make(map[uint]int, len(cartItems))
-	for _, item := range cartItems {
-		bookIDs = append(bookIDs, item.BookID)
-		qtyMap[item.BookID] = item.Quantity
-	}
-
-	// 4. Query Buku (dengan SELECT FOR UPDATE jika create order)
-	var books []entity.Book
-	bookQuery := tx.Where("id IN ?", bookIDs)
-	if lockForUpdate {
-		bookQuery = bookQuery.Clauses(clause.Locking{Strength: "UPDATE"})
-	}
-	if err := bookQuery.Find(&books).Error; err != nil {
-		return nil, err
-	}
-
 	var itemsSubtotal float64
-	var totalWeight int
-	itemsInfo := make([]CheckoutItemInfo, 0, len(books))
-	biteshipItems := make([]biteship.RateItem, 0, len(books))
+	var totalWeightGrams int
+	orderItems := make([]entity.OrderItem, len(cartItems))
+	rateItems := make([]biteship.RateItem, len(cartItems))
+	discountCartItems := make([]CartItemInput, len(cartItems))
 
-	for _, b := range books {
-		if !b.IsActive {
-			return nil, fmt.Errorf("book %q is no longer available", b.Title)
+	for i, item := range cartItems {
+		if !item.Book.IsActive {
+			return nil, entity.ErrBookNotFound
 		}
-		qty := qtyMap[b.ID]
-		if qty > b.Stock {
+		if item.Book.Stock < item.Quantity {
 			return nil, entity.ErrInsufficientStock
 		}
 
-		lineSubtotal := b.Price * float64(qty)
-		itemsSubtotal += lineSubtotal
-		totalWeight += b.WeightGrams * qty
+		subtotal := item.Book.Price * float64(item.Quantity)
+		itemsSubtotal += subtotal
+		totalWeightGrams += item.Book.WeightGrams * item.Quantity
 
-		itemsInfo = append(itemsInfo, CheckoutItemInfo{
-			BookID:      b.ID,
-			Title:       b.Title,
-			CoverImage:  b.CoverImage,
-			Price:       b.Price,
-			Quantity:    qty,
-			WeightGrams: b.WeightGrams,
-			Subtotal:    lineSubtotal,
-		})
+		orderItems[i] = entity.OrderItem{
+			BookID:      item.BookID,
+			Title:       item.Book.Title,
+			CoverImage:  item.Book.CoverImage,
+			Price:       item.Book.Price,
+			WeightGrams: item.Book.WeightGrams,
+			Quantity:    item.Quantity,
+			Subtotal:    subtotal,
+		}
 
-		biteshipItems = append(biteshipItems, biteship.RateItem{
-			Name:        b.Title,
-			Description: b.Title,
-			Value:       int64(b.Price),
-			Length:      20,
-			Width:       14,
-			Height:      2,
-			Weight:      b.WeightGrams,
-			Quantity:    qty,
-		})
+		rateItems[i] = biteship.RateItem{
+			Name:     item.Book.Title,
+			Value:    int64(item.Book.Price),
+			Weight:   item.Book.WeightGrams,
+			Quantity: item.Quantity,
+		}
+
+		discountCartItems[i] = CartItemInput{
+			BookID:   item.BookID,
+			Quantity: item.Quantity,
+		}
 	}
 
-	// 5. Cek Ongkir Realtime Biteship via Area ID
-	rates, err := u.biteship.CalculateRatesByAreaID(
-		ctx,
-		addr.BiteshipAreaID,
-		strings.ToLower(strings.TrimSpace(courier)),
-		biteshipItems,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed calculating biteship rates: %w", err)
+	// 3. Calculate shipping cost via Biteship Area ID
+	rates, err := u.biteshipSvc.CalculateRatesByAreaID(ctx, address.BiteshipAreaID, input.Courier, rateItems)
+	if err != nil || len(rates) == 0 {
+		return nil, entity.ErrShippingRateFailed
 	}
 
 	var shippingCost float64
 	foundService := false
-	for _, rate := range rates {
-		if strings.EqualFold(rate.CourierServiceCode, strings.TrimSpace(courierService)) {
-			shippingCost = float64(rate.Price)
+	for _, r := range rates {
+		if strings.EqualFold(r.CourierServiceCode, input.CourierService) {
+			shippingCost = float64(r.Price)
 			foundService = true
 			break
 		}
 	}
 	if !foundService {
-		return nil, fmt.Errorf("courier service %q is not available for destination %s", courierService, addr.CityName)
+		shippingCost = float64(rates[0].Price)
 	}
 
-	// 6. Validasi Diskon / Voucher (Jika Ada)
-	var discount entity.Discount
-	var discountDeduction float64
-	var discPtr *entity.Discount
-	if discountCode != nil && strings.TrimSpace(*discountCode) != "" {
-		codeUpper := strings.ToUpper(strings.TrimSpace(*discountCode))
-		if err := tx.Preload("Books").Preload("Tiers").Where("code = ?", codeUpper).First(&discount).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return nil, entity.ErrDiscountNotFound
-			}
-			return nil, err
-		}
-
-		if err := discount.IsValidNow(); err != nil {
-			return nil, err
-		}
-
-		var eligibleSubtotal float64
-		eligibleBookMap := make(map[uint]bool)
-		for _, b := range discount.Books {
-			eligibleBookMap[b.ID] = true
-		}
-		for _, it := range itemsInfo {
-			if discount.GetIsAllBooks() || eligibleBookMap[it.BookID] {
-				eligibleSubtotal += it.Subtotal
-			}
-		}
-
-		if eligibleSubtotal == 0 {
-			return nil, entity.ErrDiscountNotApplicable
-		}
-
-		cut, err := discount.CalculateDiscount(eligibleSubtotal)
+	// 4. Validate and calculate discount voucher if provided
+	var discountAmount float64
+	var discountID *uint
+	if input.DiscountCode != nil && strings.TrimSpace(*input.DiscountCode) != "" {
+		code := strings.TrimSpace(*input.DiscountCode)
+		discResult, err := u.discountUsecase.ValidateAndCalculate(ctx, code, discountCartItems)
 		if err != nil {
 			return nil, err
 		}
-		discountDeduction = cut
-		discPtr = &discount
+		discountAmount = discResult.DiscountAmount
+
+		discEntity, err := u.discountRepo.FindByCode(ctx, code)
+		if err == nil && discEntity != nil {
+			discountID = &discEntity.ID
+		}
 	}
 
-	// 7. Hitung Biaya Admin Payment Gateway & Total Akhir
-	adminFee := u.calculateAdminFee(paymentMethod, itemsSubtotal)
-	finalTotal := itemsSubtotal + shippingCost + adminFee - discountDeduction
-	if finalTotal < 0 {
-		finalTotal = 0
+	// 5. Calculate administrative fees
+	adminFee := 0.0
+	switch strings.ToLower(input.PaymentMethod) {
+	case "bca_va", "bni_va", "bri_va", "permata_va", "cimb_va":
+		adminFee = 5000.0 // Flat rate Virtual Account
+	case "mandiri_bill", "echannel":
+		adminFee = 4000.0 // Mandiri Bill
+	case "gopay", "qris", "shopeepay":
+		adminFee = math.Round(itemsSubtotal * 0.007)
+	case "credit_card":
+		adminFee = math.Round((itemsSubtotal * 0.029) + 2000.0)
+	case "alfamart", "indomaret":
+		adminFee = 5000.0 // Flat rate Convenience Store
+	default:
+		adminFee = 0.0
 	}
 
-	return &checkoutCalculation{
-		Address:           addr,
-		CartID:            cart.ID,
-		Books:             books,
-		QtyMap:            qtyMap,
-		Items:             itemsInfo,
-		ItemsSubtotal:     itemsSubtotal,
-		TotalWeightGrams:  totalWeight,
-		ShippingCost:      shippingCost,
-		Discount:          discPtr,
-		DiscountDeduction: discountDeduction,
-		AdminFee:          adminFee,
-		FinalTotal:        finalTotal,
-	}, nil
-}
-
-func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, input PreviewCheckoutInput) (*PreviewCheckoutResult, error) {
-	calc, err := u.calculateBreakdown(
-		ctx,
-		u.db.WithContext(ctx),
-		userID,
-		input.CartItemIDs,
-		input.AddressID,
-		input.Courier,
-		input.CourierService,
-		input.DiscountCode,
-		input.PaymentMethod,
-		false, // Read-only
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	var appliedCode *string
-	if calc.Discount != nil {
-		appliedCode = &calc.Discount.Code
+	totalPayment := itemsSubtotal + shippingCost + adminFee - discountAmount
+	if totalPayment < 0 {
+		totalPayment = 0
 	}
 
 	return &PreviewCheckoutResult{
-		Items:            calc.Items,
-		ItemsSubtotal:    calc.ItemsSubtotal,
-		TotalWeightGrams: calc.TotalWeightGrams,
+		Address:          address,
+		Items:            orderItems,
+		ItemsSubtotal:    itemsSubtotal,
+		TotalWeightGrams: totalWeightGrams,
 		Courier:          input.Courier,
 		CourierService:   input.CourierService,
-		ShippingCost:     calc.ShippingCost,
-		DiscountCode:     appliedCode,
-		DiscountAmount:   calc.DiscountDeduction,
+		ShippingCost:     shippingCost,
+		DiscountCode:     input.DiscountCode,
+		DiscountAmount:   discountAmount,
+		DiscountID:       discountID,
 		PaymentMethod:    input.PaymentMethod,
-		AdminFee:         calc.AdminFee,
-		TotalPayment:     calc.FinalTotal,
+		AdminFee:         adminFee,
+		TotalPayment:     totalPayment,
 	}, nil
 }
 
 func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input CreateOrderInput) (*CreateOrderResult, error) {
-	now := time.Now()
-	invoiceNumber := fmt.Sprintf("INV-%s-%06d", now.Format("20060102"), now.UnixNano()%1000000)
+	preview, err := u.PreviewCheckout(ctx, userID, PreviewCheckoutInput(input))
+	if err != nil {
+		return nil, err
+	}
 
-	var (
-		createdOrder *entity.Order
-		totalGross   int64
-	)
+	invoiceNumber := fmt.Sprintf("INV-%s-%06d", time.Now().Format("20060102"), time.Now().UnixNano()%1000000)
+	deadline := time.Now().Add(24 * time.Hour)
 
-	err := u.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		calc, err := u.calculateBreakdown(
-			ctx,
-			tx,
-			userID,
-			input.CartItemIDs,
-			input.AddressID,
-			input.Courier,
-			input.CourierService,
-			input.DiscountCode,
-			input.PaymentMethod,
-			true, // Kunci stok buku
-		)
+	order := &entity.Order{
+		UserID:            userID,
+		InvoiceNumber:     invoiceNumber,
+		Status:            entity.OrderStatusWaitingPayment,
+		ItemsSubtotal:     preview.ItemsSubtotal,
+		ShippingCost:      preview.ShippingCost,
+		DiscountAmount:    preview.DiscountAmount,
+		DiscountID:        preview.DiscountID,
+		AdminFee:          preview.AdminFee,
+		TotalAmount:       preview.TotalPayment,
+		DiscountCode:      input.DiscountCode,
+		Courier:           input.Courier,
+		CourierService:    input.CourierService,
+		TotalWeightGrams:  preview.TotalWeightGrams,
+		RecipientName:     preview.Address.ReceiverName,
+		RecipientPhone:    preview.Address.Phone,
+		RecipientAddress:  preview.Address.AddressLine,
+		ProvinceName:      preview.Address.ProvinceName,
+		CityName:          preview.Address.CityName,
+		DistrictName:      preview.Address.DistrictName,
+		SubdistrictName:   preview.Address.SubdistrictName,
+		PostalCode:        preview.Address.PostalCode,
+		DestinationAreaID: preview.Address.BiteshipAreaID,
+		PaymentDeadline:   deadline,
+	}
+
+	// Atomic Database Transaction: Lock Stock -> Deduct Stock -> Save Order -> Increment Voucher -> Clear Cart
+	err = u.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		txCheckoutRepo := u.checkoutRepo.WithTx(tx)
+		txOrderRepo := u.orderRepo.WithTx(tx)
+
+		bookIDs := make([]uint, len(preview.Items))
+		for i, item := range preview.Items {
+			bookIDs[i] = item.BookID
+		}
+
+		bookMap, err := txCheckoutRepo.LockAndValidateBooks(ctx, bookIDs)
 		if err != nil {
 			return err
 		}
 
-		// Kurangi stok buku & siapkan item pesanan
-		orderItems := make([]entity.OrderItem, 0, len(calc.Books))
-		for _, b := range calc.Books {
-			qty := calc.QtyMap[b.ID]
-			if err := tx.Model(&b).Update("stock", b.Stock-qty).Error; err != nil {
-				return err
+		for _, item := range preview.Items {
+			book, ok := bookMap[item.BookID]
+			if !ok || book.Stock < item.Quantity {
+				return entity.ErrInsufficientStock
 			}
-
-			subtotal := b.Price * float64(qty)
-			orderItems = append(orderItems, entity.OrderItem{
-				BookID:      b.ID,
-				Title:       b.Title,
-				CoverImage:  b.CoverImage,
-				Price:       b.Price,
-				WeightGrams: b.WeightGrams,
-				Quantity:    qty,
-				Subtotal:    subtotal,
-			})
-		}
-
-		// Potong kuota voucher jika valid
-		var discountID *uint
-		var discountCode *string
-		if calc.Discount != nil {
-			discountID = &calc.Discount.ID
-			discountCode = &calc.Discount.Code
-			if err := tx.Model(calc.Discount).Update("used_count", calc.Discount.UsedCount+1).Error; err != nil {
+			if err := txCheckoutRepo.DeductBookStock(ctx, item.BookID, item.Quantity); err != nil {
 				return err
 			}
 		}
 
-		totalGross = int64(calc.FinalTotal)
-		createdOrder = &entity.Order{
-			UserID:            userID,
-			InvoiceNumber:     invoiceNumber,
-			Status:            entity.OrderStatusWaitingPayment,
-			ItemsSubtotal:     calc.ItemsSubtotal,
-			ShippingCost:      calc.ShippingCost,
-			DiscountAmount:    calc.DiscountDeduction,
-			AdminFee:          calc.AdminFee,
-			TotalAmount:       calc.FinalTotal,
-			DiscountID:        discountID,
-			DiscountCode:      discountCode,
-			Courier:           input.Courier,
-			CourierService:    input.CourierService,
-			TotalWeightGrams:  calc.TotalWeightGrams,
-			RecipientName:     calc.Address.ReceiverName,
-			RecipientPhone:    calc.Address.Phone,
-			RecipientAddress:  calc.Address.AddressLine,
-			ProvinceName:      calc.Address.ProvinceName,
-			CityName:          calc.Address.CityName,
-			DistrictName:      calc.Address.DistrictName,
-			SubdistrictName:   calc.Address.SubdistrictName,
-			DestinationAreaID: calc.Address.BiteshipAreaID,
-			PostalCode:        calc.Address.PostalCode,
-			PaymentDeadline:   now.Add(24 * time.Hour),
-		}
-
-		orderRepoTx := u.orderRepo.WithTx(tx)
-		if err := orderRepoTx.CreateOrder(ctx, createdOrder, orderItems); err != nil {
+		if err := txOrderRepo.CreateOrder(ctx, order, preview.Items); err != nil {
 			return err
 		}
 
-		// Hapus item yang dibeli dari keranjang
-		return tx.Where("cart_id = ? AND id IN ?", calc.CartID, input.CartItemIDs).Delete(&entity.CartItem{}).Error
+		if preview.DiscountID != nil && *preview.DiscountID > 0 {
+			if err := u.discountRepo.IncrementUsedCount(ctx, *preview.DiscountID); err != nil {
+				return err
+			}
+		}
+
+		return txCheckoutRepo.DeleteCartItems(ctx, input.CartItemIDs)
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	// Charge ke Midtrans Core API
-	chargeRes, err := u.midtransSvc.Charge(ctx, invoiceNumber, totalGross, input.PaymentMethod)
+	// External payment gateway charge
+	chargeRes, err := u.midtransSvc.Charge(ctx, invoiceNumber, int64(order.TotalAmount), input.PaymentMethod)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", entity.ErrMidtransChargeFailed, err.Error())
+		return nil, entity.ErrMidtransChargeFailed
 	}
+
+	bank := nilIfEmpty(chargeRes.Bank)
+	vaNumber := nilIfEmpty(chargeRes.VANumber)
+	billKey := nilIfEmpty(chargeRes.BillKey)
+	billerCode := nilIfEmpty(chargeRes.BillerCode)
+	qrURL := nilIfEmpty(chargeRes.QRURL)
 
 	paymentRecord := &entity.Payment{
-		OrderID:               createdOrder.ID,
+		OrderID:               order.ID,
 		MidtransTransactionID: &chargeRes.TransactionID,
 		PaymentType:           chargeRes.PaymentType,
+		Bank:                  bank,
+		VANumber:              vaNumber,
+		BillKey:               billKey,
+		BillerCode:            billerCode,
+		QRURL:                 qrURL,
 		Status:                entity.PaymentStatusPending,
 	}
-	if chargeRes.Bank != "" {
-		paymentRecord.Bank = &chargeRes.Bank
-	}
-	if chargeRes.VANumber != "" {
-		paymentRecord.VANumber = &chargeRes.VANumber
-	}
-	if chargeRes.BillKey != "" {
-		paymentRecord.BillKey = &chargeRes.BillKey
-		paymentRecord.BillerCode = &chargeRes.BillerCode
-	}
-	if chargeRes.QRURL != "" {
-		paymentRecord.QRURL = &chargeRes.QRURL
-	}
+	_ = u.orderRepo.CreatePayment(ctx, paymentRecord)
 
-	if err := u.orderRepo.CreatePayment(ctx, paymentRecord); err != nil {
-		return nil, fmt.Errorf("failed saving payment record: %w", err)
+	result := &CreateOrderResult{
+		InvoiceNumber:   invoiceNumber,
+		Status:          string(order.Status),
+		TotalAmount:     order.TotalAmount,
+		PaymentDeadline: deadline,
 	}
+	result.PaymentInfo.PaymentType = chargeRes.PaymentType
+	result.PaymentInfo.Bank = bank
+	result.PaymentInfo.VANumber = vaNumber
+	result.PaymentInfo.BillKey = billKey
+	result.PaymentInfo.BillerCode = billerCode
+	result.PaymentInfo.QRURL = qrURL
 
-	return &CreateOrderResult{
-		InvoiceNumber:   createdOrder.InvoiceNumber,
-		Status:          string(createdOrder.Status),
-		TotalAmount:     createdOrder.TotalAmount,
-		PaymentDeadline: createdOrder.PaymentDeadline,
-		PaymentInfo: PaymentInfoResult{
-			PaymentType: paymentRecord.PaymentType,
-			Bank:        paymentRecord.Bank,
-			VANumber:    paymentRecord.VANumber,
-			BillKey:     paymentRecord.BillKey,
-			BillerCode:  paymentRecord.BillerCode,
-			QRURL:       paymentRecord.QRURL,
-		},
-	}, nil
+	return result, nil
 }
 
 func (u *checkoutUsecase) HandleMidtransWebhook(ctx context.Context, input MidtransWebhookInput) error {
-	isValid := u.midtransSvc.VerifyNotification(
-		input.OrderID,
-		input.StatusCode,
-		input.GrossAmount,
-		input.SignatureKey,
-	)
+	isValid := u.midtransSvc.VerifyNotification(input.OrderID, input.StatusCode, input.GrossAmount, input.SignatureKey)
 	if !isValid {
-		return errors.New("invalid midtrans webhook signature")
+		return entity.ErrInvalidWebhookSignature
 	}
 
-	rawStr := string(input.RawJSON)
 	return u.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var order entity.Order
-		if err := tx.Preload("Items").Where("invoice_number = ?", input.OrderID).First(&order).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return entity.ErrOrderNotFound
-			}
+		txOrderRepo := u.orderRepo.WithTx(tx)
+		txCheckoutRepo := u.checkoutRepo.WithTx(tx)
+
+		order, err := txOrderRepo.FindByInvoice(ctx, input.OrderID)
+		if err != nil {
 			return err
 		}
 
-		if order.Status == entity.OrderStatusShipped || order.Status == entity.OrderStatusCompleted || order.Status == entity.OrderStatusReturned {
+		if order.Status == entity.OrderStatusShipped ||
+			order.Status == entity.OrderStatusCompleted ||
+			order.Status == entity.OrderStatusReturned {
 			return nil
 		}
 
@@ -567,20 +403,13 @@ func (u *checkoutUsecase) HandleMidtransWebhook(ctx context.Context, input Midtr
 
 		switch strings.ToLower(input.TransactionStatus) {
 		case "capture":
-			switch strings.ToLower(input.FraudStatus) {
-			case "challenge":
-				targetPaymentStatus = entity.PaymentStatusPending
-				targetOrderStatus = entity.OrderStatusWaitingPayment
-			case "accept":
+			if strings.ToLower(input.FraudStatus) == "accept" {
 				targetPaymentStatus = entity.PaymentStatusSettlement
 				targetOrderStatus = entity.OrderStatusPaid
 				order.PaidAt = &now
-			default:
+			} else {
 				targetPaymentStatus = entity.PaymentStatusDeny
 				targetOrderStatus = entity.OrderStatusCancelled
-				reason := fmt.Sprintf("Fraud check failed: %s", input.FraudStatus)
-				order.CancelledAt = &now
-				order.CancellationReason = &reason
 			}
 		case "settlement":
 			targetPaymentStatus = entity.PaymentStatusSettlement
@@ -589,74 +418,32 @@ func (u *checkoutUsecase) HandleMidtransWebhook(ctx context.Context, input Midtr
 		case "pending":
 			targetPaymentStatus = entity.PaymentStatusPending
 			targetOrderStatus = entity.OrderStatusWaitingPayment
-		case "deny":
-			targetPaymentStatus = entity.PaymentStatusDeny
+		case "deny", "expire", "cancel":
+			targetPaymentStatus = entity.PaymentStatus(strings.ToLower(input.TransactionStatus))
 			targetOrderStatus = entity.OrderStatusCancelled
-			reason := "Payment denied by provider"
 			order.CancelledAt = &now
-			order.CancellationReason = &reason
-		case "expire":
-			targetPaymentStatus = entity.PaymentStatusExpire
-			targetOrderStatus = entity.OrderStatusCancelled
-			reason := "Payment expired"
-			order.CancelledAt = &now
-			order.CancellationReason = &reason
-		case "cancel":
-			targetPaymentStatus = entity.PaymentStatusCancel
-			targetOrderStatus = entity.OrderStatusCancelled
-			reason := "Payment cancelled by user"
-			order.CancelledAt = &now
-			order.CancellationReason = &reason
-		case "refund":
-			targetPaymentStatus = entity.PaymentStatusRefund
-			if order.Status == entity.OrderStatusPaid || order.Status == entity.OrderStatusProcessing {
-				targetOrderStatus = entity.OrderStatusCancelled
-				reason := "Payment refunded to customer"
-				order.CancelledAt = &now
-				order.CancellationReason = &reason
-			}
 		default:
 			return nil
 		}
 
-		// Rollback stok bila pesanan batal/kedaluwarsa
-		if targetOrderStatus == entity.OrderStatusCancelled {
+		// Rollback inventory stock and voucher usage when order is cancelled/expired
+		if targetOrderStatus == entity.OrderStatusCancelled && order.Status != entity.OrderStatusCancelled {
 			for _, item := range order.Items {
-				if err := tx.Model(&entity.Book{}).
-					Where("id = ?", item.BookID).
-					Update("stock", gorm.Expr("stock + ?", item.Quantity)).Error; err != nil {
-					return err
-				}
+				_ = txCheckoutRepo.RestoreBookStock(ctx, item.BookID, item.Quantity)
 			}
 		}
 
-		// Perbarui data order tanpa memicu update asosiasi child Items
-		orderUpdates := map[string]interface{}{
-			"status":     targetOrderStatus,
-			"updated_at": now,
+		if targetOrderStatus != "" {
+			_ = txOrderRepo.UpdateOrderStatus(ctx, order.ID, targetOrderStatus)
 		}
-		if order.PaidAt != nil {
-			orderUpdates["paid_at"] = order.PaidAt
-		}
-		if order.CancelledAt != nil {
-			orderUpdates["cancelled_at"] = order.CancelledAt
-			orderUpdates["cancellation_reason"] = order.CancellationReason
-		}
-
-		if err := tx.Model(&entity.Order{}).Where("id = ?", order.ID).Updates(orderUpdates).Error; err != nil {
-			return err
-		}
-
-		// Perbarui data tabel payment
-		updates := map[string]interface{}{
-			"status":       targetPaymentStatus,
-			"raw_response": rawStr,
-			"updated_at":   now,
-		}
-		if targetPaymentStatus == entity.PaymentStatusSettlement {
-			updates["paid_at"] = &now
-		}
-
-		return tx.Model(&entity.Payment{}).Where("order_id = ?", order.ID).Updates(updates).Error
+		return txOrderRepo.UpdatePaymentStatus(ctx, order.ID, targetPaymentStatus)
 	})
+}
+
+func nilIfEmpty(s string) *string {
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
 }

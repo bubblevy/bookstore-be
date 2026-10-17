@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -80,10 +81,23 @@ func TestCheckoutHandler_PreviewCheckout(t *testing.T) {
 		app := setupCheckoutApp(mockUC, true)
 
 		expectedRes := &usecase.PreviewCheckoutResult{
-			ItemsSubtotal: 200000,
-			ShippingCost:  18000,
-			AdminFee:      4000,
-			TotalPayment:  222000,
+			Address: &entity.Address{
+				ID:           5,
+				ReceiverName: "Budi Santoso",
+				Phone:        "08123456789",
+				AddressLine:  "Jl. Sudirman No. 1",
+				ProvinceName: "DKI Jakarta",
+				CityName:     "Jakarta Selatan",
+				PostalCode:   "12190",
+			},
+			ItemsSubtotal:    200000,
+			TotalWeightGrams: 1000,
+			Courier:          "jne",
+			CourierService:   "reg",
+			ShippingCost:     18000,
+			PaymentMethod:    "bca_va",
+			AdminFee:         5000,
+			TotalPayment:     223000,
 		}
 
 		mockUC.On("PreviewCheckout", mock.Anything, uint(1), mock.MatchedBy(func(in usecase.PreviewCheckoutInput) bool {
@@ -92,8 +106,8 @@ func TestCheckoutHandler_PreviewCheckout(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/checkout/preview", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		resp, err := app.Test(req)
 
+		resp, err := app.Test(req)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		mockUC.AssertExpectations(t)
@@ -105,8 +119,8 @@ func TestCheckoutHandler_PreviewCheckout(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/checkout/preview", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		resp, err := app.Test(req)
 
+		resp, err := app.Test(req)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
@@ -115,14 +129,29 @@ func TestCheckoutHandler_PreviewCheckout(t *testing.T) {
 		mockUC := new(MockCheckoutUsecase)
 		app := setupCheckoutApp(mockUC, true)
 
-		// cart_item_ids kosong atau courier tidak diisi
 		invalidBody := []byte(`{"cart_item_ids": [], "courier": ""}`)
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/checkout/preview", bytes.NewReader(invalidBody))
 		req.Header.Set("Content-Type", "application/json")
-		resp, err := app.Test(req)
 
+		resp, err := app.Test(req)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("address not found returns 404", func(t *testing.T) {
+		mockUC := new(MockCheckoutUsecase)
+		app := setupCheckoutApp(mockUC, true)
+
+		mockUC.On("PreviewCheckout", mock.Anything, uint(1), mock.Anything).
+			Return(nil, entity.ErrAddressNotFound).Once()
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/checkout/preview", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+		mockUC.AssertExpectations(t)
 	})
 }
 
@@ -141,24 +170,24 @@ func TestCheckoutHandler_CreateOrder(t *testing.T) {
 		mockUC := new(MockCheckoutUsecase)
 		app := setupCheckoutApp(mockUC, true)
 
-		va := "1234567890"
+		bank := "bca"
+		va := "123456789012"
 		expectedRes := &usecase.CreateOrderResult{
-			InvoiceNumber:   "inv-20261016-000101",
+			InvoiceNumber:   "INV-20261017-000101",
 			Status:          "waiting_payment",
-			TotalAmount:     222000,
+			TotalAmount:     223000,
 			PaymentDeadline: time.Now().Add(24 * time.Hour),
-			PaymentInfo: usecase.PaymentInfoResult{
-				PaymentType: "bank_transfer",
-				VANumber:    &va,
-			},
 		}
+		expectedRes.PaymentInfo.PaymentType = "bank_transfer"
+		expectedRes.PaymentInfo.Bank = &bank
+		expectedRes.PaymentInfo.VANumber = &va
 
 		mockUC.On("CreateOrder", mock.Anything, uint(1), mock.Anything).Return(expectedRes, nil).Once()
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/checkout/order", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		resp, err := app.Test(req)
 
+		resp, err := app.Test(req)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 		mockUC.AssertExpectations(t)
@@ -173,18 +202,35 @@ func TestCheckoutHandler_CreateOrder(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/checkout/order", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		resp, err := app.Test(req)
 
+		resp, err := app.Test(req)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
+
+	t.Run("payment gateway error returns 502 Bad Gateway", func(t *testing.T) {
+		mockUC := new(MockCheckoutUsecase)
+		app := setupCheckoutApp(mockUC, true)
+
+		mockUC.On("CreateOrder", mock.Anything, uint(1), mock.Anything).
+			Return(nil, entity.ErrMidtransChargeFailed).Once()
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/checkout/order", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
+		mockUC.AssertExpectations(t)
 	})
 }
 
 func TestCheckoutHandler_HandleMidtransWebhook(t *testing.T) {
 	webhookBody := []byte(`{
-		"order_id": "inv-20261016-000101",
+		"order_id": "INV-20261017-000101",
 		"status_code": "200",
-		"gross_amount": "222000.00",
+		"gross_amount": "223000.00",
 		"signature_key": "valid_signature",
 		"transaction_status": "settlement"
 	}`)
@@ -194,15 +240,31 @@ func TestCheckoutHandler_HandleMidtransWebhook(t *testing.T) {
 		app := setupCheckoutApp(mockUC, false)
 
 		mockUC.On("HandleMidtransWebhook", mock.Anything, mock.MatchedBy(func(in usecase.MidtransWebhookInput) bool {
-			return in.OrderID == "inv-20261016-000101" && in.TransactionStatus == "settlement"
+			return in.OrderID == "INV-20261017-000101" && in.TransactionStatus == "settlement"
 		})).Return(nil).Once()
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/payments/midtrans/webhook", bytes.NewReader(webhookBody))
 		req.Header.Set("Content-Type", "application/json")
-		resp, err := app.Test(req)
 
+		resp, err := app.Test(req)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
+
+	t.Run("invalid webhook signature returns 403 Forbidden", func(t *testing.T) {
+		mockUC := new(MockCheckoutUsecase)
+		app := setupCheckoutApp(mockUC, false)
+
+		mockUC.On("HandleMidtransWebhook", mock.Anything, mock.Anything).
+			Return(errors.New("invalid midtrans webhook signature")).Once()
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/payments/midtrans/webhook", bytes.NewReader(webhookBody))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 		mockUC.AssertExpectations(t)
 	})
 }

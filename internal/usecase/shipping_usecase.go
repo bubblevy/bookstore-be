@@ -15,30 +15,54 @@ import (
 )
 
 type StoreShippingConfig struct {
-	ShipperName      string
-	ShipperPhone     string
-	ShipperEmail     string
-	OriginName       string
-	OriginPhone      string
-	OriginAddr       string
-	OriginAreaID     string
-	OriginPostalCode int
+	ShipperName       string
+	ShipperPhone      string
+	ShipperEmail      string
+	OriginName        string
+	OriginPhone       string
+	OriginAddr        string
+	OriginAreaID      string
+	OriginPostalCode  int
+	AvailableCouriers string
+}
+
+type GetShippingRatesInput struct {
+	CartItemIDs []uint
+	AddressID   *uint
+}
+
+type CourierOptionResult struct {
+	CourierCode        string
+	CourierName        string
+	CourierServiceName string
+	CourierServiceCode string
+	Description        string
+	Price              float64
+	ETD                string
+	Type               string
+}
+
+type ShippingRatesResult struct {
+	TotalWeightGrams int
+	DestinationArea  string
+	Options          []CourierOptionResult
 }
 
 type FulfillOrderResult struct {
-	ShipmentID      uint                  `json:"shipment_id"`
-	InvoiceNumber   string                `json:"invoice_number"`
-	BiteshipOrderID string                `json:"biteship_order_id"`
-	WaybillNumber   *string               `json:"waybill_number,omitempty"`
-	Status          entity.ShippingStatus `json:"status"`
-	Courier         string                `json:"courier"`
-	CourierService  string                `json:"courier_service"`
-	TrackingURL     *string               `json:"tracking_url,omitempty"`
+	ShipmentID      uint
+	InvoiceNumber   string
+	BiteshipOrderID string
+	WaybillNumber   *string
+	Status          entity.ShippingStatus
+	Courier         string
+	CourierService  string
+	TrackingURL     *string
 }
 
 type ShippingUsecase interface {
 	SearchAreas(ctx context.Context, keyword string) ([]biteship.AreaItem, error)
 	GetCouriers(ctx context.Context) ([]biteship.CourierDetail, error)
+	GetShippingRates(ctx context.Context, userID uint, input GetShippingRatesInput) (*ShippingRatesResult, error)
 	FulfillOrder(ctx context.Context, invoiceNumber string, orderNote string) (*FulfillOrderResult, error)
 	GetOrderTracking(ctx context.Context, userID uint, invoiceNumber string) (*biteship.TrackingDetailResult, error)
 	ProcessReturn(ctx context.Context, invoiceNumber string, reason string) error
@@ -49,6 +73,8 @@ type shippingUsecase struct {
 	db           *gorm.DB
 	orderRepo    repository.OrderRepository
 	shipmentRepo repository.ShipmentRepository
+	checkoutRepo repository.CheckoutRepository
+	addressRepo  repository.AddressRepository
 	biteship     biteship.Client
 	cfg          StoreShippingConfig
 }
@@ -57,6 +83,8 @@ func NewShippingUsecase(
 	db *gorm.DB,
 	orderRepo repository.OrderRepository,
 	shipmentRepo repository.ShipmentRepository,
+	checkoutRepo repository.CheckoutRepository,
+	addressRepo repository.AddressRepository,
 	biteship biteship.Client,
 	cfg StoreShippingConfig,
 ) ShippingUsecase {
@@ -64,6 +92,8 @@ func NewShippingUsecase(
 		db:           db,
 		orderRepo:    orderRepo,
 		shipmentRepo: shipmentRepo,
+		checkoutRepo: checkoutRepo,
+		addressRepo:  addressRepo,
 		biteship:     biteship,
 		cfg:          cfg,
 	}
@@ -77,10 +107,98 @@ func (u *shippingUsecase) GetCouriers(ctx context.Context) ([]biteship.CourierDe
 	return u.biteship.GetCouriers(ctx)
 }
 
+func (u *shippingUsecase) GetShippingRates(ctx context.Context, userID uint, input GetShippingRatesInput) (*ShippingRatesResult, error) {
+	if len(input.CartItemIDs) == 0 {
+		return nil, entity.ErrCartEmpty
+	}
+
+	var address *entity.Address
+	var err error
+	if input.AddressID != nil && *input.AddressID > 0 {
+		address, err = u.addressRepo.FindByID(ctx, *input.AddressID)
+	} else {
+		address, err = u.addressRepo.FindPrimaryByUserID(ctx, userID)
+	}
+	if err != nil || address == nil || address.UserID != userID {
+		return nil, entity.ErrAddressNotFound
+	}
+
+	cartItems, err := u.checkoutRepo.GetCartItemsWithBooks(ctx, userID, input.CartItemIDs)
+	if err != nil {
+		return nil, err
+	}
+	if len(cartItems) == 0 {
+		return nil, entity.ErrCartItemNotFound
+	}
+
+	var totalWeightGrams int
+	rateItems := make([]biteship.RateItem, len(cartItems))
+	for i, item := range cartItems {
+		if !item.Book.IsActive {
+			return nil, entity.ErrBookNotFound
+		}
+		totalWeightGrams += item.Book.WeightGrams * item.Quantity
+
+		rateItems[i] = biteship.RateItem{
+			Name:     item.Book.Title,
+			Value:    int64(item.Book.Price),
+			Weight:   item.Book.WeightGrams,
+			Quantity: item.Quantity,
+		}
+	}
+
+	couriers := strings.TrimSpace(u.cfg.AvailableCouriers)
+	if couriers == "" {
+		couriers = "jne,sicepat,jnt,anteraja,tiki,pos"
+	}
+
+	biteshipRates, err := u.biteship.CalculateRatesByAreaID(ctx, address.BiteshipAreaID, couriers, rateItems)
+	if err != nil {
+		return nil, entity.ErrShippingRateFailed
+	}
+
+	options := make([]CourierOptionResult, 0, len(biteshipRates))
+	for _, rate := range biteshipRates {
+		etd := strings.TrimSpace(rate.Duration)
+		if etd == "" {
+			etd = strings.TrimSpace(rate.ShipmentDurationRange)
+		}
+		if etd == "" {
+			etd = "-"
+		}
+
+		options = append(options, CourierOptionResult{
+			CourierCode:        rate.CourierCode,
+			CourierName:        rate.CourierName,
+			CourierServiceName: rate.CourierServiceName,
+			CourierServiceCode: rate.CourierServiceCode,
+			Description:        rate.Description,
+			Price:              float64(rate.Price),
+			ETD:                etd,
+			Type:               rate.Type,
+		})
+	}
+
+	fullAddress := fmt.Sprintf("%s, Kel. %s, Kec. %s, %s, %s %s",
+		address.AddressLine,
+		address.SubdistrictName,
+		address.DistrictName,
+		address.CityName,
+		address.ProvinceName,
+		address.PostalCode,
+	)
+
+	return &ShippingRatesResult{
+		TotalWeightGrams: totalWeightGrams,
+		DestinationArea:  fullAddress,
+		Options:          options,
+	}, nil
+}
+
 func (u *shippingUsecase) FulfillOrder(ctx context.Context, invoiceNumber string, orderNote string) (*FulfillOrderResult, error) {
 	var order entity.Order
 	if err := u.db.WithContext(ctx).Preload("Items").Where("invoice_number = ?", invoiceNumber).First(&order).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, entity.ErrOrderNotFound
 		}
 		return nil, err
@@ -143,20 +261,19 @@ func (u *shippingUsecase) FulfillOrder(ctx context.Context, invoiceNumber string
 	}
 
 	var notePtr *string
-	if orderNote != "" {
+	if strings.TrimSpace(orderNote) != "" {
 		notePtr = &orderNote
 	}
-
 	var waybill *string
 	if biteshipRes.Courier.WaybillID != "" {
 		waybill = &biteshipRes.Courier.WaybillID
 	}
-
 	var trackingID *string
 	if biteshipRes.Courier.TrackingID != "" {
 		trackingID = &biteshipRes.Courier.TrackingID
 	}
 
+	internalTrackingURL := fmt.Sprintf("/orders/%s/tracking", order.InvoiceNumber)
 	shipment := &entity.Shipment{
 		OrderID:            order.ID,
 		BiteshipOrderID:    biteshipRes.ID,
@@ -165,7 +282,7 @@ func (u *shippingUsecase) FulfillOrder(ctx context.Context, invoiceNumber string
 		Courier:            order.Courier,
 		CourierService:     order.CourierService,
 		Status:             entity.ShippingStatusAllocated,
-		TrackingURL:        &biteshipRes.Courier.TrackingURL,
+		TrackingURL:        &internalTrackingURL,
 		OrderNote:          notePtr,
 	}
 
@@ -174,7 +291,6 @@ func (u *shippingUsecase) FulfillOrder(ctx context.Context, invoiceNumber string
 		if err := tx.Create(shipment).Error; err != nil {
 			return err
 		}
-
 		return tx.Model(&entity.Order{}).
 			Where("id = ?", order.ID).
 			Updates(map[string]interface{}{
@@ -202,7 +318,7 @@ func (u *shippingUsecase) FulfillOrder(ctx context.Context, invoiceNumber string
 func (u *shippingUsecase) GetOrderTracking(ctx context.Context, userID uint, invoiceNumber string) (*biteship.TrackingDetailResult, error) {
 	var order entity.Order
 	if err := u.db.WithContext(ctx).Where("invoice_number = ?", invoiceNumber).First(&order).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, entity.ErrOrderNotFound
 		}
 		return nil, err
@@ -228,7 +344,6 @@ func (u *shippingUsecase) GetOrderTracking(ctx context.Context, userID uint, inv
 	} else {
 		return nil, entity.ErrTrackingNumberNotReady
 	}
-
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +373,8 @@ func (u *shippingUsecase) HandleWebhook(ctx context.Context, payload biteship.We
 	var mappedStatus entity.ShippingStatus
 	var mappedOrderStatus *entity.OrderStatus
 
-	switch strings.ToLower(strings.TrimSpace(payload.Status)) {
+	cleanStatus := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(payload.Status), "_", ""))
+	switch cleanStatus {
 	case "placed":
 		mappedStatus = entity.ShippingStatusPlaced
 	case "scheduled":
@@ -267,18 +383,22 @@ func (u *shippingUsecase) HandleWebhook(ctx context.Context, payload biteship.We
 		mappedStatus = entity.ShippingStatusConfirmed
 	case "allocated":
 		mappedStatus = entity.ShippingStatusAllocated
-	case "picking_up":
+	case "pickingup":
 		mappedStatus = entity.ShippingStatusPickingUp
 	case "picked":
 		mappedStatus = entity.ShippingStatusPicked
 		st := entity.OrderStatusShipped
 		mappedOrderStatus = &st
-	case "dropping_off":
+	case "droppingoff":
 		mappedStatus = entity.ShippingStatusDroppingOff
 		st := entity.OrderStatusShipped
 		mappedOrderStatus = &st
-	case "in_transit":
+	case "intransit":
 		mappedStatus = entity.ShippingStatusInTransit
+		st := entity.OrderStatusShipped
+		mappedOrderStatus = &st
+	case "returnintransit":
+		mappedStatus = entity.ShippingStatusReturnInTransit
 		st := entity.OrderStatusShipped
 		mappedOrderStatus = &st
 	case "delivered":
@@ -287,7 +407,7 @@ func (u *shippingUsecase) HandleWebhook(ctx context.Context, payload biteship.We
 		mappedOrderStatus = &st
 	case "rejected":
 		mappedStatus = entity.ShippingStatusRejected
-	case "courier_not_found":
+	case "couriernotfound":
 		mappedStatus = entity.ShippingStatusCourierNotFound
 	case "cancelled":
 		mappedStatus = entity.ShippingStatusCancelled
@@ -295,7 +415,7 @@ func (u *shippingUsecase) HandleWebhook(ctx context.Context, payload biteship.We
 		mappedStatus = entity.ShippingStatusReturned
 		st := entity.OrderStatusReturned
 		mappedOrderStatus = &st
-	case "on_hold":
+	case "onhold":
 		mappedStatus = entity.ShippingStatusOnHold
 	case "disposed":
 		mappedStatus = entity.ShippingStatusDisposed
@@ -312,25 +432,66 @@ func (u *shippingUsecase) HandleWebhook(ctx context.Context, payload biteship.We
 
 	now := time.Now()
 	return u.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&entity.Shipment{}).
-			Where("id = ?", shipment.ID).
-			Updates(map[string]interface{}{
-				"status":         shipment.Status,
-				"waybill_number": shipment.WaybillNumber,
-				"updated_at":     now,
-			}).Error; err != nil {
+		shipmentUpdates := map[string]interface{}{
+			"status":     shipment.Status,
+			"updated_at": now,
+		}
+		if shipment.WaybillNumber != nil && *shipment.WaybillNumber != "" {
+			shipmentUpdates["waybill_number"] = *shipment.WaybillNumber
+		}
+		if err := tx.Model(&entity.Shipment{}).Where("id = ?", shipment.ID).Updates(shipmentUpdates).Error; err != nil {
 			return err
 		}
 
 		if mappedOrderStatus != nil {
+			var currentOrder entity.Order
+			if err := tx.Preload("Items").Where("id = ?", shipment.OrderID).First(&currentOrder).Error; err != nil {
+				return err
+			}
+
+			if currentOrder.Status == entity.OrderStatusCompleted && *mappedOrderStatus != entity.OrderStatusReturned {
+				return nil
+			}
+
 			orderUpdates := map[string]interface{}{
 				"status":     *mappedOrderStatus,
 				"updated_at": now,
 			}
-			if payload.WaybillID != "" {
+			if payload.WaybillID != "" && (currentOrder.ShippingTrackingNumber == nil || *currentOrder.ShippingTrackingNumber == "") {
 				orderUpdates["shipping_tracking_number"] = payload.WaybillID
 			}
-			return tx.Model(&entity.Order{}).Where("id = ?", shipment.OrderID).Updates(orderUpdates).Error
+
+			if cleanStatus == "returnintransit" {
+				reason := "Courier initiated Return to Sender (package is in transit back to origin)"
+				if payload.Note != "" {
+					reason = payload.Note
+				}
+				orderUpdates["return_reason"] = reason
+			}
+
+			if *mappedOrderStatus == entity.OrderStatusReturned {
+				orderUpdates["returned_at"] = now
+				reason := "Package successfully returned to warehouse"
+				if cleanStatus == "disposed" {
+					reason = "Package lost or damaged by courier provider during transit"
+				}
+				if payload.Note != "" {
+					reason = payload.Note
+				}
+				orderUpdates["return_reason"] = reason
+
+				if currentOrder.Status != entity.OrderStatusReturned {
+					for _, item := range currentOrder.Items {
+						if err := tx.Model(&entity.Book{}).
+							Where("id = ?", item.BookID).
+							Update("stock", gorm.Expr("stock + ?", item.Quantity)).Error; err != nil {
+							return fmt.Errorf("failed restocking book ID %d: %w", item.BookID, err)
+						}
+					}
+				}
+			}
+
+			return tx.Model(&entity.Order{}).Where("id = ?", currentOrder.ID).Updates(orderUpdates).Error
 		}
 
 		return nil
@@ -348,15 +509,15 @@ func (u *shippingUsecase) ProcessReturn(ctx context.Context, invoiceNumber strin
 		}
 
 		if order.Status != entity.OrderStatusShipped && order.Status != entity.OrderStatusCompleted {
-			return errors.New("only shipped or completed orders can be returned")
+			return entity.ErrOrderInvalidReturnState
 		}
 
 		if order.Status == entity.OrderStatusReturned {
-			return errors.New("order is already marked as returned")
+			return entity.ErrOrderAlreadyReturned
 		}
 
 		now := time.Now()
-		returnReason := reason
+		returnReason := strings.TrimSpace(reason)
 		if returnReason == "" {
 			returnReason = "Package returned to warehouse"
 		}
@@ -381,7 +542,7 @@ func (u *shippingUsecase) ProcessReturn(ctx context.Context, invoiceNumber strin
 			if err := tx.Model(&entity.Book{}).
 				Where("id = ?", item.BookID).
 				Update("stock", gorm.Expr("stock + ?", item.Quantity)).Error; err != nil {
-				return fmt.Errorf("failed restocking book %d: %w", item.BookID, err)
+				return fmt.Errorf("failed restocking book ID %d: %w", item.BookID, err)
 			}
 		}
 
