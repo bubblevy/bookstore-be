@@ -61,8 +61,7 @@ type AppConfig struct {
 
 func LoadConfig() AppConfig {
 	if err := godotenv.Load(); err != nil {
-		fmt.Fprintln(os.Stderr, "environment variable failed to load or .env file not found")
-		os.Exit(1)
+		// .env file is optional when environment variables are set directly via environment/Docker
 	}
 
 	couriers := os.Getenv("BITESHIP_AVAILABLE_COURIERS")

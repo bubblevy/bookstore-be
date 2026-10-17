@@ -1,0 +1,74 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bookstore_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DATABASE_USER:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-postgres}
+      POSTGRES_DB: ${DATABASE_NAME:-bookstore}
+      TZ: Asia/Jakarta
+    ports:
+      - "${DATABASE_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-postgres} -d ${DATABASE_NAME:-bookstore}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bookstore_network
+
+  migration:
+    image: migrate/migrate:v4.18.2
+    container_name: bookstore_migration
+    restart: "no"
+    volumes:
+      - ./migrations:/migrations:ro
+    command:
+      - -path=/migrations
+      - -database=postgres://${DATABASE_USER:-postgres}:${DATABASE_PASSWORD:-postgres}@postgres:5432/${DATABASE_NAME:-bookstore}?sslmode=disable
+      - up
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - bookstore_network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bookstore_api
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USER=${DATABASE_USER:-postgres}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-postgres}
+      - DATABASE_NAME=${DATABASE_NAME:-bookstore}
+    volumes:
+      - ./public:/app/public
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+    networks:
+      - bookstore_network
+
+volumes:
+  postgres_data:
+    name: bookstore_postgres_data
+
+networks:
+  bookstore_network:
+    name: bookstore_network
+    driver: bridge

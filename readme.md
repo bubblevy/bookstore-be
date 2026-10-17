@@ -253,19 +253,56 @@ cp .env.example .env
 
 ## Getting Started
 
-### 1. Prerequisites
+### Option A: Running with Docker (Recommended)
+
+You can run the entire stack (PostgreSQL database, database migrations, and Go API) in isolated containers using Docker Compose with a single command:
+
+1. **Prepare Environment File**:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Start Services**:
+   ```bash
+   docker compose up --build -d
+   ```
+   This automatically:
+   - Starts PostgreSQL 16 on port `5432` with a persistent volume (`bookstore_postgres_data`).
+   - Waits for PostgreSQL to become healthy.
+   - Executes all database migrations up to the latest version via `golang-migrate`.
+   - Builds and launches the Bookstore Go API container on port `8000`.
+
+3. **Check Logs & Status**:
+   ```bash
+   # View logs of the API service
+   docker compose logs -f app
+
+   # Check container status
+   docker compose ps
+   ```
+
+4. **Stop Services**:
+   ```bash
+   docker compose down
+   ```
+
+---
+
+### Option B: Running Locally
+
+#### 1. Prerequisites
 - [Go](https://golang.org/dl/) (version 1.27 or higher)
 - [PostgreSQL](https://www.postgresql.org/) (running instance)
 - [Golang Migrate CLI](https://github.com/golang-migrate/migrate) (optional, for manual migrations)
 
-### 2. Database Migration
+#### 2. Database Migration
 Run the SQL migration scripts in `migrations/` against your PostgreSQL database:
 
 ```bash
 migrate -path migrations -database "postgres://postgres:password@localhost:5432/bookstore?sslmode=disable" up
 ```
 
-### 3. Run the Server
+#### 3. Run the Server
 Install dependencies and launch the backend server:
 
 ```bash
