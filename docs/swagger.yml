@@ -26,7 +26,12 @@ tags:
   - name: Address
     description: User shipping address management
   - name: Shipping
-    description: RajaOngkir destination lookup and authenticated shipping cost calculation
+    description: Biteship destination area lookup, couriers, authenticated rate calculation, shipment tracking, order fulfillment, return management, and tracking webhooks
+  - name: Checkout
+    description: Pre-checkout quotation, order placement, and Midtrans payment webhooks
+  - name: Order
+    description: User order history, invoice retrieval, and detailed order status
+
 
 paths:
   # =========================================================================
@@ -1699,7 +1704,7 @@ paths:
       tags:
         - Address
       summary: Create a new address
-      description: Adds a new address for the authenticated user using RajaOngkir destination ID. Maximum 5 addresses per user.
+      description: Adds a new address for the authenticated user using Biteship destination area ID. Maximum 5 addresses per user.
       security:
         - BearerAuth: []
       requestBody:
@@ -1731,6 +1736,40 @@ paths:
           description: Validation error or maximum address limit reached (5 addresses)
         '401':
           description: Unauthorized request
+        '500':
+          description: Internal server error
+
+  /api/v1/addresses/primary:
+    get:
+      tags:
+        - Address
+      summary: Get primary address
+      description: Retrieves the primary shipping address for the authenticated user.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Primary address retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "primary address retrieved successfully"
+                  data:
+                    $ref: '#/components/schemas/AddressDetail'
+        '401':
+          description: Unauthorized request
+        '404':
+          description: Primary address not found
         '500':
           description: Internal server error
 
@@ -1887,12 +1926,12 @@ paths:
   # =========================================================================
   # SHIPPING
   # =========================================================================
-  /api/v1/shipping/destinations:
+  /api/v1/shipping/areas:
     get:
       tags:
         - Shipping
-      summary: Search domestic destination
-      description: Public single-endpoint location lookup using keyword (minimum 3 characters) powered by RajaOngkir/Komerce.
+      summary: Search destination areas
+      description: Public endpoint to search domestic destination areas by keyword using Biteship Maps API (minimum 3 characters).
       parameters:
         - in: query
           name: search
@@ -1900,24 +1939,11 @@ paths:
           schema:
             type: string
             minLength: 3
-          description: Keyword to search (e.g., welahan, gayamprit, klaten)
-        - in: query
-          name: limit
-          required: false
-          schema:
-            type: integer
-            default: 10
-          description: Limit number of results
-        - in: query
-          name: offset
-          required: false
-          schema:
-            type: integer
-            default: 0
-          description: Offset for pagination
+          description: "Search keyword for administrative area (minimum 3 characters, e.g. kemang, kebayoran)"
+          example: "kemang"
       responses:
         '200':
-          description: Destinations retrieved successfully
+          description: Areas retrieved successfully
           content:
             application/json:
               schema:
@@ -1931,22 +1957,52 @@ paths:
                     example: true
                   message:
                     type: string
-                    example: "destinations retrieved successfully"
+                    example: "areas retrieved successfully"
                   data:
                     type: array
                     items:
-                      $ref: '#/components/schemas/DomesticDestination'
+                      $ref: '#/components/schemas/AreaItem'
         '400':
-          description: Search keyword must be at least 3 characters
+          description: Search parameter must be at least 3 characters
         '500':
-          description: Failed to retrieve destinations from RajaOngkir
+          description: Failed to retrieve areas from Biteship
 
-  /api/v1/shipping/cost:
+  /api/v1/shipping/couriers:
+    get:
+      tags:
+        - Shipping
+      summary: Get available couriers
+      description: Public endpoint to retrieve all supported courier partners and services provided by Biteship.
+      responses:
+        '200':
+          description: Couriers retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "couriers retrieved successfully"
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CourierDetail'
+        '400':
+          description: Failed to retrieve couriers
+
+  /api/v1/shipping/rates:
     post:
       tags:
         - Shipping
-      summary: Calculate domestic shipping cost
-      description: Calculates delivery rates from store origin to destination location ID using selected couriers.
+      summary: Calculate dynamic shipping rates
+      description: Authenticated endpoint to calculate real-time courier shipping rates and estimated delivery times for selected cart items to a destination address.
       security:
         - BearerAuth: []
       requestBody:
@@ -1954,10 +2010,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CheckCostRequest'
+              $ref: '#/components/schemas/GetShippingRatesRequest'
       responses:
         '200':
-          description: Shipping costs calculated successfully
+          description: Shipping rates retrieved successfully
           content:
             application/json:
               schema:
@@ -1971,17 +2027,422 @@ paths:
                     example: true
                   message:
                     type: string
-                    example: "shipping costs calculated successfully"
+                    example: "shipping rates retrieved successfully"
+                  data:
+                    $ref: '#/components/schemas/ShippingRatesResponse'
+        '400':
+          description: Cart is empty or invalid payload
+        '401':
+          description: Unauthorized request
+        '404':
+          description: Address, cart item, or book not found
+        '502':
+          description: Failed to retrieve shipping rates from courier provider
+
+  /api/v1/shipping/webhook:
+    post:
+      tags:
+        - Shipping
+      summary: Handle Biteship tracking webhook
+      description: Webhook endpoint called by Biteship to push real-time delivery status updates. Authenticated via X-Biteship-Signature header.
+      security:
+        - BiteshipSignatureAuth: []
+      parameters:
+        - in: header
+          name: X-Biteship-Signature
+          required: true
+          schema:
+            type: string
+          description: Webhook secret signature configured for Biteship verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BiteshipWebhookPayload'
+      responses:
+        '200':
+          description: Webhook processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid webhook payload
+        '401':
+          description: Missing or invalid signature
+        '500':
+          description: Failed to handle webhook update
+
+  /api/v1/orders/{invoice_number}/tracking:
+    get:
+      tags:
+        - Shipping
+        - Order
+      summary: Track order shipment
+      description: Authenticated endpoint for customers and admins to retrieve real-time courier tracking milestones and status for an order.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: invoice_number
+          required: true
+          schema:
+            type: string
+          description: Order invoice number
+          example: "INV-20261017-0001"
+      responses:
+        '200':
+          description: Tracking details retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "tracking details retrieved successfully"
+                  data:
+                    $ref: '#/components/schemas/TrackingDetailResult'
+        '400':
+          description: Tracking number has not been issued yet
+        '401':
+          description: Unauthorized request
+        '403':
+          description: Forbidden (user does not own this order)
+        '404':
+          description: Order or shipment details not found
+
+  /api/v1/orders/{invoice_number}/fulfill:
+    post:
+      tags:
+        - Shipping
+      summary: Dispatch courier pickup (Admin)
+      description: Admin-only endpoint to trigger automated pickup dispatch via Biteship for a paid order. Generates shipment records and waybill numbers.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: invoice_number
+          required: true
+          schema:
+            type: string
+          description: Order invoice number
+          example: "INV-20261017-0001"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FulfillOrderRequest'
+      responses:
+        '200':
+          description: Pickup scheduled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "pickup scheduled successfully"
+                  data:
+                    $ref: '#/components/schemas/FulfillOrderResponse'
+        '400':
+          description: Order is not paid yet or shipment is already fulfilled
+        '401':
+          description: Unauthorized request
+        '403':
+          description: Forbidden (Admin role required)
+        '404':
+          description: Order not found
+        '502':
+          description: Failed to dispatch pickup request to courier provider
+
+  /api/v1/orders/{invoice_number}/return:
+    post:
+      tags:
+        - Shipping
+      summary: Process order return (Admin)
+      description: Admin-only endpoint to mark an order as returned and automatically restore item stock levels.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: invoice_number
+          required: true
+          schema:
+            type: string
+          description: Order invoice number
+          example: "INV-20261017-0001"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcessReturnRequest'
+      responses:
+        '200':
+          description: Order return processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid return state (order must be shipped or completed) or order already returned
+        '401':
+          description: Unauthorized request
+        '403':
+          description: Forbidden (Admin role required)
+        '404':
+          description: Order not found
+
+  # =========================================================================
+  # CHECKOUT
+  # =========================================================================
+  /api/v1/checkout/preview:
+    post:
+      tags:
+        - Checkout
+      summary: Preview checkout calculation
+      description: Authenticated endpoint to simulate order checkout with real-time book prices, shipping rates, voucher discounts, and payment admin fees prior to placing an order.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutPreviewRequest'
+      responses:
+        '200':
+          description: Checkout preview calculated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "checkout preview calculated successfully"
+                  data:
+                    $ref: '#/components/schemas/CheckoutPreviewResponse'
+        '400':
+          description: Cart is empty, insufficient stock, or discount invalid
+        '401':
+          description: Unauthorized request
+        '404':
+          description: Destination address not found
+
+  /api/v1/checkout/order:
+    post:
+      tags:
+        - Checkout
+      summary: Create order and initiate payment
+      description: Authenticated endpoint to convert selected cart items into a confirmed order, deduct stock, calculate shipping and discounts, and charge via Midtrans.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+      responses:
+        '201':
+          description: Order created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 201
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "order created successfully"
+                  data:
+                    $ref: '#/components/schemas/CreateOrderResponse'
+        '400':
+          description: Cart empty, insufficient stock, discount invalid/expired, or unsupported payment method
+        '401':
+          description: Unauthorized request
+        '404':
+          description: Destination address or cart items not found
+        '502':
+          description: Midtrans charge request failed
+
+  /api/v1/payments/midtrans/webhook:
+    post:
+      tags:
+        - Checkout
+      summary: Handle Midtrans payment notification
+      description: Asynchronous payment notification webhook called by Midtrans. Verifies SHA512 signature and updates order status upon settlement, expiration, or cancellation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MidtransWebhookPayload'
+      responses:
+        '200':
+          description: Payment notification handled successfully
+          content:
+            application/json:
+              example:
+                status: "ok"
+                message: "notification handled successfully"
+        '400':
+          description: Cannot parse notification body
+          content:
+            application/json:
+              example:
+                status: "error"
+                message: "cannot parse notification body"
+        '403':
+          description: Invalid Midtrans webhook signature
+          content:
+            application/json:
+              example:
+                status: "error"
+                message: "invalid midtrans webhook signature"
+        '500':
+          description: Failed to process payment update
+
+  # =========================================================================
+  # ORDER
+  # =========================================================================
+  /api/v1/orders:
+    get:
+      tags:
+        - Order
+      summary: Get user orders
+      description: Authenticated endpoint to retrieve order history for the authenticated user, optionally filtered by order status.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [waiting_payment, paid, processing, shipped, completed, cancelled, returned]
+          description: "Filter orders by status (optional)."
+          example: "paid"
+      responses:
+        '200':
+          description: Orders retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "orders retrieved successfully"
                   data:
                     type: array
                     items:
-                      $ref: '#/components/schemas/ShippingCostResult'
-        '400':
-          description: Invalid request payload
+                      $ref: '#/components/schemas/OrderListItemResponse'
         '401':
           description: Unauthorized request
         '500':
-          description: Failed to calculate shipping costs from RajaOngkir
+          description: Internal server error
+
+  /api/v1/orders/{invoice_number}:
+    get:
+      tags:
+        - Order
+      summary: Get order detail
+      description: Authenticated endpoint to retrieve full details for a specific order by its unique invoice number.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: invoice_number
+          required: true
+          schema:
+            type: string
+          description: Order invoice number
+          example: "INV-20261017-0001"
+      responses:
+        '200':
+          description: Order detail retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "order detail retrieved successfully"
+                  data:
+                    $ref: '#/components/schemas/OrderDetailResponse'
+        '400':
+          description: Invoice number parameter is required
+        '401':
+          description: Unauthorized request
+        '404':
+          description: Order not found
+        '500':
+          description: Internal server error
+
+  # =========================================================================
+  # STATIC ASSETS
+  # =========================================================================
+  /api/v1/static/{filepath}:
+    get:
+      tags:
+        - Health
+      summary: Access static uploaded files
+      description: Public endpoint to serve static assets such as uploaded book cover images from local storage.
+      parameters:
+        - in: path
+          name: filepath
+          required: true
+          schema:
+            type: string
+          description: "Relative file path under public storage (e.g. covers/my-book.jpg)"
+          example: "covers/pragmatic-programmer.jpg"
+      responses:
+        '200':
+          description: Static file content stream (image/jpeg, image/png, etc.)
+        '404':
+          description: File not found
 
 components:
   securitySchemes:
@@ -1990,6 +2451,11 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: Provide the JWT Access Token (can also be passed automatically via 'access_token' cookie).
+    BiteshipSignatureAuth:
+      type: apiKey
+      in: header
+      name: X-Biteship-Signature
+      description: Webhook signature authentication header for Biteship tracking events.
 
   schemas:
     SuccessResponse:
@@ -2155,12 +2621,13 @@ components:
           type: string
           minLength: 2
           maxLength: 150
-          example: "Tere Liye"
+          example: "J.K. Rowling"
         bio:
           type: string
           maxLength: 2000
           nullable: true
-          example: "Penulis novel ternama Indonesia"
+          description: "Author biography (optional)."
+          example: "British author best known for writing the Harry Potter fantasy series."
 
     UpdateAuthorRequest:
       type: object
@@ -2171,12 +2638,13 @@ components:
           type: string
           minLength: 2
           maxLength: 150
-          example: "Tere Liye"
+          example: "J.K. Rowling"
         bio:
           type: string
           maxLength: 2000
           nullable: true
-          example: "Penulis novel fiksi Indonesia"
+          description: "Author biography (optional)."
+          example: "British author, philanthropist, and screenwriter."
 
     AuthorListItem:
       type: object
@@ -2231,60 +2699,73 @@ components:
       properties:
         category_id:
           type: integer
+          description: "ID of the category"
           example: 1
         author_id:
           type: integer
+          description: "ID of the author"
           example: 1
         publisher_id:
           type: integer
+          description: "ID of the publisher"
           example: 1
         title:
           type: string
           minLength: 2
           maxLength: 255
-          example: "Bumi Manusia"
+          description: "Title of the book"
+          example: "The Pragmatic Programmer"
         isbn:
           type: string
           maxLength: 30
           nullable: true
-          example: "9789799731234"
+          description: "ISBN number (optional, max 30 characters)."
+          example: "9780135957059"
         synopsis:
           type: string
           nullable: true
-          example: "Roman berlatar Hindia Belanda menceritakan Minke dan Annelies."
+          description: "Synopsis or overview of the book (optional)."
+          example: "Your journey to mastery in software development."
         price:
           type: number
           format: double
           minimum: 0
+          description: "Book price"
           example: 135000.00
         weight_grams:
           type: integer
           minimum: 1
+          description: "Weight in grams for shipping calculation"
           example: 450
         pages:
           type: integer
           minimum: 1
           nullable: true
-          example: 535
+          description: "Total number of pages (optional)."
+          example: 352
         publication_year:
           type: integer
           minimum: 1000
           maximum: 2100
           nullable: true
-          example: 2011
+          description: "Year of publication between 1000 and 2100 (optional)."
+          example: 2019
         stock:
           type: integer
           minimum: 0
           default: 0
+          description: "Initial stock inventory (optional, defaults to 0)."
           example: 40
         cover_image:
           type: string
           maxLength: 255
           nullable: true
-          example: "https://example.com/covers/bumi-manusia.jpg"
+          description: "Relative URL or static path to the cover image (optional)."
+          example: "/api/v1/static/covers/pragmatic-programmer.jpg"
         is_active:
           type: boolean
           default: true
+          description: "Whether the book is visible to customers (optional, defaults to true)."
           example: true
 
     UpdateBookRequest:
@@ -2299,58 +2780,71 @@ components:
       properties:
         category_id:
           type: integer
+          description: "ID of the category"
           example: 1
         author_id:
           type: integer
+          description: "ID of the author"
           example: 1
         publisher_id:
           type: integer
+          description: "ID of the publisher"
           example: 1
         title:
           type: string
           minLength: 2
           maxLength: 255
-          example: "Bumi Manusia (Edisi Khusus)"
+          description: "Title of the book"
+          example: "The Pragmatic Programmer (20th Anniversary Edition)"
         isbn:
           type: string
           maxLength: 30
           nullable: true
-          example: "9789799731234"
+          description: "ISBN number (optional, max 30 characters)."
+          example: "9780135957059"
         synopsis:
           type: string
           nullable: true
-          example: "Edisi hardcover terbaru dari Tetralogi Buru."
+          description: "Synopsis or overview of the book (optional)."
+          example: "Updated 20th Anniversary Edition with modern best practices."
         price:
           type: number
           format: double
           minimum: 0
+          description: "Book price"
           example: 160000.00
         weight_grams:
           type: integer
           minimum: 1
+          description: "Weight in grams for shipping calculation"
           example: 550
         pages:
           type: integer
           minimum: 1
           nullable: true
-          example: 550
+          description: "Total number of pages (optional)."
+          example: 352
         publication_year:
           type: integer
           minimum: 1000
           maximum: 2100
           nullable: true
+          description: "Year of publication between 1000 and 2100 (optional)."
           example: 2024
         stock:
           type: integer
           minimum: 0
+          description: "Updated stock inventory (optional, defaults to 0)."
           example: 50
         cover_image:
           type: string
           maxLength: 255
           nullable: true
-          example: "https://example.com/covers/bumi-manusia-special.jpg"
+          description: "Relative URL or static path to the cover image (optional)."
+          example: "/api/v1/static/covers/pragmatic-programmer-anniversary.jpg"
         is_active:
           type: boolean
+          description: "Whether the book is visible to customers (optional)."
           example: true
 
     BookRelationItem:
@@ -2476,21 +2970,25 @@ components:
           type: number
           format: double
           minimum: 0
+          description: "Minimum cart subtotal required to qualify for this tier"
           example: 100000.00
         reward_type:
           type: string
           enum: [PERCENTAGE, FIXED]
+          description: "Type of reward applied at this tier"
           example: "FIXED"
         reward_value:
           type: number
           format: double
           minimum: 0.01
+          description: "Reward value (fixed amount in currency, or percentage rate)"
           example: 5000.00
         max_reward:
           type: number
           format: double
           nullable: true
           minimum: 0.01
+          description: "Maximum reward cap amount for PERCENTAGE reward type (optional)."
           example: null
 
     CreateDiscountRequest:
@@ -2500,7 +2998,6 @@ components:
         - name
         - discount_type
         - discount_value
-        - min_purchase
         - is_all_books
         - start_date
         - end_date
@@ -2510,73 +3007,80 @@ components:
           minLength: 3
           maxLength: 50
           pattern: '^[a-zA-Z0-9]+$'
-          description: Unique voucher code (automatically converted to uppercase)
-          example: "DISKONHEMAT10"
+          description: "Unique voucher coupon code (automatically normalized to uppercase)"
+          example: "BOOKFEST10"
         name:
           type: string
           minLength: 3
           maxLength: 150
-          example: "Promo Belanja Hemat Up To 10%"
+          description: "Display name of the discount promotion"
+          example: "Book Festival Up To 10% Off"
         description:
           type: string
           nullable: true
-          example: "Potongan harga bertingkat untuk buku pilihan"
+          description: "Description or terms of the promotion (optional)."
+          example: "Tiered discount promotion for selected programming and fiction books."
         discount_type:
           type: string
           enum: [PERCENTAGE, FIXED, TIERED]
+          description: "Discount calculation strategy"
           example: "TIERED"
         discount_value:
           type: number
           format: double
           minimum: 0.01
-          description: Base value for PERCENTAGE/FIXED, or max rate cap representation for TIERED
+          description: "Base discount value for PERCENTAGE/FIXED, or max headline rate for TIERED"
           example: 10.00
         min_purchase:
           type: number
           format: double
           minimum: 0
           default: 0
+          description: "Minimum cart subtotal spend requirement (optional, defaults to 0)."
           example: 100000.00
         max_discount_amount:
           type: number
           format: double
           nullable: true
           minimum: 0.01
-          description: Global max discount cap
+          description: "Global maximum discount cap amount (optional)."
           example: 25000.00
         quota:
           type: integer
           minimum: 0
           default: 0
-          description: Max total redemptions (0 indicates unlimited)
+          description: "Maximum total redemptions allowed (optional, 0 indicates unlimited)."
           example: 100
         is_all_books:
           type: boolean
-          description: If true, discount applies to all books. If false, book_ids must be specified.
+          description: "Whether discount applies to all books. If false, book_ids must be provided."
           example: false
         is_active:
           type: boolean
           default: true
+          description: "Whether the voucher is currently active (optional, defaults to true)."
           example: true
         start_date:
           type: string
           format: date-time
+          description: "Start validity timestamp"
           example: "2026-10-01T00:00:00Z"
         end_date:
           type: string
           format: date-time
+          description: "End expiration timestamp"
           example: "2026-10-31T23:59:59Z"
         book_ids:
           type: array
           items:
             type: integer
-          description: Eligible book IDs (used when is_all_books is false)
+          description: "Eligible book IDs when is_all_books is false (optional)."
           example: [1, 2]
         tiers:
           type: array
           items:
             $ref: '#/components/schemas/DiscountTierRequest'
-          description: Threshold reward tiers (required if discount_type is TIERED)
+          description: "Threshold reward tiers required when discount_type is TIERED (optional)."
 
     UpdateDiscountRequest:
       type: object
@@ -2585,7 +3089,6 @@ components:
         - name
         - discount_type
         - discount_value
-        - min_purchase
         - is_all_books
         - start_date
         - end_date
@@ -2595,63 +3098,77 @@ components:
           minLength: 3
           maxLength: 50
           pattern: '^[a-zA-Z0-9]+$'
-          example: "DISKONHEMAT10"
+          description: "Unique voucher coupon code"
+          example: "BOOKFEST10"
         name:
           type: string
           minLength: 3
           maxLength: 150
-          example: "Promo Belanja Hemat Up To 10% (Updated)"
+          description: "Display name of the discount promotion"
+          example: "Book Festival Up To 10% Off (Updated)"
         description:
           type: string
           nullable: true
-          example: "Potongan harga bertingkat untuk buku pilihan"
+          description: "Description or terms of the promotion (optional)."
+          example: "Tiered discount promotion for selected programming and fiction books."
         discount_type:
           type: string
           enum: [PERCENTAGE, FIXED, TIERED]
+          description: "Discount calculation strategy"
           example: "TIERED"
         discount_value:
           type: number
           format: double
           minimum: 0.01
+          description: "Base discount value for PERCENTAGE/FIXED, or max headline rate for TIERED"
           example: 10.00
         min_purchase:
           type: number
           format: double
           minimum: 0
+          description: "Minimum cart subtotal spend requirement (optional, defaults to 0)."
           example: 100000.00
         max_discount_amount:
           type: number
           format: double
           nullable: true
           minimum: 0.01
+          description: "Global maximum discount cap amount (optional)."
           example: 25000.00
         quota:
           type: integer
           minimum: 0
+          description: "Maximum total redemptions allowed (optional, 0 indicates unlimited)."
           example: 150
         is_all_books:
           type: boolean
+          description: "Whether discount applies to all books. If false, book_ids must be provided."
           example: false
         is_active:
           type: boolean
+          description: "Whether the voucher is currently active (optional)."
           example: true
         start_date:
           type: string
           format: date-time
+          description: "Start validity timestamp"
           example: "2026-10-01T00:00:00Z"
         end_date:
           type: string
           format: date-time
+          description: "End expiration timestamp"
           example: "2026-11-15T23:59:59Z"
         book_ids:
           type: array
           items:
             type: integer
+          description: "Eligible book IDs when is_all_books is false (optional)."
           example: [1, 2]
         tiers:
           type: array
           items:
             $ref: '#/components/schemas/DiscountTierRequest'
+          description: "Threshold reward tiers required when discount_type is TIERED (optional)."
 
     DiscountListItem:
       type: object
@@ -3032,12 +3549,10 @@ components:
 
     RefreshTokenRequest:
       type: object
-      required:
-        - refresh_token
       properties:
         refresh_token:
           type: string
-          description: "Required only if not provided via HTTP-only cookie"
+          description: "Refresh token string (optional if refresh_token HTTP-only cookie is set, otherwise required)."
           example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 
     ActivateAccountRequest:
@@ -3117,7 +3632,7 @@ components:
         - receiver_name
         - phone
         - address_line
-        - destination_id
+        - biteship_area_id
         - province_name
         - city_name
         - district_name
@@ -3125,41 +3640,50 @@ components:
       properties:
         receiver_name:
           type: string
-          minLength: 3
+          minLength: 2
           maxLength: 150
-          example: "Budi Santoso"
+          description: "Recipient full name"
+          example: "John Doe"
         phone:
           type: string
-          minLength: 9
+          minLength: 8
           maxLength: 20
+          description: "Recipient phone number"
           example: "081234567890"
         address_line:
           type: string
-          minLength: 10
-          maxLength: 255
-          example: "Jl. Merbabu No. 12, RT 03 / RW 02"
-        destination_id:
-          type: integer
-          example: 26895
+          minLength: 5
+          description: "Street address, house/unit number, notes"
+          example: "Jl. Sudirman No. 45, RT 01 / RW 03"
+        biteship_area_id:
+          type: string
+          description: "Standard destination area ID retrieved from Biteship areas search"
+          example: "IDNP11IDNC278IDND1234IDZ59464"
         province_name:
           type: string
-          example: "Jawa Tengah"
+          description: "Province name"
+          example: "DKI Jakarta"
         city_name:
           type: string
-          example: "Jepara"
+          description: "City or regency name"
+          example: "Jakarta Selatan"
         district_name:
           type: string
-          example: "Welahan"
+          description: "District (Kecamatan) name"
+          example: "Kebayoran Baru"
         subdistrict_name:
           type: string
           nullable: true
-          example: "Welahan"
+          description: "Subdistrict (Kelurahan) name (optional)."
+          example: "Senayan"
         postal_code:
           type: string
           pattern: '^[0-9]{5}$'
-          example: "59464"
+          description: "5-digit postal code"
+          example: "12190"
         is_primary:
           type: boolean
+          description: "Whether to set this address as the default primary address (optional, defaults to false)."
           example: true
 
     UpdateAddressRequest:
@@ -3168,7 +3692,7 @@ components:
         - receiver_name
         - phone
         - address_line
-        - destination_id
+        - biteship_area_id
         - province_name
         - city_name
         - district_name
@@ -3176,41 +3700,50 @@ components:
       properties:
         receiver_name:
           type: string
-          minLength: 3
+          minLength: 2
           maxLength: 150
-          example: "Budi Santoso"
+          description: "Recipient full name"
+          example: "John Doe"
         phone:
           type: string
-          minLength: 9
+          minLength: 8
           maxLength: 20
+          description: "Recipient phone number"
           example: "081234567890"
         address_line:
           type: string
-          minLength: 10
-          maxLength: 255
-          example: "Jl. Merbabu No. 12, RT 03 / RW 02"
-        destination_id:
-          type: integer
-          example: 26895
+          minLength: 5
+          description: "Street address, house/unit number, notes"
+          example: "Jl. Sudirman No. 45, RT 01 / RW 03"
+        biteship_area_id:
+          type: string
+          description: "Standard destination area ID retrieved from Biteship areas search"
+          example: "IDNP11IDNC278IDND1234IDZ59464"
         province_name:
           type: string
-          example: "Jawa Tengah"
+          description: "Province name"
+          example: "DKI Jakarta"
         city_name:
           type: string
-          example: "Jepara"
+          description: "City or regency name"
+          example: "Jakarta Selatan"
         district_name:
           type: string
-          example: "Welahan"
+          description: "District (Kecamatan) name"
+          example: "Kebayoran Baru"
         subdistrict_name:
           type: string
           nullable: true
-          example: "Welahan"
+          description: "Subdistrict (Kelurahan) name (optional)."
+          example: "Senayan"
         postal_code:
           type: string
           pattern: '^[0-9]{5}$'
-          example: "59464"
+          description: "5-digit postal code"
+          example: "12190"
         is_primary:
           type: boolean
+          description: "Whether to set this address as the default primary address (optional, defaults to false)."
           example: true
 
     AddressListItem:
@@ -3219,62 +3752,36 @@ components:
         id:
           type: integer
           example: 1
+        user_id:
+          type: integer
+          example: 10
         receiver_name:
           type: string
-          example: "Budi Santoso"
+          example: "John Doe"
         phone:
           type: string
           example: "081234567890"
         address_line:
           type: string
-          example: "Jl. Merbabu No. 12, RT 03 / RW 02"
-        city_name:
+          example: "Jl. Sudirman No. 45, RT 01 / RW 03"
+        biteship_area_id:
           type: string
-          example: "Jepara"
+          example: "IDNP11IDNC278IDND1234IDZ59464"
         province_name:
           type: string
-          example: "Jawa Tengah"
-        postal_code:
-          type: string
-          example: "59464"
-        is_primary:
-          type: boolean
-          example: true
-
-    AddressDetail:
-      type: object
-      properties:
-        id:
-          type: integer
-          example: 1
-        receiver_name:
-          type: string
-          example: "Budi Santoso"
-        phone:
-          type: string
-          example: "081234567890"
-        address_line:
-          type: string
-          example: "Jl. Merbabu No. 12, RT 03 / RW 02"
-        destination_id:
-          type: integer
-          example: 26895
-        province_name:
-          type: string
-          example: "Jawa Tengah"
+          example: "DKI Jakarta"
         city_name:
           type: string
-          example: "Jepara"
+          example: "Jakarta Selatan"
         district_name:
           type: string
-          example: "Welahan"
+          example: "Kebayoran Baru"
         subdistrict_name:
           type: string
-          nullable: true
-          example: "Welahan"
+          example: "Senayan"
         postal_code:
           type: string
-          example: "59464"
+          example: "12190"
         is_primary:
           type: boolean
           example: true
@@ -3286,76 +3793,888 @@ components:
           type: string
           format: date-time
           example: "2026-10-14T09:39:55+07:00"
-        deleted_at:
-          type: string
-          format: date-time
-          nullable: true
-          example: null
 
-    # =========================================================================
-    # SHIPPING SCHEMAS
-    # =========================================================================
-    DomesticDestination:
+    AddressDetail:
       type: object
       properties:
         id:
           type: integer
-          example: 26895
-        label:
+          example: 1
+        user_id:
+          type: integer
+          example: 10
+        receiver_name:
           type: string
-          example: "Welahan, Jepara, Jawa Tengah, 59464"
-        subdistrict_name:
+          example: "John Doe"
+        phone:
           type: string
-          example: "Welahan"
-        district_name:
+          example: "081234567890"
+        address_line:
           type: string
-          example: "Welahan"
-        city_name:
+          example: "Jl. Sudirman No. 45, RT 01 / RW 03"
+        biteship_area_id:
           type: string
-          example: "Jepara"
+          example: "IDNP11IDNC278IDND1234IDZ59464"
         province_name:
           type: string
-          example: "Jawa Tengah"
-        zip_code:
+          example: "DKI Jakarta"
+        city_name:
           type: string
-          example: "59464"
+          example: "Jakarta Selatan"
+        district_name:
+          type: string
+          example: "Kebayoran Baru"
+        subdistrict_name:
+          type: string
+          example: "Senayan"
+        postal_code:
+          type: string
+          example: "12190"
+        is_primary:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-10-14T09:39:55+07:00"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-10-14T09:39:55+07:00"
 
-    CheckCostRequest:
+    # =========================================================================
+    # SHIPPING SCHEMAS (BITESHIP)
+    # =========================================================================
+    AreaItem:
+      type: object
+      properties:
+        id:
+          type: string
+          description: "Biteship area ID"
+          example: "IDNP11IDNC278IDND1234IDZ12190"
+        name:
+          type: string
+          example: "Senayan, Kebayoran Baru, Jakarta Selatan, DKI Jakarta"
+        administrative_division_level_1_name:
+          type: string
+          description: "Province"
+          example: "DKI Jakarta"
+        administrative_division_level_2_name:
+          type: string
+          description: "City / Regency"
+          example: "Jakarta Selatan"
+        administrative_division_level_3_name:
+          type: string
+          description: "District (Kecamatan)"
+          example: "Kebayoran Baru"
+        administrative_division_level_4_name:
+          type: string
+          description: "Subdistrict (Kelurahan)"
+          example: "Senayan"
+        postal_code:
+          type: integer
+          example: 12190
+
+    CourierDetail:
+      type: object
+      properties:
+        available_for_cash_on_delivery:
+          type: boolean
+          example: false
+        available_for_proof_of_delivery:
+          type: boolean
+          example: true
+        available_for_instant_waybill:
+          type: boolean
+          example: true
+        courier_name:
+          type: string
+          example: "JNE"
+        courier_code:
+          type: string
+          example: "jne"
+        courier_service_name:
+          type: string
+          example: "Reguler"
+        courier_service_code:
+          type: string
+          example: "reg"
+        tier:
+          type: string
+          example: "standard"
+        description:
+          type: string
+          example: "Regular delivery service (2-3 business days)"
+        service_type:
+          type: string
+          example: "standard"
+
+    GetShippingRatesRequest:
       type: object
       required:
-        - destination_id
-        - weight_grams
+        - cart_item_ids
       properties:
-        destination_id:
+        cart_item_ids:
+          type: array
+          minItems: 1
+          items:
+            type: integer
+          description: "List of shopping cart item IDs to include in shipping rate calculation"
+          example: [1, 2]
+        address_id:
           type: integer
-          example: 26895
-        weight_grams:
+          nullable: true
+          description: "Target shipping address ID (optional, defaults to user's primary address if omitted)."
+          example: 1
+
+    CourierOptionResponse:
+      type: object
+      properties:
+        courier_code:
+          type: string
+          example: "jne"
+        courier_name:
+          type: string
+          example: "JNE"
+        courier_service_name:
+          type: string
+          example: "Reguler"
+        courier_service_code:
+          type: string
+          example: "reg"
+        description:
+          type: string
+          example: "Layanan Reguler JNE"
+        price:
+          type: number
+          format: double
+          example: 15000.00
+        etd:
+          type: string
+          example: "1-2"
+        type:
+          type: string
+          example: "standard"
+
+    ShippingRatesResponse:
+      type: object
+      properties:
+        total_weight_grams:
           type: integer
-          description: Total weight in grams (defaults to 1000 if not specified)
           example: 1000
+        destination_area:
+          type: string
+          example: "Senayan, Kebayoran Baru, Jakarta Selatan, DKI Jakarta"
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/CourierOptionResponse'
+
+    FulfillOrderRequest:
+      type: object
+      properties:
+        order_note:
+          type: string
+          description: "Special note or instructions for the courier pickup (optional)."
+          example: "Please handle carefully, fragile books inside."
+
+    FulfillOrderResponse:
+      type: object
+      properties:
+        shipment_id:
+          type: integer
+          example: 12
+        invoice_number:
+          type: string
+          example: "INV-20261017-0001"
+        biteship_order_id:
+          type: string
+          example: "64fa83d29a1b2c3d4e5f6789"
+        waybill_number:
+          type: string
+          nullable: true
+          example: "SOCAG00123456789"
+        status:
+          type: string
+          example: "allocated"
         courier:
           type: string
-          description: "Colon-separated list of couriers or single courier (e.g. jne, jne:pos:tiki)"
-          example: "jne:pos:tiki"
+          example: "jne"
+        courier_service:
+          type: string
+          example: "reg"
+        tracking_url:
+          type: string
+          nullable: true
+          example: "https://biteship.com/track/64fa83d29a1b2c3d4e5f6789"
 
-    ShippingCostResult:
+    ProcessReturnRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: "Reason for the order return (optional)."
+          example: "Customer reported package damaged in transit."
+
+    CourierInfo:
+      type: object
+      properties:
+        company:
+          type: string
+          example: "jne"
+        name:
+          type: string
+          example: "JNE"
+        driver_name:
+          type: string
+          nullable: true
+          description: "Driver full name (optional)."
+          example: "Ahmad"
+        driver_phone:
+          type: string
+          nullable: true
+          description: "Driver phone number (optional)."
+          example: "081298765432"
+        type:
+          type: string
+          example: "standard"
+        link:
+          type: string
+          nullable: true
+          description: "Direct courier web tracking link (optional)."
+          example: "https://www.jne.co.id/id/tracking/trace/SOCAG00123456789"
+
+    TrackingHistory:
+      type: object
+      properties:
+        note:
+          type: string
+          example: "Shipment received by JNE Sorting Center"
+        updated_at:
+          type: string
+          example: "2026-10-17 14:30:00"
+        status:
+          type: string
+          example: "in_transit"
+
+    TrackingDetailResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "success"
+        waybill_id:
+          type: string
+          example: "SOCAG00123456789"
+        courier_code:
+          type: string
+          example: "jne"
+        courier_name:
+          type: string
+          example: "JNE"
+        courier:
+          $ref: '#/components/schemas/CourierInfo'
+        status:
+          type: string
+          example: "in_transit"
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrackingHistory'
+
+    BiteshipWebhookPayload:
+      type: object
+      required:
+        - event
+        - order_id
+        - status
+      properties:
+        event:
+          type: string
+          description: "Webhook event name (e.g. order.status)"
+          example: "order.status"
+        courier_tracking_id:
+          type: string
+          nullable: true
+          description: "Courier internal tracking ID (optional)."
+          example: "TRK123456"
+        order_id:
+          type: string
+          description: "Biteship order ID"
+          example: "64fa83d29a1b2c3d4e5f6789"
+        waybill_id:
+          type: string
+          nullable: true
+          description: "Courier waybill / airwaybill (AWB) number (optional)."
+          example: "SOCAG00123456789"
+        courier_code:
+          type: string
+          nullable: true
+          description: "Courier provider code (optional)."
+          example: "jne"
+        status:
+          type: string
+          description: "Standard delivery status"
+          example: "delivered"
+        note:
+          type: string
+          nullable: true
+          description: "Status detail or driver remarks (optional)."
+          example: "Delivered to recipient John Doe"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-10-17T15:00:00Z"
+        metadata:
+          type: object
+          nullable: true
+          description: "Custom metadata payload passed during order creation (optional)."
+
+    # =========================================================================
+    # CHECKOUT SCHEMAS
+    # =========================================================================
+    CheckoutPreviewRequest:
+      type: object
+      required:
+        - cart_item_ids
+        - courier
+        - courier_service
+        - payment_method
+      properties:
+        cart_item_ids:
+          type: array
+          minItems: 1
+          items:
+            type: integer
+          description: "Array of selected cart item IDs to purchase"
+          example: [1, 2]
+        address_id:
+          type: integer
+          nullable: true
+          description: "Destination address ID (optional, defaults to user's primary address if omitted)."
+          example: 1
+        courier:
+          type: string
+          description: "Selected courier code (e.g. jne, sicepat, anteraja)"
+          example: "jne"
+        courier_service:
+          type: string
+          description: "Selected courier service code (e.g. reg, yes, oke)"
+          example: "reg"
+        discount_code:
+          type: string
+          nullable: true
+          description: "Voucher or coupon code to redeem (optional)."
+          example: "BOOKFEST10"
+        payment_method:
+          type: string
+          description: "Selected payment channel (e.g. bank_transfer, bca_va, bri_va, bni_va, mandiri_bill, gopay, qris)"
+          example: "bca_va"
+
+    CheckoutItemPreview:
+      type: object
+      properties:
+        book_id:
+          type: integer
+          example: 1
+        title:
+          type: string
+          example: "The Pragmatic Programmer"
+        cover_image:
+          type: string
+          nullable: true
+          description: "Book cover thumbnail (optional)."
+          example: "/api/v1/static/covers/pragmatic.jpg"
+        price:
+          type: number
+          format: double
+          example: 135000.00
+        quantity:
+          type: integer
+          example: 2
+        weight_grams:
+          type: integer
+          example: 450
+        subtotal:
+          type: number
+          format: double
+          example: 270000.00
+
+    AddressPreviewResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        receiver_name:
+          type: string
+          example: "John Doe"
+        phone:
+          type: string
+          example: "081234567890"
+        address_line:
+          type: string
+          example: "Jl. Sudirman No. 45, RT 01 / RW 03"
+        province_name:
+          type: string
+          example: "DKI Jakarta"
+        city_name:
+          type: string
+          example: "Jakarta Selatan"
+        district_name:
+          type: string
+          example: "Kebayoran Baru"
+        subdistrict_name:
+          type: string
+          example: "Senayan"
+        postal_code:
+          type: string
+          example: "12190"
+
+    CheckoutPreviewResponse:
+      type: object
+      properties:
+        address:
+          $ref: '#/components/schemas/AddressPreviewResponse'
+          nullable: true
+          description: "Delivery destination details (optional, null if address not found)."
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CheckoutItemPreview'
+        items_subtotal:
+          type: number
+          format: double
+          description: "Total cost of items before shipping and discounts"
+          example: 270000.00
+        total_weight_grams:
+          type: integer
+          description: "Combined total weight of items in grams"
+          example: 900
+        courier:
+          type: string
+          example: "jne"
+        courier_service:
+          type: string
+          example: "reg"
+        shipping_cost:
+          type: number
+          format: double
+          description: "Calculated delivery fee"
+          example: 15000.00
+        discount_code:
+          type: string
+          nullable: true
+          description: "Applied discount code (optional)."
+          example: "BOOKFEST10"
+        discount_amount:
+          type: number
+          format: double
+          description: "Discount deducted from total"
+          example: 27000.00
+        payment_method:
+          type: string
+          example: "bca_va"
+        admin_fee:
+          type: number
+          format: double
+          description: "Payment gateway processing fee"
+          example: 0.00
+        total_payment:
+          type: number
+          format: double
+          description: "Grand total amount to pay"
+          example: 258000.00
+
+    CreateOrderRequest:
+      type: object
+      required:
+        - cart_item_ids
+        - courier
+        - courier_service
+        - payment_method
+      properties:
+        cart_item_ids:
+          type: array
+          minItems: 1
+          items:
+            type: integer
+          description: "Array of selected cart item IDs to place into the order"
+          example: [1, 2]
+        address_id:
+          type: integer
+          nullable: true
+          description: "Destination address ID (optional, defaults to primary address if omitted)."
+          example: 1
+        courier:
+          type: string
+          description: "Selected courier code (e.g. jne, sicepat)"
+          example: "jne"
+        courier_service:
+          type: string
+          description: "Selected courier service code (e.g. reg, oke)"
+          example: "reg"
+        discount_code:
+          type: string
+          nullable: true
+          description: "Voucher or discount coupon code to redeem (optional)."
+          example: "BOOKFEST10"
+        payment_method:
+          type: string
+          description: "Payment channel code (e.g. bank_transfer, bca_va, bri_va, bni_va, mandiri_bill, gopay, qris)"
+          example: "bca_va"
+
+    PaymentInfoResponse:
+      type: object
+      properties:
+        payment_type:
+          type: string
+          description: "Type of payment channel"
+          example: "bank_transfer"
+        bank:
+          type: string
+          nullable: true
+          description: "Bank name (optional)."
+          example: "bca"
+        va_number:
+          type: string
+          nullable: true
+          description: "Virtual account number for bank transfer (optional)."
+          example: "8765400012345678"
+        bill_key:
+          type: string
+          nullable: true
+          description: "Mandiri Bill payment key (optional)."
+          example: null
+        biller_code:
+          type: string
+          nullable: true
+          description: "Mandiri Biller company code (optional)."
+          example: null
+        qr_url:
+          type: string
+          nullable: true
+          description: "QRIS / GoPay QR code image URL (optional)."
+          example: null
+
+    CreateOrderResponse:
+      type: object
+      properties:
+        invoice_number:
+          type: string
+          description: "Unique order invoice number"
+          example: "INV-20261017-0001"
+        status:
+          type: string
+          description: "Initial order status"
+          example: "waiting_payment"
+        total_amount:
+          type: number
+          format: double
+          description: "Final payable total amount"
+          example: 258000.00
+        payment_deadline:
+          type: string
+          format: date-time
+          description: "Payment expiration deadline"
+          example: "2026-10-18T17:00:00Z"
+        payment_info:
+          $ref: '#/components/schemas/PaymentInfoResponse'
+
+    MidtransWebhookPayload:
+      type: object
+      required:
+        - order_id
+        - transaction_status
+        - status_code
+        - gross_amount
+        - signature_key
+      properties:
+        transaction_time:
+          type: string
+          example: "2026-10-17 17:15:00"
+        transaction_status:
+          type: string
+          description: "Payment lifecycle status (settlement, pending, expire, cancel, deny)"
+          example: "settlement"
+        transaction_id:
+          type: string
+          example: "2e6bbf46-1736-4d2b-a45e-b2d9760773d6"
+        status_message:
+          type: string
+          example: "Midtrans payment notification"
+        status_code:
+          type: string
+          example: "200"
+        signature_key:
+          type: string
+          description: "SHA512 verification signature"
+          example: "97669bbba1cfd145c26..."
+        payment_type:
+          type: string
+          example: "bank_transfer"
+        order_id:
+          type: string
+          description: "Invoice number matching the order"
+          example: "INV-20261017-0001"
+        gross_amount:
+          type: string
+          example: "258000.00"
+        fraud_status:
+          type: string
+          example: "accept"
+        currency:
+          type: string
+          example: "IDR"
+
+    # =========================================================================
+    # ORDER SCHEMAS
+    # =========================================================================
+    OrderListItemResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        invoice_number:
+          type: string
+          example: "INV-20261017-0001"
+        status:
+          type: string
+          enum: [waiting_payment, paid, processing, shipped, completed, cancelled, returned]
+          example: "paid"
+        total_amount:
+          type: number
+          format: double
+          example: 258000.00
+        total_quantity:
+          type: integer
+          description: "Total book copies in the order"
+          example: 2
+        first_item_title:
+          type: string
+          example: "The Pragmatic Programmer"
+        first_item_cover:
+          type: string
+          nullable: true
+          description: "Thumbnail of first order item (optional)."
+          example: "/api/v1/static/covers/pragmatic.jpg"
+        extra_item_count:
+          type: integer
+          description: "Number of additional items beyond the first item"
+          example: 1
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-10-17T17:00:00Z"
+
+    OrderRecipientResponse:
       type: object
       properties:
         name:
           type: string
-          example: "Jalur Nugraha Ekakurir (JNE)"
-        code:
+          example: "John Doe"
+        phone:
+          type: string
+          example: "081234567890"
+        address:
+          type: string
+          example: "Jl. Sudirman No. 45, RT 01 / RW 03"
+        province:
+          type: string
+          example: "DKI Jakarta"
+        city:
+          type: string
+          example: "Jakarta Selatan"
+        district:
+          type: string
+          example: "Kebayoran Baru"
+        subdistrict:
+          type: string
+          example: "Senayan"
+        postal_code:
+          type: string
+          example: "12190"
+
+    OrderShippingResponse:
+      type: object
+      properties:
+        courier:
           type: string
           example: "jne"
-        service:
+        courier_service:
           type: string
-          example: "REG"
-        description:
+          example: "reg"
+        tracking_number:
           type: string
-          example: "Layanan Reguler"
-        cost:
+          nullable: true
+          description: "Courier waybill / tracking code (optional)."
+          example: "SOCAG00123456789"
+        status:
+          type: string
+          example: "in_transit"
+        tracking_url:
+          type: string
+          description: "Internal tracking URL"
+          example: "/orders/INV-20261017-0001/tracking"
+
+    OrderPaymentResponse:
+      type: object
+      properties:
+        payment_type:
+          type: string
+          example: "bank_transfer"
+        bank:
+          type: string
+          nullable: true
+          description: "Bank name (optional)."
+          example: "bca"
+        va_number:
+          type: string
+          nullable: true
+          description: "Virtual account number (optional)."
+          example: "8765400012345678"
+        bill_key:
+          type: string
+          nullable: true
+          description: "Mandiri Bill key (optional)."
+          example: null
+        biller_code:
+          type: string
+          nullable: true
+          description: "Mandiri Biller code (optional)."
+          example: null
+        qr_url:
+          type: string
+          nullable: true
+          description: "QR code URL (optional)."
+          example: null
+        status:
+          type: string
+          example: "settlement"
+        paid_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Payment timestamp (optional)."
+          example: "2026-10-17T17:15:00Z"
+
+    OrderItemResponse:
+      type: object
+      properties:
+        book_id:
           type: integer
-          example: 15000
-        etd:
+          example: 1
+        title:
           type: string
-          example: "2-3"
+          example: "The Pragmatic Programmer"
+        cover_image:
+          type: string
+          nullable: true
+          description: "Book cover thumbnail (optional)."
+          example: "/api/v1/static/covers/pragmatic.jpg"
+        price:
+          type: number
+          format: double
+          example: 135000.00
+        quantity:
+          type: integer
+          example: 2
+        weight_grams:
+          type: integer
+          example: 450
+        subtotal:
+          type: number
+          format: double
+          example: 270000.00
+
+    OrderPricingResponse:
+      type: object
+      properties:
+        items_subtotal:
+          type: number
+          format: double
+          example: 270000.00
+        shipping_cost:
+          type: number
+          format: double
+          example: 15000.00
+        discount_amount:
+          type: number
+          format: double
+          example: 27000.00
+        admin_fee:
+          type: number
+          format: double
+          example: 0.00
+        total_amount:
+          type: number
+          format: double
+          example: 258000.00
+
+    OrderDetailResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        invoice_number:
+          type: string
+          example: "INV-20261017-0001"
+        status:
+          type: string
+          enum: [waiting_payment, paid, processing, shipped, completed, cancelled, returned]
+          example: "paid"
+        payment_deadline:
+          type: string
+          format: date-time
+          example: "2026-10-18T17:00:00Z"
+        paid_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Timestamp when payment was confirmed (optional)."
+          example: "2026-10-17T17:15:00Z"
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Cancellation timestamp (optional)."
+          example: null
+        cancellation_reason:
+          type: string
+          nullable: true
+          description: "Reason why order was cancelled (optional)."
+          example: null
+        returned_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Timestamp when return was processed (optional)."
+          example: null
+        return_reason:
+          type: string
+          nullable: true
+          description: "Reason why order was returned (optional)."
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-10-17T17:00:00Z"
+        recipient:
+          $ref: '#/components/schemas/OrderRecipientResponse'
+        shipping:
+          $ref: '#/components/schemas/OrderShippingResponse'
+        payment:
+          $ref: '#/components/schemas/OrderPaymentResponse'
+          nullable: true
+          description: "Payment transaction info (optional)."
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItemResponse'
+        pricing:
+          $ref: '#/components/schemas/OrderPricingResponse'
