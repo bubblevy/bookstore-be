@@ -27,6 +27,8 @@ func main() {
 		}
 	}
 	logger.Init(cfg.AppEnv, logPath)
+	// start background log retention scheduler (retention: 14 days, check every 24 hours)
+	logger.StartRetentionScheduler(context.Background(), logger.GetLogDir(), 14*24*time.Hour, 24*time.Hour)
 
 	// timezone
 	loc, err := time.LoadLocation("Asia/Jakarta")

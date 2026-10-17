@@ -19,6 +19,11 @@ services:
       retries: 5
     networks:
       - bookstore_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   migration:
     image: migrate/migrate:v4.18.2
@@ -63,6 +68,11 @@ services:
         condition: service_completed_successfully
     networks:
       - bookstore_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   postgres_data:

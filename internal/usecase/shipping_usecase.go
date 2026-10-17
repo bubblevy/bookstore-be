@@ -11,6 +11,7 @@ import (
 	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/repository"
 	"github.com/bubblevy/bookstore/pkg/biteship"
+	"github.com/bubblevy/bookstore/pkg/logger"
 	"gorm.io/gorm"
 )
 
@@ -257,6 +258,7 @@ func (u *shippingUsecase) FulfillOrder(ctx context.Context, invoiceNumber string
 
 	biteshipRes, err := u.biteship.CreateOrderByAreaID(ctx, biteshipReq)
 	if err != nil {
+		logger.Error("dispatch courier order failed", "invoice", invoiceNumber, "courier", order.Courier, "error", err)
 		return nil, fmt.Errorf("%w: %s", entity.ErrDispatchCourierFailed, err.Error())
 	}
 
@@ -300,8 +302,17 @@ func (u *shippingUsecase) FulfillOrder(ctx context.Context, invoiceNumber string
 			}).Error
 	})
 	if err != nil {
+		logger.Error("save shipment transaction failed", "invoice", invoiceNumber, "error", err)
 		return nil, err
 	}
+
+	logger.Info("order fulfilled and courier dispatched",
+		"invoice", order.InvoiceNumber,
+		"courier", order.Courier,
+		"courier_service", order.CourierService,
+		"biteship_order_id", shipment.BiteshipOrderID,
+		"waybill_id", biteshipRes.Courier.WaybillID,
+	)
 
 	return &FulfillOrderResult{
 		ShipmentID:      shipment.ID,
@@ -365,8 +376,15 @@ func (u *shippingUsecase) GetOrderTracking(ctx context.Context, userID uint, inv
 }
 
 func (u *shippingUsecase) HandleWebhook(ctx context.Context, payload biteship.WebhookTrackingPayload) error {
+	logger.Info("biteship webhook received",
+		"biteship_order_id", payload.OrderID,
+		"status", payload.Status,
+		"waybill_id", payload.WaybillID,
+	)
+
 	shipment, err := u.shipmentRepo.FindByBiteshipOrderID(ctx, payload.OrderID)
 	if err != nil || shipment == nil {
+		logger.Warn("biteship webhook ignored - shipment not found", "biteship_order_id", payload.OrderID)
 		return nil
 	}
 
@@ -494,6 +512,10 @@ func (u *shippingUsecase) HandleWebhook(ctx context.Context, payload biteship.We
 			return tx.Model(&entity.Order{}).Where("id = ?", currentOrder.ID).Updates(orderUpdates).Error
 		}
 
+		logger.Info("biteship webhook processed successfully",
+			"biteship_order_id", payload.OrderID,
+			"shipping_status", mappedStatus,
+		)
 		return nil
 	})
 }

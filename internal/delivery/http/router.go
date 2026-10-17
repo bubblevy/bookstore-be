@@ -24,6 +24,7 @@ import (
 func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	// global middleware
 	app.Use(middleware.RequestID())
+	app.Use(middleware.HTTPLogger())
 	app.Use(recover.New())
 	app.Use(helmet.New())
 	app.Use(middleware.CORS([]string{cfg.SMTP.FrontendURL}))

@@ -10,6 +10,7 @@ import (
 	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/repository"
 	"github.com/bubblevy/bookstore/pkg/biteship"
+	"github.com/bubblevy/bookstore/pkg/logger"
 	"github.com/bubblevy/bookstore/pkg/payment"
 	"gorm.io/gorm"
 )
@@ -312,6 +313,7 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 		for _, item := range preview.Items {
 			book, ok := bookMap[item.BookID]
 			if !ok || book.Stock < item.Quantity {
+				logger.Warn("create order failed - insufficient stock", "user_id", userID, "book_id", item.BookID)
 				return entity.ErrInsufficientStock
 			}
 			if err := txCheckoutRepo.DeductBookStock(ctx, item.BookID, item.Quantity); err != nil {
@@ -332,12 +334,14 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 		return txCheckoutRepo.DeleteCartItems(ctx, input.CartItemIDs)
 	})
 	if err != nil {
+		logger.Error("create order failed - transaction error", "user_id", userID, "error", err)
 		return nil, err
 	}
 
 	// External payment gateway charge
 	chargeRes, err := u.midtransSvc.Charge(ctx, invoiceNumber, int64(order.TotalAmount), input.PaymentMethod)
 	if err != nil {
+		logger.Error("create order failed - midtrans charge error", "invoice", invoiceNumber, "error", err)
 		return nil, entity.ErrMidtransChargeFailed
 	}
 
@@ -360,6 +364,14 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 	}
 	_ = u.orderRepo.CreatePayment(ctx, paymentRecord)
 
+	logger.Info("order created successfully",
+		"invoice", invoiceNumber,
+		"user_id", userID,
+		"total_amount", order.TotalAmount,
+		"payment_method", input.PaymentMethod,
+		"courier", input.Courier,
+	)
+
 	result := &CreateOrderResult{
 		InvoiceNumber:   invoiceNumber,
 		Status:          string(order.Status),
@@ -379,8 +391,16 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 func (u *checkoutUsecase) HandleMidtransWebhook(ctx context.Context, input MidtransWebhookInput) error {
 	isValid := u.midtransSvc.VerifyNotification(input.OrderID, input.StatusCode, input.GrossAmount, input.SignatureKey)
 	if !isValid {
+		logger.Warn("midtrans webhook invalid signature", "order_id", input.OrderID, "status_code", input.StatusCode)
 		return entity.ErrInvalidWebhookSignature
 	}
+
+	logger.Info("midtrans webhook received",
+		"order_id", input.OrderID,
+		"transaction_status", input.TransactionStatus,
+		"fraud_status", input.FraudStatus,
+		"gross_amount", input.GrossAmount,
+	)
 
 	return u.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		txOrderRepo := u.orderRepo.WithTx(tx)
@@ -388,12 +408,14 @@ func (u *checkoutUsecase) HandleMidtransWebhook(ctx context.Context, input Midtr
 
 		order, err := txOrderRepo.FindByInvoice(ctx, input.OrderID)
 		if err != nil {
+			logger.Error("midtrans webhook failed - order not found", "order_id", input.OrderID, "error", err)
 			return err
 		}
 
 		if order.Status == entity.OrderStatusShipped ||
 			order.Status == entity.OrderStatusCompleted ||
 			order.Status == entity.OrderStatusReturned {
+			logger.Info("midtrans webhook ignored - order already finished", "order_id", input.OrderID, "status", order.Status)
 			return nil
 		}
 
@@ -428,6 +450,7 @@ func (u *checkoutUsecase) HandleMidtransWebhook(ctx context.Context, input Midtr
 
 		// Rollback inventory stock and voucher usage when order is cancelled/expired
 		if targetOrderStatus == entity.OrderStatusCancelled && order.Status != entity.OrderStatusCancelled {
+			logger.Info("midtrans webhook cancelling order - rolling back inventory stock", "order_id", order.InvoiceNumber)
 			for _, item := range order.Items {
 				_ = txCheckoutRepo.RestoreBookStock(ctx, item.BookID, item.Quantity)
 			}
@@ -436,6 +459,11 @@ func (u *checkoutUsecase) HandleMidtransWebhook(ctx context.Context, input Midtr
 		if targetOrderStatus != "" {
 			_ = txOrderRepo.UpdateOrderStatus(ctx, order.ID, targetOrderStatus)
 		}
+		logger.Info("midtrans webhook processed successfully",
+			"order_id", order.InvoiceNumber,
+			"order_status", targetOrderStatus,
+			"payment_status", targetPaymentStatus,
+		)
 		return txOrderRepo.UpdatePaymentStatus(ctx, order.ID, targetPaymentStatus)
 	})
 }
