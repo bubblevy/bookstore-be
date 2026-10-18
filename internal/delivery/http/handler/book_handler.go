@@ -49,7 +49,7 @@ func (h *BookHandler) FindAll(c fiber.Ctx) error {
 	}
 
 	if minP := c.Query("min_price"); minP != "" {
-		if val, err := strconv.ParseFloat(minP, 64); err == nil && val >= 0 {
+		if val, err := strconv.Atoi(minP); err == nil && val >= 0 {
 			filter.MinPrice = &val
 		} else {
 			return response.Error(c, fiber.StatusBadRequest, "invalid min_price parameter", nil)
@@ -57,7 +57,7 @@ func (h *BookHandler) FindAll(c fiber.Ctx) error {
 	}
 
 	if maxP := c.Query("max_price"); maxP != "" {
-		if val, err := strconv.ParseFloat(maxP, 64); err == nil && val >= 0 {
+		if val, err := strconv.Atoi(maxP); err == nil && val >= 0 {
 			filter.MaxPrice = &val
 		} else {
 			return response.Error(c, fiber.StatusBadRequest, "invalid max_price parameter", nil)
@@ -117,20 +117,32 @@ func (h *BookHandler) Create(c fiber.Ctx) error {
 		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", response.FormatValidationErrors(err))
 	}
 
+	var stockVal int
+	if req.Stock != nil {
+		stockVal = *req.Stock
+	}
+
 	input := usecase.CreateBookInput{
-		CategoryID:      req.CategoryID,
-		AuthorID:        req.AuthorID,
-		PublisherID:     req.PublisherID,
-		Title:           req.Title,
-		ISBN:            req.ISBN,
-		Synopsis:        req.Synopsis,
-		Price:           req.Price,
-		WeightGrams:     req.WeightGrams,
-		Pages:           req.Pages,
-		PublicationYear: req.PublicationYear,
-		Stock:           req.Stock,
-		CoverImage:      req.CoverImage,
-		IsActive:        req.IsActive,
+		CategoryID:         req.CategoryID,
+		AuthorID:           req.AuthorID,
+		PublisherID:        req.PublisherID,
+		Title:              req.Title,
+		ISBN:               &req.ISBN,
+		Synopsis:           &req.Synopsis,
+		Price:              req.Price,
+		OriginalPrice:      req.OriginalPrice,
+		DiscountPercentage: req.DiscountPercentage,
+		WeightGrams:        req.WeightGrams,
+		Pages:              &req.Pages,
+		PublicationYear:    &req.PublicationYear,
+		Language:           req.Language,
+		Length:             req.Length,
+		Width:              req.Width,
+		Height:             req.Height,
+		Condition:          req.Condition,
+		Stock:              stockVal,
+		CoverImage:         &req.CoverImage,
+		IsActive:           req.IsActive,
 	}
 
 	res, err := h.usecase.Create(c.Context(), input)
@@ -167,20 +179,32 @@ func (h *BookHandler) Update(c fiber.Ctx) error {
 		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", response.FormatValidationErrors(err))
 	}
 
+	var updateStockVal int
+	if req.Stock != nil {
+		updateStockVal = *req.Stock
+	}
+
 	input := usecase.UpdateBookInput{
-		CategoryID:      req.CategoryID,
-		AuthorID:        req.AuthorID,
-		PublisherID:     req.PublisherID,
-		Title:           req.Title,
-		ISBN:            req.ISBN,
-		Synopsis:        req.Synopsis,
-		Price:           req.Price,
-		WeightGrams:     req.WeightGrams,
-		Pages:           req.Pages,
-		PublicationYear: req.PublicationYear,
-		Stock:           req.Stock,
-		CoverImage:      req.CoverImage,
-		IsActive:        req.IsActive,
+		CategoryID:         req.CategoryID,
+		AuthorID:           req.AuthorID,
+		PublisherID:        req.PublisherID,
+		Title:              req.Title,
+		ISBN:               &req.ISBN,
+		Synopsis:           &req.Synopsis,
+		Price:              req.Price,
+		OriginalPrice:      req.OriginalPrice,
+		DiscountPercentage: req.DiscountPercentage,
+		WeightGrams:        req.WeightGrams,
+		Pages:              &req.Pages,
+		PublicationYear:    &req.PublicationYear,
+		Language:           req.Language,
+		Length:             req.Length,
+		Width:              req.Width,
+		Height:             req.Height,
+		Condition:          req.Condition,
+		Stock:              updateStockVal,
+		CoverImage:         &req.CoverImage,
+		IsActive:           req.IsActive,
 	}
 
 	res, err := h.usecase.Update(c.Context(), uint(id), input)

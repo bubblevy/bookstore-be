@@ -68,6 +68,14 @@ func (m *MockShipmentRepository) FindByBiteshipOrderID(ctx context.Context, bite
 	return nil, args.Error(1)
 }
 
+func (m *MockShipmentRepository) FindByIdentifier(ctx context.Context, identifier string) (*entity.Shipment, error) {
+	args := m.Called(ctx, identifier)
+	if res := args.Get(0); res != nil {
+		return res.(*entity.Shipment), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
 func (m *MockShipmentRepository) FindByInvoiceNumber(ctx context.Context, invoiceNumber string) (*entity.Shipment, error) {
 	args := m.Called(ctx, invoiceNumber)
 	if res := args.Get(0); res != nil {
@@ -164,7 +172,7 @@ func TestShippingUsecase_GetShippingRates(t *testing.T) {
 		assert.Equal(t, 1000, res.TotalWeightGrams)
 		assert.Equal(t, "Jl. Pemuda No. 45, Kel. Kramat Pela, Kec. Kebayoran Baru, Jakarta Selatan, DKI Jakarta 12250", res.DestinationArea)
 		assert.Len(t, res.Options, 1)
-		assert.Equal(t, float64(20000), res.Options[0].Price)
+		assert.Equal(t, 20000, res.Options[0].Price)
 	})
 
 	t.Run("empty cart item returns ErrCartEmpty", func(t *testing.T) {
@@ -411,6 +419,100 @@ func TestShippingUsecase_HandleWebhook(t *testing.T) {
 
 		err := uc.HandleWebhook(context.Background(), payload)
 		assert.NoError(t, err)
+		assert.NoError(t, sqlMock.ExpectationsWereMet())
+	})
+
+	t.Run("webhook shipped updates allocated shipment to in_transit and order to shipped", func(t *testing.T) {
+		gormDB, sqlMock := setupGormSqlmock(t)
+		mockShipmentRepo := new(MockShipmentRepository)
+
+		uc := usecase.NewShippingUsecase(gormDB, nil, mockShipmentRepo, nil, nil, nil, defaultStoreShippingConfig())
+
+		shipment := &entity.Shipment{
+			ID:              2,
+			OrderID:         20,
+			BiteshipOrderID: "bite-order-abc",
+			Status:          entity.ShippingStatusAllocated,
+		}
+		mockShipmentRepo.On("FindByBiteshipOrderID", mock.Anything, "bite-order-abc").Return(shipment, nil).Once()
+
+		sqlMock.ExpectBegin()
+
+		// 1. Update Shipment to in_transit
+		sqlMock.ExpectExec(`UPDATE "shipments" SET`).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		// 2. Preload order inside transaction
+		sqlMock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "orders" WHERE id = $1 ORDER BY "orders"."id" LIMIT $2`)).
+			WithArgs(20, 1).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "status"}).
+				AddRow(20, entity.OrderStatusProcessing))
+
+		sqlMock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "order_items" WHERE "order_items"."order_id" = $1`)).
+			WithArgs(20).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "order_id"}))
+
+		// 3. Update Order status to Shipped
+		sqlMock.ExpectExec(`UPDATE "orders" SET`).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		sqlMock.ExpectCommit()
+
+		payload := biteship.WebhookTrackingPayload{
+			ID:        "bite-order-abc",
+			Status:    "shipped",
+			WaybillID: "SOCAG0002",
+		}
+
+		err := uc.HandleWebhook(context.Background(), payload)
+		assert.NoError(t, err)
+		assert.Equal(t, entity.ShippingStatusInTransit, shipment.Status)
+		assert.NoError(t, sqlMock.ExpectationsWereMet())
+	})
+
+	t.Run("webhook lookup falls back to FindByIdentifier when FindByBiteshipOrderID returns nil", func(t *testing.T) {
+		gormDB, sqlMock := setupGormSqlmock(t)
+		mockShipmentRepo := new(MockShipmentRepository)
+
+		uc := usecase.NewShippingUsecase(gormDB, nil, mockShipmentRepo, nil, nil, nil, defaultStoreShippingConfig())
+
+		shipment := &entity.Shipment{
+			ID:              3,
+			OrderID:         30,
+			BiteshipOrderID: "bite-order-real",
+			Status:          entity.ShippingStatusAllocated,
+		}
+		mockShipmentRepo.On("FindByBiteshipOrderID", mock.Anything, "INV-20261018-001").Return(nil, nil).Once()
+		mockShipmentRepo.On("FindByIdentifier", mock.Anything, "INV-20261018-001").Return(shipment, nil).Once()
+
+		sqlMock.ExpectBegin()
+
+		sqlMock.ExpectExec(`UPDATE "shipments" SET`).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		sqlMock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "orders" WHERE id = $1 ORDER BY "orders"."id" LIMIT $2`)).
+			WithArgs(30, 1).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "status"}).
+				AddRow(30, entity.OrderStatusProcessing))
+
+		sqlMock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "order_items" WHERE "order_items"."order_id" = $1`)).
+			WithArgs(30).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "order_id"}))
+
+		sqlMock.ExpectExec(`UPDATE "orders" SET`).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		sqlMock.ExpectCommit()
+
+		payload := biteship.WebhookTrackingPayload{
+			OrderID:   "INV-20261018-001",
+			Status:    "in_transit",
+			WaybillID: "WAYBILL-333",
+		}
+
+		err := uc.HandleWebhook(context.Background(), payload)
+		assert.NoError(t, err)
+		assert.Equal(t, entity.ShippingStatusInTransit, shipment.Status)
 		assert.NoError(t, sqlMock.ExpectationsWereMet())
 	})
 }

@@ -38,15 +38,49 @@ func (r *orderRepository) CreatePayment(ctx context.Context, payment *entity.Pay
 }
 
 func (r *orderRepository) UpdateOrderStatus(ctx context.Context, orderID uint, status entity.OrderStatus) error {
+	updates := map[string]interface{}{
+		"status":     status,
+		"updated_at": time.Now(),
+	}
+	if status == entity.OrderStatusPaid {
+		updates["paid_at"] = time.Now()
+	} else if status == entity.OrderStatusCancelled {
+		updates["cancelled_at"] = time.Now()
+	}
 	return r.db.WithContext(ctx).Model(&entity.Order{}).
 		Where("id = ?", orderID).
-		Update("status", status).Error
+		Updates(updates).Error
 }
 
 func (r *orderRepository) UpdatePaymentStatus(ctx context.Context, orderID uint, status entity.PaymentStatus) error {
+	updates := map[string]interface{}{
+		"status":     status,
+		"updated_at": time.Now(),
+	}
+	if status == entity.PaymentStatusSettlement {
+		updates["paid_at"] = time.Now()
+	}
 	return r.db.WithContext(ctx).Model(&entity.Payment{}).
 		Where("order_id = ?", orderID).
-		Update("status", status).Error
+		Updates(updates).Error
+}
+
+func (r *orderRepository) UpdatePaymentDetails(ctx context.Context, orderID uint, status entity.PaymentStatus, rawResponse *string, paidAt *time.Time) error {
+	updates := map[string]interface{}{
+		"status":     status,
+		"updated_at": time.Now(),
+	}
+	if rawResponse != nil && *rawResponse != "" {
+		updates["raw_response"] = *rawResponse
+	}
+	if paidAt != nil {
+		updates["paid_at"] = *paidAt
+	} else if status == entity.PaymentStatusSettlement {
+		updates["paid_at"] = time.Now()
+	}
+	return r.db.WithContext(ctx).Model(&entity.Payment{}).
+		Where("order_id = ?", orderID).
+		Updates(updates).Error
 }
 
 func (r *orderRepository) MarkAsReturned(ctx context.Context, orderID uint, reason string) error {

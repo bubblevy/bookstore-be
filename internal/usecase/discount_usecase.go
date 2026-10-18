@@ -12,10 +12,10 @@ import (
 )
 
 type DiscountTierInput struct {
-	MinSpend    float64
+	MinSpend    int
 	RewardType  string
-	RewardValue float64
-	MaxReward   *float64
+	RewardValue int
+	MaxReward   *int
 }
 
 type CreateDiscountInput struct {
@@ -23,9 +23,9 @@ type CreateDiscountInput struct {
 	Name              string
 	Description       *string
 	DiscountType      string
-	DiscountValue     float64
-	MinPurchase       float64
-	MaxDiscountAmount *float64
+	DiscountValue     int
+	MinPurchase       int
+	MaxDiscountAmount *int
 	Quota             int
 	IsAllBooks        bool
 	IsActive          *bool
@@ -40,9 +40,9 @@ type UpdateDiscountInput struct {
 	Name              string
 	Description       *string
 	DiscountType      string
-	DiscountValue     float64
-	MinPurchase       float64
-	MaxDiscountAmount *float64
+	DiscountValue     int
+	MinPurchase       int
+	MaxDiscountAmount *int
 	Quota             int
 	IsAllBooks        bool
 	IsActive          *bool
@@ -53,11 +53,11 @@ type UpdateDiscountInput struct {
 }
 
 type DiscountTierResult struct {
-	ID          uint     `json:"id"`
-	MinSpend    float64  `json:"min_spend"`
-	RewardType  string   `json:"reward_type"`
-	RewardValue float64  `json:"reward_value"`
-	MaxReward   *float64 `json:"max_reward,omitempty"`
+	ID          uint   `json:"id"`
+	MinSpend    int    `json:"min_spend"`
+	RewardType  string `json:"reward_type"`
+	RewardValue int    `json:"reward_value"`
+	MaxReward   *int   `json:"max_reward,omitempty"`
 }
 
 type DiscountBookItem struct {
@@ -71,8 +71,8 @@ type DiscountListItem struct {
 	Code          string    `json:"code"`
 	Name          string    `json:"name"`
 	DiscountType  string    `json:"discount_type"`
-	DiscountValue float64   `json:"discount_value"`
-	MinPurchase   float64   `json:"min_purchase"`
+	DiscountValue int       `json:"discount_value"`
+	MinPurchase   int       `json:"min_purchase"`
 	Quota         int       `json:"quota"`
 	UsedCount     int       `json:"used_count"`
 	IsAllBooks    bool      `json:"is_all_books"`
@@ -87,9 +87,9 @@ type DiscountResult struct {
 	Name              string               `json:"name"`
 	Description       *string              `json:"description,omitempty"`
 	DiscountType      string               `json:"discount_type"`
-	DiscountValue     float64              `json:"discount_value"`
-	MinPurchase       float64              `json:"min_purchase"`
-	MaxDiscountAmount *float64             `json:"max_discount_amount,omitempty"`
+	DiscountValue     int                  `json:"discount_value"`
+	MinPurchase       int                  `json:"min_purchase"`
+	MaxDiscountAmount *int                 `json:"max_discount_amount,omitempty"`
 	Quota             int                  `json:"quota"`
 	UsedCount         int                  `json:"used_count"`
 	IsAllBooks        bool                 `json:"is_all_books"`
@@ -103,10 +103,10 @@ type DiscountResult struct {
 }
 
 type CheckDiscountResult struct {
-	Code           string  `json:"code"`
-	Name           string  `json:"name"`
-	DiscountAmount float64 `json:"discount_amount"`
-	FinalAmount    float64 `json:"final_amount"`
+	Code           string `json:"code"`
+	Name           string `json:"name"`
+	DiscountAmount int    `json:"discount_amount"`
+	FinalAmount    int    `json:"final_amount"`
 }
 
 type CartItemInput struct {
@@ -412,8 +412,8 @@ func (u *discountUsecase) ValidateAndCalculate(ctx context.Context, code string,
 		return nil, entity.ErrDiscountBookNotFound
 	}
 
-	var totalCartAmount float64
-	var eligibleSubtotal float64
+	var totalCartAmount int
+	var eligibleSubtotal int
 
 	eligibleBookMap := make(map[uint]bool)
 	for _, b := range discount.Books {
@@ -422,7 +422,7 @@ func (u *discountUsecase) ValidateAndCalculate(ctx context.Context, code string,
 
 	for _, book := range books {
 		qty := qtyMap[book.ID]
-		itemTotal := book.Price * float64(qty)
+		itemTotal := book.Price * qty
 		totalCartAmount += itemTotal
 
 		if discount.GetIsAllBooks() || eligibleBookMap[book.ID] {

@@ -47,7 +47,8 @@ func (h *CategoryHandler) Create(c fiber.Ctx) error {
 	}
 
 	input := usecase.CreateCategoryInput{
-		Name: req.Name,
+		Name:     req.Name,
+		ImageURL: req.ImageURL,
 	}
 
 	res, err := h.usecase.Create(c.Context(), input)
@@ -97,8 +98,9 @@ func (h *CategoryHandler) Update(c fiber.Ctx) error {
 	}
 
 	input := usecase.UpdateCategoryInput{
-		ID:   uint(id),
-		Name: req.Name,
+		ID:       uint(id),
+		Name:     req.Name,
+		ImageURL: req.ImageURL,
 	}
 
 	res, err := h.usecase.Update(c.Context(), uint(id), input)

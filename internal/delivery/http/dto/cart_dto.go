@@ -13,7 +13,7 @@ type CartBookSummary struct {
 	ID          uint    `json:"id"`
 	Title       string  `json:"title"`
 	Slug        string  `json:"slug"`
-	Price       float64 `json:"price"`
+	Price       int     `json:"price"`
 	WeightGrams int     `json:"weight_grams"`
 	Stock       int     `json:"stock"`
 	CoverImage  *string `json:"cover_image,omitempty"`
@@ -24,7 +24,7 @@ type CartItemResponse struct {
 	ID        uint            `json:"id"`
 	BookID    uint            `json:"book_id"`
 	Quantity  int             `json:"quantity"`
-	Subtotal  float64         `json:"subtotal"`
+	Subtotal  int             `json:"subtotal"`
 	Subweight int             `json:"subweight_grams"`
 	Book      CartBookSummary `json:"book"`
 }
@@ -34,7 +34,7 @@ type CartResponse struct {
 	TotalItems  int                `json:"total_items"`
 	TotalQty    int                `json:"total_quantity"`
 	TotalWeight int                `json:"total_weight_grams"`
-	TotalPrice  float64            `json:"total_price"`
+	TotalPrice  int                `json:"total_price"`
 	Items       []CartItemResponse `json:"items"`
 }
 

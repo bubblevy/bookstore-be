@@ -38,7 +38,7 @@ type CourierOptionResult struct {
 	CourierServiceName string
 	CourierServiceCode string
 	Description        string
-	Price              float64
+	Price              int
 	ETD                string
 	Type               string
 }
@@ -174,7 +174,7 @@ func (u *shippingUsecase) GetShippingRates(ctx context.Context, userID uint, inp
 			CourierServiceName: rate.CourierServiceName,
 			CourierServiceCode: rate.CourierServiceCode,
 			Description:        rate.Description,
-			Price:              float64(rate.Price),
+			Price:              int(rate.Price),
 			ETD:                etd,
 			Type:               rate.Type,
 		})
@@ -376,22 +376,50 @@ func (u *shippingUsecase) GetOrderTracking(ctx context.Context, userID uint, inv
 }
 
 func (u *shippingUsecase) HandleWebhook(ctx context.Context, payload biteship.WebhookTrackingPayload) error {
+	orderID := payload.GetOrderID()
+	trackingID := payload.GetTrackingID()
+	waybillID := payload.GetWaybillID()
+	statusStr := payload.GetStatus()
+
 	logger.Info("biteship webhook received",
-		"biteship_order_id", payload.OrderID,
-		"status", payload.Status,
-		"waybill_id", payload.WaybillID,
+		"biteship_order_id", orderID,
+		"tracking_id", trackingID,
+		"waybill_id", waybillID,
+		"status", statusStr,
 	)
 
-	shipment, err := u.shipmentRepo.FindByBiteshipOrderID(ctx, payload.OrderID)
+	var shipment *entity.Shipment
+	var err error
+	if orderID != "" {
+		shipment, err = u.shipmentRepo.FindByBiteshipOrderID(ctx, orderID)
+	}
+	if (shipment == nil || err != nil) && orderID != "" {
+		shipment, err = u.shipmentRepo.FindByIdentifier(ctx, orderID)
+	}
+	if (shipment == nil || err != nil) && trackingID != "" {
+		shipment, err = u.shipmentRepo.FindByIdentifier(ctx, trackingID)
+	}
+	if (shipment == nil || err != nil) && waybillID != "" {
+		shipment, err = u.shipmentRepo.FindByIdentifier(ctx, waybillID)
+	}
+
 	if err != nil || shipment == nil {
-		logger.Warn("biteship webhook ignored - shipment not found", "biteship_order_id", payload.OrderID)
+		logger.Warn("biteship webhook ignored - shipment not found",
+			"biteship_order_id", orderID,
+			"tracking_id", trackingID,
+			"waybill_id", waybillID,
+		)
 		return nil
 	}
 
 	var mappedStatus entity.ShippingStatus
 	var mappedOrderStatus *entity.OrderStatus
 
-	cleanStatus := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(payload.Status), "_", ""))
+	cleanStatus := strings.ToLower(strings.TrimSpace(statusStr))
+	cleanStatus = strings.ReplaceAll(cleanStatus, "_", "")
+	cleanStatus = strings.ReplaceAll(cleanStatus, "-", "")
+	cleanStatus = strings.ReplaceAll(cleanStatus, " ", "")
+
 	switch cleanStatus {
 	case "placed":
 		mappedStatus = entity.ShippingStatusPlaced
@@ -401,9 +429,9 @@ func (u *shippingUsecase) HandleWebhook(ctx context.Context, payload biteship.We
 		mappedStatus = entity.ShippingStatusConfirmed
 	case "allocated":
 		mappedStatus = entity.ShippingStatusAllocated
-	case "pickingup":
+	case "pickingup", "pickup":
 		mappedStatus = entity.ShippingStatusPickingUp
-	case "picked":
+	case "picked", "pickedup":
 		mappedStatus = entity.ShippingStatusPicked
 		st := entity.OrderStatusShipped
 		mappedOrderStatus = &st
@@ -411,11 +439,11 @@ func (u *shippingUsecase) HandleWebhook(ctx context.Context, payload biteship.We
 		mappedStatus = entity.ShippingStatusDroppingOff
 		st := entity.OrderStatusShipped
 		mappedOrderStatus = &st
-	case "intransit":
+	case "intransit", "transit", "shipped", "shipping", "delivering", "onprocess":
 		mappedStatus = entity.ShippingStatusInTransit
 		st := entity.OrderStatusShipped
 		mappedOrderStatus = &st
-	case "returnintransit":
+	case "returnintransit", "returntransit":
 		mappedStatus = entity.ShippingStatusReturnInTransit
 		st := entity.OrderStatusShipped
 		mappedOrderStatus = &st
@@ -427,7 +455,7 @@ func (u *shippingUsecase) HandleWebhook(ctx context.Context, payload biteship.We
 		mappedStatus = entity.ShippingStatusRejected
 	case "couriernotfound":
 		mappedStatus = entity.ShippingStatusCourierNotFound
-	case "cancelled":
+	case "cancelled", "canceled":
 		mappedStatus = entity.ShippingStatusCancelled
 	case "returned":
 		mappedStatus = entity.ShippingStatusReturned
@@ -440,12 +468,16 @@ func (u *shippingUsecase) HandleWebhook(ctx context.Context, payload biteship.We
 		st := entity.OrderStatusReturned
 		mappedOrderStatus = &st
 	default:
+		logger.Warn("biteship webhook unhandled status", "status", statusStr, "clean_status", cleanStatus)
 		return nil
 	}
 
 	shipment.Status = mappedStatus
-	if payload.WaybillID != "" {
-		shipment.WaybillNumber = &payload.WaybillID
+	if waybillID != "" {
+		shipment.WaybillNumber = &waybillID
+	}
+	if trackingID != "" {
+		shipment.BiteshipTrackingID = &trackingID
 	}
 
 	now := time.Now()
@@ -456,6 +488,9 @@ func (u *shippingUsecase) HandleWebhook(ctx context.Context, payload biteship.We
 		}
 		if shipment.WaybillNumber != nil && *shipment.WaybillNumber != "" {
 			shipmentUpdates["waybill_number"] = *shipment.WaybillNumber
+		}
+		if shipment.BiteshipTrackingID != nil && *shipment.BiteshipTrackingID != "" {
+			shipmentUpdates["biteship_tracking_id"] = *shipment.BiteshipTrackingID
 		}
 		if err := tx.Model(&entity.Shipment{}).Where("id = ?", shipment.ID).Updates(shipmentUpdates).Error; err != nil {
 			return err
@@ -475,11 +510,11 @@ func (u *shippingUsecase) HandleWebhook(ctx context.Context, payload biteship.We
 				"status":     *mappedOrderStatus,
 				"updated_at": now,
 			}
-			if payload.WaybillID != "" && (currentOrder.ShippingTrackingNumber == nil || *currentOrder.ShippingTrackingNumber == "") {
-				orderUpdates["shipping_tracking_number"] = payload.WaybillID
+			if waybillID != "" && (currentOrder.ShippingTrackingNumber == nil || *currentOrder.ShippingTrackingNumber == "") {
+				orderUpdates["shipping_tracking_number"] = waybillID
 			}
 
-			if cleanStatus == "returnintransit" {
+			if cleanStatus == "returnintransit" || cleanStatus == "returntransit" {
 				reason := "Courier initiated Return to Sender (package is in transit back to origin)"
 				if payload.Note != "" {
 					reason = payload.Note
@@ -513,7 +548,7 @@ func (u *shippingUsecase) HandleWebhook(ctx context.Context, payload biteship.We
 		}
 
 		logger.Info("biteship webhook processed successfully",
-			"biteship_order_id", payload.OrderID,
+			"biteship_order_id", orderID,
 			"shipping_status", mappedStatus,
 		)
 		return nil

@@ -3,10 +3,10 @@ package dto
 import "time"
 
 type DiscountTierRequest struct {
-	MinSpend    float64  `json:"min_spend" validate:"required,gte=0"`
-	RewardType  string   `json:"reward_type" validate:"required,oneof=PERCENTAGE FIXED"`
-	RewardValue float64  `json:"reward_value" validate:"required,gt=0"`
-	MaxReward   *float64 `json:"max_reward" validate:"omitempty,gt=0"`
+	MinSpend    int     `json:"min_spend" validate:"required,gte=0"`
+	RewardType  string  `json:"reward_type" validate:"required,oneof=PERCENTAGE FIXED"`
+	RewardValue int     `json:"reward_value" validate:"required,gt=0"`
+	MaxReward   *int    `json:"max_reward" validate:"omitempty,gt=0"`
 }
 
 type CreateDiscountRequest struct {
@@ -14,9 +14,9 @@ type CreateDiscountRequest struct {
 	Name              string                `json:"name" validate:"required,min=3,max=150"`
 	Description       *string               `json:"description" validate:"omitempty"`
 	DiscountType      string                `json:"discount_type" validate:"required,oneof=PERCENTAGE FIXED TIERED"`
-	DiscountValue     float64               `json:"discount_value" validate:"required,gt=0"`
-	MinPurchase       float64               `json:"min_purchase" validate:"gte=0"`
-	MaxDiscountAmount *float64              `json:"max_discount_amount" validate:"omitempty,gt=0"`
+	DiscountValue     int                   `json:"discount_value" validate:"required,gt=0"`
+	MinPurchase       int                   `json:"min_purchase" validate:"gte=0"`
+	MaxDiscountAmount *int                  `json:"max_discount_amount" validate:"omitempty,gt=0"`
 	Quota             int                   `json:"quota" validate:"gte=0"`
 	IsAllBooks        *bool                 `json:"is_all_books" validate:"required"`
 	IsActive          *bool                 `json:"is_active"`
@@ -31,9 +31,9 @@ type UpdateDiscountRequest struct {
 	Name              string                `json:"name" validate:"required,min=3,max=150"`
 	Description       *string               `json:"description" validate:"omitempty"`
 	DiscountType      string                `json:"discount_type" validate:"required,oneof=PERCENTAGE FIXED TIERED"`
-	DiscountValue     float64               `json:"discount_value" validate:"required,gt=0"`
-	MinPurchase       float64               `json:"min_purchase" validate:"gte=0"`
-	MaxDiscountAmount *float64              `json:"max_discount_amount" validate:"omitempty,gt=0"`
+	DiscountValue     int                   `json:"discount_value" validate:"required,gt=0"`
+	MinPurchase       int                   `json:"min_purchase" validate:"gte=0"`
+	MaxDiscountAmount *int                  `json:"max_discount_amount" validate:"omitempty,gt=0"`
 	Quota             int                   `json:"quota" validate:"gte=0"`
 	IsAllBooks        *bool                 `json:"is_all_books" validate:"required"`
 	IsActive          *bool                 `json:"is_active"`

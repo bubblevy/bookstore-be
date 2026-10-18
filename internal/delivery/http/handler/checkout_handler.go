@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 
 	"github.com/bubblevy/bookstore/internal/delivery/http/dto"
@@ -196,13 +197,19 @@ func (h *CheckoutHandler) CreateOrder(c fiber.Ctx) error {
 }
 
 func (h *CheckoutHandler) HandleMidtransWebhook(c fiber.Ctx) error {
-	rawBody := c.Body()
+	rawBody := append([]byte(nil), c.Body()...)
 	var payload dto.MidtransWebhookPayload
 	if err := c.Bind().Body(&payload); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"status":  "error",
-			"message": "cannot parse notification body",
-		})
+		if jsonErr := json.Unmarshal(rawBody, &payload); jsonErr != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"status":  "error",
+				"message": "cannot parse notification body",
+			})
+		}
+	}
+
+	if len(rawBody) == 0 {
+		rawBody, _ = json.Marshal(payload)
 	}
 
 	input := usecase.MidtransWebhookInput{

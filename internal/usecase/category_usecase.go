@@ -11,26 +11,32 @@ import (
 )
 
 type CreateCategoryInput struct {
-	Name string
+	Name     string
+	ImageURL *string
 }
 
 type UpdateCategoryInput struct {
-	ID   uint
-	Name string
+	ID       uint
+	Name     string
+	ImageURL *string
 }
 
 type CategoryList struct {
-	ID   uint   `json:"id"`
-	Name string `json:"name"`
-	Slug string `json:"slug"`
+	ID         uint    `json:"id"`
+	Name       string  `json:"name"`
+	Slug       string  `json:"slug"`
+	ImageURL   *string `json:"image_url,omitempty"`
+	TotalBooks int64   `json:"total_books"`
 }
 
 type CategoryResult struct {
-	ID        uint      `json:"id"`
-	Name      string    `json:"name"`
-	Slug      string    `json:"slug"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID         uint      `json:"id"`
+	Name       string    `json:"name"`
+	Slug       string    `json:"slug"`
+	ImageURL   *string   `json:"image_url,omitempty"`
+	TotalBooks int64     `json:"total_books"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 type CategoryUsecase interface {
@@ -51,11 +57,13 @@ func NewCategoryUsecase(categoryRepo repository.CategoryRepository) CategoryUsec
 
 func (u *categoryUsecase) toResponse(cat *entity.Category) *CategoryResult {
 	return &CategoryResult{
-		ID:        cat.ID,
-		Name:      cat.Name,
-		Slug:      cat.Slug,
-		CreatedAt: cat.CreatedAt,
-		UpdatedAt: cat.UpdatedAt,
+		ID:         cat.ID,
+		Name:       cat.Name,
+		Slug:       cat.Slug,
+		ImageURL:   cat.ImageURL,
+		TotalBooks: cat.TotalBooks,
+		CreatedAt:  cat.CreatedAt,
+		UpdatedAt:  cat.UpdatedAt,
 	}
 }
 
@@ -71,8 +79,9 @@ func (u *categoryUsecase) Create(ctx context.Context, req CreateCategoryInput) (
 	}
 
 	category := &entity.Category{
-		Name: req.Name,
-		Slug: categorySlug,
+		Name:     req.Name,
+		Slug:     categorySlug,
+		ImageURL: req.ImageURL,
 	}
 
 	if err := u.categoryRepo.Create(ctx, category); err != nil {
@@ -91,9 +100,11 @@ func (u *categoryUsecase) FindAll(ctx context.Context) ([]CategoryList, error) {
 	responses := make([]CategoryList, 0, len(categories))
 	for _, cat := range categories {
 		responses = append(responses, CategoryList{
-			ID:   cat.ID,
-			Name: cat.Name,
-			Slug: cat.Slug,
+			ID:         cat.ID,
+			Name:       cat.Name,
+			Slug:       cat.Slug,
+			ImageURL:   cat.ImageURL,
+			TotalBooks: cat.TotalBooks,
 		})
 	}
 	return responses, nil
@@ -130,6 +141,7 @@ func (u *categoryUsecase) Update(ctx context.Context, id uint, req UpdateCategor
 
 	category.Name = req.Name
 	category.Slug = categorySlug
+	category.ImageURL = req.ImageURL
 
 	if err := u.categoryRepo.Update(ctx, category); err != nil {
 		return nil, fmt.Errorf("failed to update category: %w", err)

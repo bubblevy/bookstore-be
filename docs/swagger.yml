@@ -950,16 +950,14 @@ paths:
           name: min_price
           required: false
           schema:
-            type: number
-            format: double
+            type: integer
             minimum: 0
           description: Minimum book price filter
         - in: query
           name: max_price
           required: false
           schema:
-            type: number
-            format: double
+            type: integer
             minimum: 0
           description: Maximum book price filter
         - in: query
@@ -2504,6 +2502,12 @@ components:
           minLength: 2
           maxLength: 100
           example: "Sains & Teknologi"
+        image_url:
+          type: string
+          maxLength: 255
+          nullable: true
+          description: "URL or path to category icon/image (optional)."
+          example: "https://example.com/categories/science.jpg"
 
     UpdateCategoryRequest:
       type: object
@@ -2515,6 +2519,12 @@ components:
           minLength: 2
           maxLength: 100
           example: "Fiksi Ilmiah"
+        image_url:
+          type: string
+          maxLength: 255
+          nullable: true
+          description: "URL or path to category icon/image (optional)."
+          example: "https://example.com/categories/scifi.jpg"
 
     CategoryListItem:
       type: object
@@ -2528,6 +2538,14 @@ components:
         slug:
           type: string
           example: "fiksi"
+        image_url:
+          type: string
+          nullable: true
+          example: "https://example.com/categories/fiction.jpg"
+        total_books:
+          type: integer
+          description: "Total number of active books in this category."
+          example: 24
 
     CategoryResult:
       type: object
@@ -2541,6 +2559,14 @@ components:
         slug:
           type: string
           example: "fiksi-ilmiah"
+        image_url:
+          type: string
+          nullable: true
+          example: "https://example.com/categories/scifi.jpg"
+        total_books:
+          type: integer
+          description: "Total number of active books in this category."
+          example: 24
         created_at:
           type: string
           format: date-time
@@ -2694,8 +2720,19 @@ components:
         - author_id
         - publisher_id
         - title
+        - isbn
+        - synopsis
         - price
         - weight_grams
+        - pages
+        - publication_year
+        - language
+        - length
+        - width
+        - height
+        - condition
+        - stock
+        - cover_image
       properties:
         category_id:
           type: integer
@@ -2718,20 +2755,31 @@ components:
         isbn:
           type: string
           maxLength: 30
-          nullable: true
-          description: "ISBN number (optional, max 30 characters)."
+          description: "ISBN number (required, max 30 characters)."
           example: "9780135957059"
         synopsis:
           type: string
-          nullable: true
-          description: "Synopsis or overview of the book (optional)."
+          minLength: 5
+          description: "Synopsis or overview of the book (required, minimum 5 characters)."
           example: "Your journey to mastery in software development."
         price:
-          type: number
-          format: double
+          type: integer
           minimum: 0
-          description: "Book price"
-          example: 135000.00
+          description: "Book selling price (or normal price when no discount). If discount_percentage is provided without original_price, system automatically uses this price as original_price and computes discounted selling price."
+          example: 135000
+        original_price:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: "Original strike-through price before discount (optional; if omitted when discount_percentage is provided, system automatically uses price as original_price and computes discounted selling price)."
+          example: 150000
+        discount_percentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+          nullable: true
+          description: "Direct discount percentage (optional; when provided without original_price, system automatically treats price as original_price and calculates discounted selling price)."
+          example: 10
         weight_grams:
           type: integer
           minimum: 1
@@ -2740,28 +2788,54 @@ components:
         pages:
           type: integer
           minimum: 1
-          nullable: true
-          description: "Total number of pages (optional)."
+          description: "Total number of pages (required, minimum 1)."
           example: 352
         publication_year:
           type: integer
           minimum: 1000
           maximum: 2100
-          nullable: true
-          description: "Year of publication between 1000 and 2100 (optional)."
+          description: "Year of publication between 1000 and 2100 (required)."
           example: 2019
+        language:
+          type: string
+          minLength: 2
+          maxLength: 50
+          description: "Language of the book edition."
+          example: "Indonesia"
+        length:
+          type: number
+          format: double
+          minimum: 0.1
+          description: "Book length in centimeters for package shipping calculation."
+          example: 20.0
+        width:
+          type: number
+          format: double
+          minimum: 0.1
+          description: "Book width in centimeters for package shipping calculation."
+          example: 13.5
+        height:
+          type: number
+          format: double
+          minimum: 0.1
+          description: "Book height in centimeters for package shipping calculation."
+          example: 2.0
+        condition:
+          type: string
+          minLength: 2
+          maxLength: 100
+          description: "Physical condition of the book (e.g. New, 100% Baru & Segel Penerbit)."
+          example: "100% Baru & Segel Penerbit"
         stock:
           type: integer
           minimum: 0
-          default: 0
-          description: "Initial stock inventory (optional, defaults to 0)."
+          description: "Stock inventory (required, minimum 0)."
           example: 40
         cover_image:
           type: string
           maxLength: 255
-          nullable: true
-          description: "Relative URL or static path to the cover image (optional)."
-          example: "/api/v1/static/covers/pragmatic-programmer.jpg"
+          description: "Relative URL or static path to the cover image (required, max 255 characters)."
+          example: "https://example.com/static/covers/pragmatic-programmer.jpg"
         is_active:
           type: boolean
           default: true
@@ -2775,8 +2849,19 @@ components:
         - author_id
         - publisher_id
         - title
+        - isbn
+        - synopsis
         - price
         - weight_grams
+        - pages
+        - publication_year
+        - language
+        - length
+        - width
+        - height
+        - condition
+        - stock
+        - cover_image
       properties:
         category_id:
           type: integer
@@ -2799,20 +2884,31 @@ components:
         isbn:
           type: string
           maxLength: 30
-          nullable: true
-          description: "ISBN number (optional, max 30 characters)."
+          description: "ISBN number (required, max 30 characters)."
           example: "9780135957059"
         synopsis:
           type: string
-          nullable: true
-          description: "Synopsis or overview of the book (optional)."
+          minLength: 5
+          description: "Synopsis or overview of the book (required, minimum 5 characters)."
           example: "Updated 20th Anniversary Edition with modern best practices."
         price:
-          type: number
-          format: double
+          type: integer
           minimum: 0
-          description: "Book price"
-          example: 160000.00
+          description: "Book selling price (or normal price when no discount). If discount_percentage is provided without original_price, system automatically uses this price as original_price and computes discounted selling price."
+          example: 160000
+        original_price:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: "Original strike-through price before discount (optional; if omitted when discount_percentage is provided, system automatically uses price as original_price and computes discounted selling price)."
+          example: 180000
+        discount_percentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+          nullable: true
+          description: "Direct discount percentage (optional; when provided without original_price, system automatically treats price as original_price and calculates discounted selling price)."
+          example: 11
         weight_grams:
           type: integer
           minimum: 1
@@ -2821,27 +2917,54 @@ components:
         pages:
           type: integer
           minimum: 1
-          nullable: true
-          description: "Total number of pages (optional)."
+          description: "Total number of pages (required, minimum 1)."
           example: 352
         publication_year:
           type: integer
           minimum: 1000
           maximum: 2100
-          nullable: true
-          description: "Year of publication between 1000 and 2100 (optional)."
+          description: "Year of publication between 1000 and 2100 (required)."
           example: 2024
+        language:
+          type: string
+          minLength: 2
+          maxLength: 50
+          description: "Language of the book edition."
+          example: "Indonesia"
+        length:
+          type: number
+          format: double
+          minimum: 0.1
+          description: "Book length in centimeters for package shipping calculation."
+          example: 20.0
+        width:
+          type: number
+          format: double
+          minimum: 0.1
+          description: "Book width in centimeters for package shipping calculation."
+          example: 13.5
+        height:
+          type: number
+          format: double
+          minimum: 0.1
+          description: "Book height in centimeters for package shipping calculation."
+          example: 2.0
+        condition:
+          type: string
+          minLength: 2
+          maxLength: 100
+          description: "Physical condition of the book (e.g. New, 100% Baru & Segel Penerbit)."
+          example: "100% Baru & Segel Penerbit"
         stock:
           type: integer
           minimum: 0
-          description: "Updated stock inventory (optional, defaults to 0)."
+          description: "Updated stock inventory (required, minimum 0)."
           example: 50
         cover_image:
           type: string
           maxLength: 255
-          nullable: true
-          description: "Relative URL or static path to the cover image (optional)."
-          example: "/api/v1/static/covers/pragmatic-programmer-anniversary.jpg"
+          description: "Relative URL or static path to the cover image (required, max 255 characters)."
+          example: "https://example.com/static/covers/pragmatic-programmer-anniversary.jpg"
         is_active:
           type: boolean
           description: "Whether the book is visible to customers (optional)."
@@ -2873,9 +2996,16 @@ components:
           type: string
           example: "bumi-manusia"
         price:
-          type: number
-          format: double
-          example: 135000.00
+          type: integer
+          example: 135000
+        original_price:
+          type: integer
+          nullable: true
+          example: 150000
+        discount_percentage:
+          type: integer
+          nullable: true
+          example: 10
         stock:
           type: integer
           example: 40
@@ -2917,9 +3047,16 @@ components:
           nullable: true
           example: "Sebuah roman berlatar zaman kolonial Hindia Belanda."
         price:
-          type: number
-          format: double
-          example: 135000.00
+          type: integer
+          example: 135000
+        original_price:
+          type: integer
+          nullable: true
+          example: 150000
+        discount_percentage:
+          type: integer
+          nullable: true
+          example: 10
         weight_grams:
           type: integer
           example: 450
@@ -2931,6 +3068,24 @@ components:
           type: integer
           nullable: true
           example: 2011
+        language:
+          type: string
+          example: "Indonesia"
+        length:
+          type: number
+          format: double
+          example: 20.0
+        width:
+          type: number
+          format: double
+          example: 13.5
+        height:
+          type: number
+          format: double
+          example: 2.0
+        condition:
+          type: string
+          example: "100% Baru & Segel Penerbit"
         stock:
           type: integer
           example: 40
@@ -2967,27 +3122,24 @@ components:
         - reward_value
       properties:
         min_spend:
-          type: number
-          format: double
+          type: integer
           minimum: 0
           description: "Minimum cart subtotal required to qualify for this tier"
-          example: 100000.00
+          example: 100000
         reward_type:
           type: string
           enum: [PERCENTAGE, FIXED]
           description: "Type of reward applied at this tier"
           example: "FIXED"
         reward_value:
-          type: number
-          format: double
-          minimum: 0.01
+          type: integer
+          minimum: 1
           description: "Reward value (fixed amount in currency, or percentage rate)"
-          example: 5000.00
+          example: 5000
         max_reward:
-          type: number
-          format: double
+          type: integer
           nullable: true
-          minimum: 0.01
+          minimum: 1
           description: "Maximum reward cap amount for PERCENTAGE reward type (optional)."
           example: null
 
@@ -3026,25 +3178,22 @@ components:
           description: "Discount calculation strategy"
           example: "TIERED"
         discount_value:
-          type: number
-          format: double
-          minimum: 0.01
+          type: integer
+          minimum: 1
           description: "Base discount value for PERCENTAGE/FIXED, or max headline rate for TIERED"
-          example: 10.00
+          example: 10
         min_purchase:
-          type: number
-          format: double
+          type: integer
           minimum: 0
           default: 0
           description: "Minimum cart subtotal spend requirement (optional, defaults to 0)."
-          example: 100000.00
+          example: 100000
         max_discount_amount:
-          type: number
-          format: double
+          type: integer
           nullable: true
-          minimum: 0.01
+          minimum: 1
           description: "Global maximum discount cap amount (optional)."
-          example: 25000.00
+          example: 25000
         quota:
           type: integer
           minimum: 0
@@ -3117,24 +3266,21 @@ components:
           description: "Discount calculation strategy"
           example: "TIERED"
         discount_value:
-          type: number
-          format: double
-          minimum: 0.01
+          type: integer
+          minimum: 1
           description: "Base discount value for PERCENTAGE/FIXED, or max headline rate for TIERED"
-          example: 10.00
+          example: 10
         min_purchase:
-          type: number
-          format: double
+          type: integer
           minimum: 0
           description: "Minimum cart subtotal spend requirement (optional, defaults to 0)."
-          example: 100000.00
+          example: 100000
         max_discount_amount:
-          type: number
-          format: double
+          type: integer
           nullable: true
-          minimum: 0.01
+          minimum: 1
           description: "Global maximum discount cap amount (optional)."
-          example: 25000.00
+          example: 25000
         quota:
           type: integer
           minimum: 0
@@ -3186,13 +3332,11 @@ components:
           type: string
           example: "TIERED"
         discount_value:
-          type: number
-          format: double
-          example: 10.00
+          type: integer
+          example: 10
         min_purchase:
-          type: number
-          format: double
-          example: 100000.00
+          type: integer
+          example: 100000
         quota:
           type: integer
           example: 100
@@ -3234,19 +3378,16 @@ components:
           type: integer
           example: 1
         min_spend:
-          type: number
-          format: double
-          example: 100000.00
+          type: integer
+          example: 100000
         reward_type:
           type: string
           example: "FIXED"
         reward_value:
-          type: number
-          format: double
-          example: 5000.00
+          type: integer
+          example: 5000
         max_reward:
-          type: number
-          format: double
+          type: integer
           nullable: true
           example: null
 
@@ -3270,18 +3411,15 @@ components:
           type: string
           example: "TIERED"
         discount_value:
-          type: number
-          format: double
-          example: 10.00
+          type: integer
+          example: 10
         min_purchase:
-          type: number
-          format: double
-          example: 100000.00
+          type: integer
+          example: 100000
         max_discount_amount:
-          type: number
-          format: double
+          type: integer
           nullable: true
-          example: 25000.00
+          example: 25000
         quota:
           type: integer
           example: 100
@@ -3358,13 +3496,11 @@ components:
           type: string
           example: "Promo Belanja Hemat Up To 10%"
         discount_amount:
-          type: number
-          format: double
-          example: 7000.00
+          type: integer
+          example: 7000
         final_amount:
-          type: number
-          format: double
-          example: 123000.00
+          type: integer
+          example: 123000
 
     # =========================================================================
     # CART SCHEMAS
@@ -3420,9 +3556,8 @@ components:
           type: string
           example: "bumi-manusia"
         price:
-          type: number
-          format: double
-          example: 135000.00
+          type: integer
+          example: 135000
         weight_grams:
           type: integer
           example: 450
@@ -3450,9 +3585,8 @@ components:
           type: integer
           example: 2
         subtotal:
-          type: number
-          format: double
-          example: 270000.00
+          type: integer
+          example: 270000
         subweight_grams:
           type: integer
           example: 900
@@ -3478,10 +3612,9 @@ components:
           description: Combined weight used directly for shipping calculation
           example: 1350
         total_price:
-          type: number
-          format: double
+          type: integer
           description: Subtotal price before discounts
-          example: 365000.00
+          example: 365000
         items:
           type: array
           items:
@@ -3500,9 +3633,8 @@ components:
           type: integer
           example: 1350
         total_price:
-          type: number
-          format: double
-          example: 365000.00
+          type: integer
+          example: 365000
         items:
           type: array
           items:
@@ -3946,9 +4078,8 @@ components:
           type: string
           example: "Layanan Reguler JNE"
         price:
-          type: number
-          format: double
-          example: 15000.00
+          type: integer
+          example: 15000
         etd:
           type: string
           example: "1-2"
@@ -4189,9 +4320,8 @@ components:
           description: "Book cover thumbnail (optional)."
           example: "/api/v1/static/covers/pragmatic.jpg"
         price:
-          type: number
-          format: double
-          example: 135000.00
+          type: integer
+          example: 135000
         quantity:
           type: integer
           example: 2
@@ -4199,9 +4329,8 @@ components:
           type: integer
           example: 450
         subtotal:
-          type: number
-          format: double
-          example: 270000.00
+          type: integer
+          example: 270000
 
     AddressPreviewResponse:
       type: object
@@ -4246,10 +4375,9 @@ components:
           items:
             $ref: '#/components/schemas/CheckoutItemPreview'
         items_subtotal:
-          type: number
-          format: double
+          type: integer
           description: "Total cost of items before shipping and discounts"
-          example: 270000.00
+          example: 270000
         total_weight_grams:
           type: integer
           description: "Combined total weight of items in grams"
@@ -4261,33 +4389,29 @@ components:
           type: string
           example: "reg"
         shipping_cost:
-          type: number
-          format: double
+          type: integer
           description: "Calculated delivery fee"
-          example: 15000.00
+          example: 15000
         discount_code:
           type: string
           nullable: true
           description: "Applied discount code (optional)."
           example: "BOOKFEST10"
         discount_amount:
-          type: number
-          format: double
+          type: integer
           description: "Discount deducted from total"
-          example: 27000.00
+          example: 27000
         payment_method:
           type: string
           example: "bca_va"
         admin_fee:
-          type: number
-          format: double
+          type: integer
           description: "Payment gateway processing fee"
-          example: 0.00
+          example: 0
         total_payment:
-          type: number
-          format: double
+          type: integer
           description: "Grand total amount to pay"
-          example: 258000.00
+          example: 258000
 
     CreateOrderRequest:
       type: object
@@ -4372,10 +4496,9 @@ components:
           description: "Initial order status"
           example: "waiting_payment"
         total_amount:
-          type: number
-          format: double
+          type: integer
           description: "Final payable total amount"
-          example: 258000.00
+          example: 258000
         payment_deadline:
           type: string
           format: date-time
@@ -4447,9 +4570,8 @@ components:
           enum: [waiting_payment, paid, processing, shipped, completed, cancelled, returned]
           example: "paid"
         total_amount:
-          type: number
-          format: double
-          example: 258000.00
+          type: integer
+          example: 258000
         total_quantity:
           type: integer
           description: "Total book copies in the order"
@@ -4577,9 +4699,8 @@ components:
           description: "Book cover thumbnail (optional)."
           example: "/api/v1/static/covers/pragmatic.jpg"
         price:
-          type: number
-          format: double
-          example: 135000.00
+          type: integer
+          example: 135000
         quantity:
           type: integer
           example: 2
@@ -4587,33 +4708,27 @@ components:
           type: integer
           example: 450
         subtotal:
-          type: number
-          format: double
-          example: 270000.00
+          type: integer
+          example: 270000
 
     OrderPricingResponse:
       type: object
       properties:
         items_subtotal:
-          type: number
-          format: double
-          example: 270000.00
+          type: integer
+          example: 270000
         shipping_cost:
-          type: number
-          format: double
-          example: 15000.00
+          type: integer
+          example: 15000
         discount_amount:
-          type: number
-          format: double
-          example: 27000.00
+          type: integer
+          example: 27000
         admin_fee:
-          type: number
-          format: double
-          example: 0.00
+          type: integer
+          example: 0
         total_amount:
-          type: number
-          format: double
-          example: 258000.00
+          type: integer
+          example: 258000
 
     OrderDetailResponse:
       type: object

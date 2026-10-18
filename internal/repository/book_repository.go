@@ -11,8 +11,8 @@ type BookFilter struct {
 	CategorySlug  string
 	AuthorSlug    string
 	PublisherSlug string
-	MinPrice      *float64
-	MaxPrice      *float64
+	MinPrice      *int
+	MaxPrice      *int
 	IsActive      *bool
 	SortBy        string // "newest", "price_asc", "price_desc", "title_asc"
 	Limit         int

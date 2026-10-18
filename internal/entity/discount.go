@@ -2,6 +2,7 @@ package entity
 
 import (
 	"errors"
+	"math"
 	"time"
 
 	"gorm.io/gorm"
@@ -31,10 +32,10 @@ const (
 type DiscountTier struct {
 	ID          uint         `gorm:"primaryKey" json:"id"`
 	DiscountID  uint         `gorm:"not null;index" json:"discount_id"`
-	MinSpend    float64      `gorm:"type:numeric(12,2);not null" json:"min_spend"`    // Minimal belanja tier ini
-	RewardType  DiscountType `gorm:"type:varchar(20);not null" json:"reward_type"`    // "FIXED" atau "PERCENTAGE"
-	RewardValue float64      `gorm:"type:numeric(12,2);not null" json:"reward_value"` // Misal 5000 (jika fixed) atau 7 (jika persen)
-	MaxReward   *float64     `gorm:"type:numeric(12,2)" json:"max_reward,omitempty"`  // Cap untuk persen
+	MinSpend    int          `gorm:"type:bigint;not null" json:"min_spend"`
+	RewardType  DiscountType `gorm:"type:varchar(20);not null" json:"reward_type"`
+	RewardValue int          `gorm:"type:bigint;not null" json:"reward_value"`
+	MaxReward   *int         `gorm:"type:bigint" json:"max_reward,omitempty"`
 }
 
 func (DiscountTier) TableName() string {
@@ -47,9 +48,9 @@ type Discount struct {
 	Name              string       `gorm:"type:varchar(150);not null" json:"name"`
 	Description       *string      `gorm:"type:text" json:"description,omitempty"`
 	DiscountType      DiscountType `gorm:"type:varchar(20);not null" json:"discount_type"`
-	DiscountValue     float64      `gorm:"type:numeric(12,2);not null" json:"discount_value"` // Untuk TIERED, ini nilai maks "Up to X%"
-	MinPurchase       float64      `gorm:"type:numeric(12,2);default:0;not null" json:"min_purchase"`
-	MaxDiscountAmount *float64     `gorm:"type:numeric(12,2)" json:"max_discount_amount,omitempty"`
+	DiscountValue     int          `gorm:"type:bigint;not null" json:"discount_value"`
+	MinPurchase       int          `gorm:"type:bigint;default:0;not null" json:"min_purchase"`
+	MaxDiscountAmount *int         `gorm:"type:bigint" json:"max_discount_amount,omitempty"`
 	Quota             int          `gorm:"default:0;not null" json:"quota"`
 	UsedCount         int          `gorm:"default:0;not null" json:"used_count"`
 	IsAllBooks        *bool        `gorm:"not null" json:"is_all_books"`
@@ -92,7 +93,7 @@ func (d *Discount) IsValidNow() error {
 	return nil
 }
 
-func (d *Discount) CalculateDiscount(subtotal float64) (float64, error) {
+func (d *Discount) CalculateDiscount(subtotal int) (int, error) {
 	if err := d.IsValidNow(); err != nil {
 		return 0, err
 	}
@@ -101,7 +102,7 @@ func (d *Discount) CalculateDiscount(subtotal float64) (float64, error) {
 		return 0, ErrDiscountMinPurchase
 	}
 
-	var deduction float64
+	var deduction int
 
 	switch d.DiscountType {
 	case DiscountTypeTiered:
@@ -120,7 +121,7 @@ func (d *Discount) CalculateDiscount(subtotal float64) (float64, error) {
 		}
 
 		if bestTier.RewardType == DiscountTypePercentage {
-			deduction = (subtotal * bestTier.RewardValue) / 100.0
+			deduction = int(math.Round((float64(subtotal) * float64(bestTier.RewardValue)) / 100.0))
 			if bestTier.MaxReward != nil && deduction > *bestTier.MaxReward {
 				deduction = *bestTier.MaxReward
 			}
@@ -129,7 +130,7 @@ func (d *Discount) CalculateDiscount(subtotal float64) (float64, error) {
 		}
 
 	case DiscountTypePercentage:
-		deduction = (subtotal * d.DiscountValue) / 100.0
+		deduction = int(math.Round((float64(subtotal) * float64(d.DiscountValue)) / 100.0))
 		if d.MaxDiscountAmount != nil && deduction > *d.MaxDiscountAmount {
 			deduction = *d.MaxDiscountAmount
 		}

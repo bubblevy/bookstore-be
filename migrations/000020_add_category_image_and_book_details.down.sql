@@ -1,0 +1,11 @@
+ALTER TABLE categories
+DROP COLUMN IF EXISTS image_url;
+
+ALTER TABLE books
+DROP COLUMN IF EXISTS original_price,
+DROP COLUMN IF EXISTS discount_percentage,
+DROP COLUMN IF EXISTS language,
+DROP COLUMN IF EXISTS length,
+DROP COLUMN IF EXISTS width,
+DROP COLUMN IF EXISTS height,
+DROP COLUMN IF EXISTS condition;

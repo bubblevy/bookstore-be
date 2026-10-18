@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"strings"
@@ -27,16 +28,16 @@ type PreviewCheckoutInput struct {
 type PreviewCheckoutResult struct {
 	Address          *entity.Address
 	Items            []entity.OrderItem
-	ItemsSubtotal    float64
+	ItemsSubtotal    int
 	TotalWeightGrams int
 	Courier          string
 	CourierService   string
-	ShippingCost     float64
+	ShippingCost     int
 	DiscountCode     *string
-	DiscountAmount   float64
+	DiscountAmount   int
 	PaymentMethod    string
-	AdminFee         float64
-	TotalPayment     float64
+	AdminFee         int
+	TotalPayment     int
 	DiscountID       *uint
 }
 
@@ -52,7 +53,7 @@ type CreateOrderInput struct {
 type CreateOrderResult struct {
 	InvoiceNumber   string
 	Status          string
-	TotalAmount     float64
+	TotalAmount     int
 	PaymentDeadline time.Time
 	PaymentInfo     struct {
 		PaymentType string
@@ -144,7 +145,7 @@ func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, inpu
 		return nil, entity.ErrCartItemNotFound
 	}
 
-	var itemsSubtotal float64
+	var itemsSubtotal int
 	var totalWeightGrams int
 	orderItems := make([]entity.OrderItem, len(cartItems))
 	rateItems := make([]biteship.RateItem, len(cartItems))
@@ -158,7 +159,7 @@ func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, inpu
 			return nil, entity.ErrInsufficientStock
 		}
 
-		subtotal := item.Book.Price * float64(item.Quantity)
+		subtotal := item.Book.Price * item.Quantity
 		itemsSubtotal += subtotal
 		totalWeightGrams += item.Book.WeightGrams * item.Quantity
 
@@ -172,9 +173,25 @@ func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, inpu
 			Subtotal:    subtotal,
 		}
 
+		length := int(item.Book.Length)
+		if length <= 0 {
+			length = 20
+		}
+		width := int(item.Book.Width)
+		if width <= 0 {
+			width = 14
+		}
+		height := int(item.Book.Height)
+		if height <= 0 {
+			height = 2
+		}
+
 		rateItems[i] = biteship.RateItem{
 			Name:     item.Book.Title,
 			Value:    int64(item.Book.Price),
+			Length:   length,
+			Width:    width,
+			Height:   height,
 			Weight:   item.Book.WeightGrams,
 			Quantity: item.Quantity,
 		}
@@ -191,21 +208,21 @@ func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, inpu
 		return nil, entity.ErrShippingRateFailed
 	}
 
-	var shippingCost float64
+	var shippingCost int
 	foundService := false
 	for _, r := range rates {
 		if strings.EqualFold(r.CourierServiceCode, input.CourierService) {
-			shippingCost = float64(r.Price)
+			shippingCost = int(r.Price)
 			foundService = true
 			break
 		}
 	}
 	if !foundService {
-		shippingCost = float64(rates[0].Price)
+		shippingCost = int(rates[0].Price)
 	}
 
 	// 4. Validate and calculate discount voucher if provided
-	var discountAmount float64
+	var discountAmount int
 	var discountID *uint
 	if input.DiscountCode != nil && strings.TrimSpace(*input.DiscountCode) != "" {
 		code := strings.TrimSpace(*input.DiscountCode)
@@ -222,20 +239,20 @@ func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, inpu
 	}
 
 	// 5. Calculate administrative fees
-	adminFee := 0.0
+	adminFee := 0
 	switch strings.ToLower(input.PaymentMethod) {
 	case "bca_va", "bni_va", "bri_va", "permata_va", "cimb_va":
-		adminFee = 5000.0 // Flat rate Virtual Account
+		adminFee = 5000 // Flat rate Virtual Account
 	case "mandiri_bill", "echannel":
-		adminFee = 4000.0 // Mandiri Bill
+		adminFee = 4000 // Mandiri Bill
 	case "gopay", "qris", "shopeepay":
-		adminFee = math.Round(itemsSubtotal * 0.007)
+		adminFee = int(math.Round(float64(itemsSubtotal) * 0.007))
 	case "credit_card":
-		adminFee = math.Round((itemsSubtotal * 0.029) + 2000.0)
+		adminFee = int(math.Round((float64(itemsSubtotal) * 0.029) + 2000.0))
 	case "alfamart", "indomaret":
-		adminFee = 5000.0 // Flat rate Convenience Store
+		adminFee = 5000 // Flat rate Convenience Store
 	default:
-		adminFee = 0.0
+		adminFee = 0
 	}
 
 	totalPayment := itemsSubtotal + shippingCost + adminFee - discountAmount
@@ -351,6 +368,11 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 	billerCode := nilIfEmpty(chargeRes.BillerCode)
 	qrURL := nilIfEmpty(chargeRes.QRURL)
 
+	var rawResp *string
+	if chargeRes.RawResponse != "" && json.Valid([]byte(chargeRes.RawResponse)) {
+		rawResp = &chargeRes.RawResponse
+	}
+
 	paymentRecord := &entity.Payment{
 		OrderID:               order.ID,
 		MidtransTransactionID: &chargeRes.TransactionID,
@@ -361,6 +383,7 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 		BillerCode:            billerCode,
 		QRURL:                 qrURL,
 		Status:                entity.PaymentStatusPending,
+		RawResponse:           rawResp,
 	}
 	_ = u.orderRepo.CreatePayment(ctx, paymentRecord)
 
@@ -456,6 +479,20 @@ func (u *checkoutUsecase) HandleMidtransWebhook(ctx context.Context, input Midtr
 			}
 		}
 
+		var rawResp *string
+		if len(input.RawJSON) > 0 && json.Valid(input.RawJSON) {
+			s := string(input.RawJSON)
+			rawResp = &s
+		}
+
+		if input.TransactionTime != "" {
+			if t, err := time.Parse("2006-01-02 15:04:05", input.TransactionTime); err == nil {
+				if targetOrderStatus == entity.OrderStatusPaid {
+					order.PaidAt = &t
+				}
+			}
+		}
+
 		if targetOrderStatus != "" {
 			_ = txOrderRepo.UpdateOrderStatus(ctx, order.ID, targetOrderStatus)
 		}
@@ -464,6 +501,9 @@ func (u *checkoutUsecase) HandleMidtransWebhook(ctx context.Context, input Midtr
 			"order_status", targetOrderStatus,
 			"payment_status", targetPaymentStatus,
 		)
+		if rawResp != nil {
+			return txOrderRepo.UpdatePaymentDetails(ctx, order.ID, targetPaymentStatus, rawResp, order.PaidAt)
+		}
 		return txOrderRepo.UpdatePaymentStatus(ctx, order.ID, targetPaymentStatus)
 	})
 }

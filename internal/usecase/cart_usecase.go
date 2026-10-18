@@ -23,7 +23,7 @@ type CartBookSummaryResult struct {
 	ID          uint    `json:"id"`
 	Title       string  `json:"title"`
 	Slug        string  `json:"slug"`
-	Price       float64 `json:"price"`
+	Price       int     `json:"price"`
 	WeightGrams int     `json:"weight_grams"`
 	Stock       int     `json:"stock"`
 	CoverImage  *string `json:"cover_image,omitempty"`
@@ -34,7 +34,7 @@ type CartItemResult struct {
 	ID             uint                  `json:"id"`
 	BookID         uint                  `json:"book_id"`
 	Quantity       int                   `json:"quantity"`
-	Subtotal       float64               `json:"subtotal"`
+	Subtotal       int                   `json:"subtotal"`
 	SubweightGrams int                   `json:"subweight_grams"`
 	Book           CartBookSummaryResult `json:"book"`
 }
@@ -44,7 +44,7 @@ type CartResult struct {
 	TotalItems       int              `json:"total_items"`
 	TotalQuantity    int              `json:"total_quantity"`
 	TotalWeightGrams int              `json:"total_weight_grams"`
-	TotalPrice       float64          `json:"total_price"`
+	TotalPrice       int              `json:"total_price"`
 	Items            []CartItemResult `json:"items"`
 }
 
@@ -56,7 +56,7 @@ type SelectedCartItemsResult struct {
 	TotalItems       int              `json:"total_items"`
 	TotalQuantity    int              `json:"total_quantity"`
 	TotalWeightGrams int              `json:"total_weight_grams"`
-	TotalPrice       float64          `json:"total_price"`
+	TotalPrice       int              `json:"total_price"`
 	Items            []CartItemResult `json:"items"`
 }
 
@@ -89,11 +89,11 @@ func (u *cartUsecase) GetCart(ctx context.Context, userID uint) (*CartResult, er
 
 	var totalQty int
 	var totalWeight int
-	var totalPrice float64
+	var totalPrice int
 
 	items := make([]CartItemResult, 0, len(cart.Items))
 	for _, it := range cart.Items {
-		subtotal := it.Book.Price * float64(it.Quantity)
+		subtotal := it.Book.Price * it.Quantity
 		subweight := it.Book.WeightGrams * it.Quantity
 
 		totalQty += it.Quantity
@@ -155,7 +155,7 @@ func (u *cartUsecase) GetSelectedItems(ctx context.Context, userID uint, input G
 
 	var totalQty int
 	var totalWeight int
-	var totalPrice float64
+	var totalPrice int
 
 	resultItems := make([]CartItemResult, 0, len(items))
 	for _, it := range items {
@@ -166,7 +166,7 @@ func (u *cartUsecase) GetSelectedItems(ctx context.Context, userID uint, input G
 			return nil, fmt.Errorf("book %q exceeds available stock", it.Book.Title)
 		}
 
-		subtotal := it.Book.Price * float64(it.Quantity)
+		subtotal := it.Book.Price * it.Quantity
 		subweight := it.Book.WeightGrams * it.Quantity
 
 		totalQty += it.Quantity

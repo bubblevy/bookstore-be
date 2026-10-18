@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha512"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -20,6 +21,7 @@ type ChargeResponse struct {
 	BillerCode    string
 	QRURL         string
 	Status        string
+	RawResponse   string
 }
 
 type MidtransService interface {
@@ -98,10 +100,12 @@ func (s *midtransService) Charge(ctx context.Context, invoiceNumber string, gros
 		return nil, fmt.Errorf("midtrans charge failed: %s (code: %s)", apiErr.GetMessage(), apiErr.GetStatusCode())
 	}
 
+	rawJSON, _ := json.Marshal(resp)
 	result := &ChargeResponse{
 		TransactionID: resp.TransactionID,
 		PaymentType:   resp.PaymentType,
 		Status:        resp.TransactionStatus,
+		RawResponse:   string(rawJSON),
 	}
 
 	// Virtual Account Bank (BCA, BNI, BRI)

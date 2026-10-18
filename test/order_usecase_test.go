@@ -70,6 +70,11 @@ func (m *MockOrderRepoForOrderUC) UpdatePaymentStatus(ctx context.Context, order
 	return m.Called(ctx, orderID, status).Error(0)
 }
 
+func (m *MockOrderRepoForOrderUC) UpdatePaymentDetails(ctx context.Context, orderID uint, status entity.PaymentStatus, rawResponse *string, paidAt *time.Time) error {
+	args := m.Called(ctx, orderID, status, rawResponse, paidAt)
+	return args.Error(0)
+}
+
 func (m *MockOrderRepoForOrderUC) MarkAsReturned(ctx context.Context, orderID uint, reason string) error {
 	return m.Called(ctx, orderID, reason).Error(0)
 }

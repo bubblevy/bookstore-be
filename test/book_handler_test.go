@@ -152,17 +152,43 @@ func TestBookHandler_Create_Success(t *testing.T) {
 	mockUC := new(MockBookUsecase)
 	app := setupBookApp(mockUC, true, true)
 
+	origPrice := 150000
+	discPct := 10
 	expected := &usecase.BookDetailResult{
-		ID:        1,
-		Title:     "Bumi Manusia",
-		Slug:      "bumi-manusia",
-		Price:     135000,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:                 1,
+		Title:              "Bumi Manusia",
+		Slug:               "bumi-manusia",
+		Price:              135000,
+		OriginalPrice:      &origPrice,
+		DiscountPercentage: &discPct,
+		Language:           "Indonesia",
+		Length:             20.0,
+		Width:              13.5,
+		Height:             2.0,
+		Condition:          "100% Baru & Segel Penerbit",
+		Stock:              25,
+		CoverImage:         func() *string { s := "https://example.com/cover.jpg"; return &s }(),
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
 	}
 
 	mockUC.On("Create", mock.Anything, mock.MatchedBy(func(input usecase.CreateBookInput) bool {
-		return input.CategoryID == 1 && input.AuthorID == 2 && input.PublisherID == 3 && input.Title == "Bumi Manusia"
+		return input.CategoryID == 1 &&
+			input.AuthorID == 2 &&
+			input.PublisherID == 3 &&
+			input.Title == "Bumi Manusia" &&
+			input.ISBN != nil && *input.ISBN == "9789799731234" &&
+			input.Synopsis != nil && *input.Synopsis == "Sebuah novel karya Pramoedya Ananta Toer." &&
+			input.Pages != nil && *input.Pages == 535 &&
+			input.PublicationYear != nil && *input.PublicationYear == 2005 &&
+			input.Stock == 25 &&
+			input.CoverImage != nil && *input.CoverImage == "https://example.com/cover.jpg" &&
+			input.Language == "Indonesia" &&
+			input.Length == 20.0 &&
+			input.Width == 13.5 &&
+			input.Height == 2.0 &&
+			input.Condition == "100% Baru & Segel Penerbit" &&
+			input.OriginalPrice != nil && *input.OriginalPrice == 150000.0
 	})).Return(expected, nil)
 
 	payload := `{
@@ -170,8 +196,20 @@ func TestBookHandler_Create_Success(t *testing.T) {
 		"author_id": 2,
 		"publisher_id": 3,
 		"title": "Bumi Manusia",
+		"isbn": "9789799731234",
+		"synopsis": "Sebuah novel karya Pramoedya Ananta Toer.",
 		"price": 135000,
-		"weight_grams": 450
+		"original_price": 150000,
+		"weight_grams": 450,
+		"pages": 535,
+		"publication_year": 2005,
+		"stock": 25,
+		"cover_image": "https://example.com/cover.jpg",
+		"language": "Indonesia",
+		"length": 20.0,
+		"width": 13.5,
+		"height": 2.0,
+		"condition": "100% Baru & Segel Penerbit"
 	}`
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/books", strings.NewReader(payload))
@@ -181,6 +219,88 @@ func TestBookHandler_Create_Success(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 	mockUC.AssertExpectations(t)
+}
+
+func TestBookHandler_Create_AutoDiscountFromPercentageOnly(t *testing.T) {
+	mockUC := new(MockBookUsecase)
+	app := setupBookApp(mockUC, true, true)
+
+	origPrice := 100000
+	discPct := 20
+	expected := &usecase.BookDetailResult{
+		ID:                 2,
+		Title:              "Bumi Manusia",
+		Slug:               "bumi-manusia",
+		Price:              80000,
+		OriginalPrice:      &origPrice,
+		DiscountPercentage: &discPct,
+		Stock:              15,
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
+	}
+
+	mockUC.On("Create", mock.Anything, mock.MatchedBy(func(input usecase.CreateBookInput) bool {
+		return input.Price == 100000 &&
+			input.OriginalPrice == nil &&
+			input.DiscountPercentage != nil && *input.DiscountPercentage == 20 &&
+			input.Stock == 15
+	})).Return(expected, nil)
+
+	payload := `{
+		"category_id": 1,
+		"author_id": 2,
+		"publisher_id": 3,
+		"title": "Bumi Manusia",
+		"isbn": "9789799731234",
+		"synopsis": "Sebuah novel karya Pramoedya Ananta Toer.",
+		"price": 100000,
+		"discount_percentage": 20,
+		"weight_grams": 450,
+		"pages": 535,
+		"publication_year": 2005,
+		"stock": 15,
+		"cover_image": "https://example.com/cover.jpg",
+		"language": "Indonesia",
+		"length": 20.0,
+		"width": 13.5,
+		"height": 2.0,
+		"condition": "100% Baru & Segel Penerbit"
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/books", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusCreated, resp.StatusCode)
+	mockUC.AssertExpectations(t)
+}
+
+func TestBookHandler_Create_ValidationError_MissingRequiredFields(t *testing.T) {
+	mockUC := new(MockBookUsecase)
+	app := setupBookApp(mockUC, true, true)
+
+	// Missing stock, cover_image, pages, publication_year, synopsis, isbn
+	payload := `{
+		"category_id": 1,
+		"author_id": 2,
+		"publisher_id": 3,
+		"title": "Bumi Manusia",
+		"price": 135000,
+		"weight_grams": 450,
+		"language": "Indonesia",
+		"length": 20.0,
+		"width": 13.5,
+		"height": 2.0,
+		"condition": "100% Baru & Segel Penerbit"
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/books", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestBookHandler_Create_SlugConflict(t *testing.T) {
@@ -194,8 +314,19 @@ func TestBookHandler_Create_SlugConflict(t *testing.T) {
 		"author_id": 2,
 		"publisher_id": 3,
 		"title": "Bumi Manusia",
+		"isbn": "9789799731234",
+		"synopsis": "Sebuah novel karya Pramoedya Ananta Toer.",
 		"price": 135000,
-		"weight_grams": 450
+		"weight_grams": 450,
+		"pages": 535,
+		"publication_year": 2005,
+		"stock": 10,
+		"cover_image": "https://example.com/cover.jpg",
+		"language": "Indonesia",
+		"length": 20.0,
+		"width": 13.5,
+		"height": 2.0,
+		"condition": "100% Baru & Segel Penerbit"
 	}`
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/books", strings.NewReader(payload))

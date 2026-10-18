@@ -26,13 +26,20 @@ type Book struct {
 	Slug            string  `gorm:"type:varchar(270);not null;uniqueIndex:uq_books_slug_active,where:deleted_at IS NULL" json:"slug"`
 	ISBN            *string `gorm:"type:varchar(30);uniqueIndex:uq_books_isbn_active,where:deleted_at IS NULL AND isbn IS NOT NULL" json:"isbn,omitempty"`
 	Synopsis        *string `gorm:"type:text" json:"synopsis,omitempty"`
-	Price           float64 `gorm:"type:numeric(12,2);not null" json:"price"`
-	WeightGrams     int     `gorm:"not null" json:"weight_grams"`
-	Pages           *int    `json:"pages,omitempty"`
-	PublicationYear *int    `gorm:"type:smallint" json:"publication_year,omitempty"`
-	Stock           int     `gorm:"not null;default:0" json:"stock"`
-	CoverImage      *string `gorm:"type:varchar(255)" json:"cover_image,omitempty"`
-	IsActive        bool    `gorm:"not null;default:true" json:"is_active"`
+	Price              int      `gorm:"type:numeric(12,0);not null" json:"price"`
+	OriginalPrice      *int     `gorm:"type:numeric(12,0)" json:"original_price,omitempty"`
+	DiscountPercentage *int     `gorm:"type:int" json:"discount_percentage,omitempty"`
+	WeightGrams        int      `gorm:"not null" json:"weight_grams"`
+	Pages              *int     `json:"pages,omitempty"`
+	PublicationYear    *int     `gorm:"type:smallint" json:"publication_year,omitempty"`
+	Language           string   `gorm:"type:varchar(50);not null;default:'Indonesia'" json:"language"`
+	Length             float64  `gorm:"type:numeric(6,2);not null;default:0" json:"length"`
+	Width              float64  `gorm:"type:numeric(6,2);not null;default:0" json:"width"`
+	Height             float64  `gorm:"type:numeric(6,2);not null;default:0" json:"height"`
+	Condition          string   `gorm:"type:varchar(100);not null;default:'New'" json:"condition"`
+	Stock              int      `gorm:"not null;default:0" json:"stock"`
+	CoverImage         *string  `gorm:"type:varchar(255)" json:"cover_image,omitempty"`
+	IsActive           bool     `gorm:"not null;default:true" json:"is_active"`
 
 	// Belongs-To Relations
 	Category  Category  `gorm:"foreignKey:CategoryID;constraint:OnDelete:RESTRICT;" json:"category,omitempty"`

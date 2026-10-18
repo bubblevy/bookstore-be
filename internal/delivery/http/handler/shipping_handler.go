@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 	"net/url"
 	"strings"
@@ -242,7 +243,9 @@ func (h *ShippingHandler) ProcessReturn(c fiber.Ctx) error {
 func (h *ShippingHandler) HandleWebhook(c fiber.Ctx) error {
 	var payload biteship.WebhookTrackingPayload
 	if err := c.Bind().Body(&payload); err != nil {
-		return response.Error(c, fiber.StatusBadRequest, "invalid webhook payload", nil)
+		if jsonErr := json.Unmarshal(c.Body(), &payload); jsonErr != nil {
+			return response.Error(c, fiber.StatusBadRequest, "invalid webhook payload", nil)
+		}
 	}
 
 	if err := h.shippingUsecase.HandleWebhook(c.Context(), payload); err != nil {

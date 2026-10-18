@@ -15,10 +15,10 @@ type CheckoutItemPreview struct {
 	BookID      uint    `json:"book_id"`
 	Title       string  `json:"title"`
 	CoverImage  *string `json:"cover_image,omitempty"`
-	Price       float64 `json:"price"`
+	Price       int     `json:"price"`
 	Quantity    int     `json:"quantity"`
 	WeightGrams int     `json:"weight_grams"`
-	Subtotal    float64 `json:"subtotal"`
+	Subtotal    int     `json:"subtotal"`
 }
 
 type AddressPreviewResponse struct {
@@ -36,16 +36,16 @@ type AddressPreviewResponse struct {
 type CheckoutPreviewResponse struct {
 	Address          *AddressPreviewResponse `json:"address,omitempty"`
 	Items            []CheckoutItemPreview   `json:"items"`
-	ItemsSubtotal    float64                 `json:"items_subtotal"`
+	ItemsSubtotal    int                     `json:"items_subtotal"`
 	TotalWeightGrams int                     `json:"total_weight_grams"`
 	Courier          string                  `json:"courier"`
 	CourierService   string                  `json:"courier_service"`
-	ShippingCost     float64                 `json:"shipping_cost"`
+	ShippingCost     int                     `json:"shipping_cost"`
 	DiscountCode     *string                 `json:"discount_code,omitempty"`
-	DiscountAmount   float64                 `json:"discount_amount"`
+	DiscountAmount   int                     `json:"discount_amount"`
 	PaymentMethod    string                  `json:"payment_method"`
-	AdminFee         float64                 `json:"admin_fee"`
-	TotalPayment     float64                 `json:"total_payment"`
+	AdminFee         int                     `json:"admin_fee"`
+	TotalPayment     int                     `json:"total_payment"`
 }
 
 type CreateOrderRequest struct {
@@ -69,7 +69,7 @@ type PaymentInfoResponse struct {
 type CreateOrderResponse struct {
 	InvoiceNumber   string              `json:"invoice_number"`
 	Status          string              `json:"status"`
-	TotalAmount     float64             `json:"total_amount"`
+	TotalAmount     int                 `json:"total_amount"`
 	PaymentDeadline time.Time           `json:"payment_deadline"`
 	PaymentInfo     PaymentInfoResponse `json:"payment_info"`
 }

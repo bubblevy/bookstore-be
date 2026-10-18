@@ -369,12 +369,99 @@ func (c *client) TrackWaybill(ctx context.Context, waybillID, courierCode string
 // WEBHOOK PAYLOAD
 type WebhookTrackingPayload struct {
 	Event             string                 `json:"event"`
+	ID                string                 `json:"id"`
 	CourierTrackingID string                 `json:"courier_tracking_id"`
+	TrackingID        string                 `json:"tracking_id"`
 	OrderID           string                 `json:"order_id"`
 	WaybillID         string                 `json:"waybill_id"`
 	CourierCode       string                 `json:"courier_code"`
 	Status            string                 `json:"status"`
+	OrderStatus       string                 `json:"order_status"`
 	Note              string                 `json:"note"`
-	UpdatedAt         time.Time              `json:"updated_at"`
+	UpdatedAt         interface{}            `json:"updated_at"`
 	Metadata          map[string]interface{} `json:"metadata"`
+	Data              *WebhookDataPayload    `json:"data,omitempty"`
+}
+
+type WebhookDataPayload struct {
+	ID                string `json:"id"`
+	OrderID           string `json:"order_id"`
+	Status            string `json:"status"`
+	OrderStatus       string `json:"order_status"`
+	WaybillID         string `json:"waybill_id"`
+	CourierTrackingID string `json:"courier_tracking_id"`
+	TrackingID        string `json:"tracking_id"`
+	CourierCode       string `json:"courier_code"`
+}
+
+func (p *WebhookTrackingPayload) GetOrderID() string {
+	if p.OrderID != "" {
+		return p.OrderID
+	}
+	if p.ID != "" {
+		return p.ID
+	}
+	if p.Data != nil {
+		if p.Data.OrderID != "" {
+			return p.Data.OrderID
+		}
+		if p.Data.ID != "" {
+			return p.Data.ID
+		}
+	}
+	if p.Metadata != nil {
+		if inv, ok := p.Metadata["invoice_number"].(string); ok && inv != "" {
+			return inv
+		}
+		if oid, ok := p.Metadata["order_id"].(string); ok && oid != "" {
+			return oid
+		}
+	}
+	return ""
+}
+
+func (p *WebhookTrackingPayload) GetTrackingID() string {
+	if p.CourierTrackingID != "" {
+		return p.CourierTrackingID
+	}
+	if p.TrackingID != "" {
+		return p.TrackingID
+	}
+	if p.Data != nil {
+		if p.Data.CourierTrackingID != "" {
+			return p.Data.CourierTrackingID
+		}
+		if p.Data.TrackingID != "" {
+			return p.Data.TrackingID
+		}
+	}
+	return ""
+}
+
+func (p *WebhookTrackingPayload) GetWaybillID() string {
+	if p.WaybillID != "" {
+		return p.WaybillID
+	}
+	if p.Data != nil && p.Data.WaybillID != "" {
+		return p.Data.WaybillID
+	}
+	return ""
+}
+
+func (p *WebhookTrackingPayload) GetStatus() string {
+	if p.Status != "" {
+		return p.Status
+	}
+	if p.OrderStatus != "" {
+		return p.OrderStatus
+	}
+	if p.Data != nil {
+		if p.Data.Status != "" {
+			return p.Data.Status
+		}
+		if p.Data.OrderStatus != "" {
+			return p.Data.OrderStatus
+		}
+	}
+	return ""
 }

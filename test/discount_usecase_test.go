@@ -163,7 +163,7 @@ func TestDiscountUsecase_ValidateAndCalculate_TieredDiscount(t *testing.T) {
 	ctx := context.Background()
 
 	isAllBooks := true
-	maxReward20k := 20000.0
+	maxReward20k := 20000
 	voucher := &entity.Discount{
 		Model:        gorm.Model{ID: 1},
 		Code:         "TIEREDHEMAT",
@@ -195,8 +195,8 @@ func TestDiscountUsecase_ValidateAndCalculate_TieredDiscount(t *testing.T) {
 	res, err := uc.ValidateAndCalculate(ctx, "tieredhemat", cartItems)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
-	assert.Equal(t, 7000.0, res.DiscountAmount)
-	assert.Equal(t, 123000.0, res.FinalAmount)
+	assert.Equal(t, 7000, res.DiscountAmount)
+	assert.Equal(t, 123000, res.FinalAmount)
 }
 
 func TestDiscountUsecase_ValidateAndCalculate_MinPurchaseNotMet(t *testing.T) {

@@ -33,11 +33,11 @@ type Order struct {
 	UserID                 uint        `gorm:"not null" json:"user_id"`
 	InvoiceNumber          string      `gorm:"type:varchar(60);not null;unique" json:"invoice_number"`
 	Status                 OrderStatus `gorm:"type:order_status;not null;default:'waiting_payment'" json:"status"`
-	ItemsSubtotal          float64     `gorm:"type:numeric(15,2);not null" json:"items_subtotal"`
-	ShippingCost           float64     `gorm:"type:numeric(15,2);not null;default:0" json:"shipping_cost"`
-	DiscountAmount         float64     `gorm:"type:numeric(15,2);not null;default:0" json:"discount_amount"`
-	AdminFee               float64     `gorm:"type:numeric(15,2);not null;default:0" json:"admin_fee"`
-	TotalAmount            float64     `gorm:"type:numeric(15,2);not null" json:"total_amount"`
+	ItemsSubtotal          int         `gorm:"type:bigint;not null" json:"items_subtotal"`
+	ShippingCost           int         `gorm:"type:bigint;not null;default:0" json:"shipping_cost"`
+	DiscountAmount         int         `gorm:"type:bigint;not null;default:0" json:"discount_amount"`
+	AdminFee               int         `gorm:"type:bigint;not null;default:0" json:"admin_fee"`
+	TotalAmount            int         `gorm:"type:bigint;not null" json:"total_amount"`
 	DiscountID             *uint       `json:"discount_id,omitempty"`
 	DiscountCode           *string     `gorm:"type:varchar(50)" json:"discount_code,omitempty"`
 	Courier                string      `gorm:"type:varchar(30);not null" json:"courier"`

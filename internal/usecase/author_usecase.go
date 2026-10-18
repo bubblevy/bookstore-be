@@ -40,7 +40,7 @@ type AuthorBookItem struct {
 	ID    uint    `json:"id"`
 	Title string  `json:"title"`
 	Slug  string  `json:"slug"`
-	Price float64 `json:"price"`
+	Price int     `json:"price"`
 	Cover *string `json:"cover_image"`
 }
 

@@ -3,6 +3,7 @@ package test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/bubblevy/bookstore/internal/entity"
@@ -119,6 +120,11 @@ func (m *MockOrderRepository) UpdateOrderStatus(ctx context.Context, orderID uin
 
 func (m *MockOrderRepository) UpdatePaymentStatus(ctx context.Context, orderID uint, status entity.PaymentStatus) error {
 	return m.Called(ctx, orderID, status).Error(0)
+}
+
+func (m *MockOrderRepository) UpdatePaymentDetails(ctx context.Context, orderID uint, status entity.PaymentStatus, rawResponse *string, paidAt *time.Time) error {
+	args := m.Called(ctx, orderID, status, rawResponse, paidAt)
+	return args.Error(0)
 }
 
 func (m *MockOrderRepository) MarkAsReturned(ctx context.Context, orderID uint, reason string) error {
@@ -436,10 +442,10 @@ func TestCheckoutUsecase_PreviewCheckout(t *testing.T) {
 		res, err := uc.PreviewCheckout(context.Background(), userID, input)
 		assert.NoError(t, err)
 		assert.NotNil(t, res)
-		assert.Equal(t, float64(200000), res.ItemsSubtotal)
-		assert.Equal(t, float64(20000), res.ShippingCost)
-		assert.Equal(t, float64(5000), res.AdminFee)
-		assert.Equal(t, float64(225000), res.TotalPayment)
+		assert.Equal(t, 200000, res.ItemsSubtotal)
+		assert.Equal(t, 20000, res.ShippingCost)
+		assert.Equal(t, 5000, res.AdminFee)
+		assert.Equal(t, 225000, res.TotalPayment)
 	})
 
 	t.Run("success preview with voucher discount calculation", func(t *testing.T) {
@@ -510,11 +516,11 @@ func TestCheckoutUsecase_PreviewCheckout(t *testing.T) {
 		res, err := uc.PreviewCheckout(context.Background(), userID, input)
 		assert.NoError(t, err)
 		assert.NotNil(t, res)
-		assert.Equal(t, float64(200000), res.ItemsSubtotal)
-		assert.Equal(t, float64(50000), res.DiscountAmount)
+		assert.Equal(t, 200000, res.ItemsSubtotal)
+		assert.Equal(t, 50000, res.DiscountAmount)
 		assert.Equal(t, uint(77), *res.DiscountID)
-		assert.Equal(t, float64(4000), res.AdminFee)
-		assert.Equal(t, float64(174000), res.TotalPayment)
+		assert.Equal(t, 4000, res.AdminFee)
+		assert.Equal(t, 174000, res.TotalPayment)
 	})
 
 	t.Run("failed when cart item IDs empty", func(t *testing.T) {
@@ -685,7 +691,7 @@ func TestCheckoutUsecase_CreateOrder(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, res)
 		assert.Equal(t, string(entity.OrderStatusWaitingPayment), res.Status)
-		assert.Equal(t, float64(225000), res.TotalAmount)
+		assert.Equal(t, 225000, res.TotalAmount)
 		assert.Equal(t, "123456789012", *res.PaymentInfo.VANumber)
 		assert.NoError(t, sqlMock.ExpectationsWereMet())
 	})
@@ -788,6 +794,52 @@ func TestCheckoutUsecase_HandleMidtransWebhook(t *testing.T) {
 			GrossAmount:       "100000.00",
 			SignatureKey:      "valid-signature",
 			TransactionStatus: "settlement",
+		}
+
+		err := uc.HandleMidtransWebhook(context.Background(), input)
+		assert.NoError(t, err)
+		assert.NoError(t, sqlMock.ExpectationsWereMet())
+	})
+
+	t.Run("success settlement with raw payload updates payment details with raw_response and paid_at", func(t *testing.T) {
+		gormDB, sqlMock := setupGormSqlmock(t)
+		mockOrderRepo := new(MockOrderRepository)
+		mockCheckoutRepo := new(MockCheckoutRepository)
+		mockMidtrans := new(MockMidtransServiceForCheckout)
+
+		uc := usecase.NewCheckoutUsecase(gormDB, mockCheckoutRepo, mockOrderRepo, nil, nil, nil, nil, mockMidtrans)
+
+		mockMidtrans.On("VerifyNotification", orderID, "200", "100000.00", "valid-signature").
+			Return(true).Once()
+
+		sqlMock.ExpectBegin()
+
+		mockOrderRepo.On("WithTx", mock.Anything).Return(mockOrderRepo).Once()
+		mockCheckoutRepo.On("WithTx", mock.Anything).Return(mockCheckoutRepo).Once()
+
+		dummyOrder := &entity.Order{
+			ID:            1,
+			InvoiceNumber: orderID,
+			Status:        entity.OrderStatusWaitingPayment,
+		}
+		mockOrderRepo.On("FindByInvoice", mock.Anything, orderID).Return(dummyOrder, nil).Once()
+		mockOrderRepo.On("UpdateOrderStatus", mock.Anything, uint(1), entity.OrderStatusPaid).Return(nil).Once()
+		mockOrderRepo.On("UpdatePaymentDetails", mock.Anything, uint(1), entity.PaymentStatusSettlement, mock.MatchedBy(func(raw *string) bool {
+			return raw != nil && *raw == `{"transaction_status":"settlement","gross_amount":"100000.00"}`
+		}), mock.MatchedBy(func(paidAt *time.Time) bool {
+			return paidAt != nil && paidAt.Format("2006-01-02 15:04:05") == "2026-10-18 15:30:00"
+		})).Return(nil).Once()
+
+		sqlMock.ExpectCommit()
+
+		input := usecase.MidtransWebhookInput{
+			OrderID:           orderID,
+			StatusCode:        "200",
+			GrossAmount:       "100000.00",
+			SignatureKey:      "valid-signature",
+			TransactionStatus: "settlement",
+			TransactionTime:   "2026-10-18 15:30:00",
+			RawJSON:           []byte(`{"transaction_status":"settlement","gross_amount":"100000.00"}`),
 		}
 
 		err := uc.HandleMidtransWebhook(context.Background(), input)

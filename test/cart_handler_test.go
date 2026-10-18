@@ -101,7 +101,7 @@ func TestCartHandler_GetCart_Success(t *testing.T) {
 		Data usecase.CartResult `json:"data"`
 	}
 	_ = json.Unmarshal(body, &res)
-	assert.Equal(t, 270000.0, res.Data.TotalPrice)
+	assert.Equal(t, 270000, res.Data.TotalPrice)
 	mockUC.AssertExpectations(t)
 }
 
@@ -167,7 +167,7 @@ func TestCartHandler_GetSelectedItems_Success(t *testing.T) {
 		Data usecase.SelectedCartItemsResult `json:"data"`
 	}
 	_ = json.Unmarshal(body, &res)
-	assert.Equal(t, 365000.0, res.Data.TotalPrice)
+	assert.Equal(t, 365000, res.Data.TotalPrice)
 	mockUC.AssertExpectations(t)
 }
 

@@ -124,7 +124,7 @@ func TestCartUsecase_GetCart_Success(t *testing.T) {
 	assert.Equal(t, 2, res.TotalItems)
 	assert.Equal(t, 3, res.TotalQuantity)
 	assert.Equal(t, 1150, res.TotalWeightGrams) // (400*2) + (350*1)
-	assert.Equal(t, 280000.0, res.TotalPrice)   // (100000*2) + (80000*1)
+	assert.Equal(t, 280000, res.TotalPrice)   // (100000*2) + (80000*1)
 	mockCartRepo.AssertExpectations(t)
 }
 
@@ -202,7 +202,7 @@ func TestCartUsecase_GetSelectedItems_Success(t *testing.T) {
 	assert.Equal(t, 1, res.TotalItems)
 	assert.Equal(t, 2, res.TotalQuantity)
 	assert.Equal(t, 800, res.TotalWeightGrams)
-	assert.Equal(t, 200000.0, res.TotalPrice)
+	assert.Equal(t, 200000, res.TotalPrice)
 	mockCartRepo.AssertExpectations(t)
 }
 

@@ -112,10 +112,10 @@ func TestCategoryHandler_FindAll_Success(t *testing.T) {
 	mockUC := new(MockCategoryUsecase)
 	app := setupCategoryApp(mockUC, true, true)
 
-	// Gunakan CategoryList, bukan CategoryResult
+	img := "https://example.com/fiction.jpg"
 	expected := []usecase.CategoryList{
-		{ID: 1, Name: "Fiksi", Slug: "fiksi"},
-		{ID: 2, Name: "Sains", Slug: "sains"},
+		{ID: 1, Name: "Fiksi", Slug: "fiksi", ImageURL: &img, TotalBooks: 10},
+		{ID: 2, Name: "Sains", Slug: "sains", TotalBooks: 4},
 	}
 
 	mockUC.On("FindAll", mock.Anything).Return(expected, nil)
@@ -137,6 +137,8 @@ func TestCategoryHandler_FindAll_Success(t *testing.T) {
 	assert.True(t, res.Status)
 	assert.Len(t, res.Data, 2)
 	assert.Equal(t, "Fiksi", res.Data[0].Name)
+	assert.Equal(t, &img, res.Data[0].ImageURL)
+	assert.Equal(t, int64(10), res.Data[0].TotalBooks)
 	mockUC.AssertExpectations(t)
 }
 
@@ -144,12 +146,15 @@ func TestCategoryHandler_FindBySlug_Success(t *testing.T) {
 	mockUC := new(MockCategoryUsecase)
 	app := setupCategoryApp(mockUC, true, true)
 
+	img := "https://example.com/fiction-popular.jpg"
 	expected := &usecase.CategoryResult{
-		ID:        1,
-		Name:      "Fiksi Populer",
-		Slug:      "fiksi-populer",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:         1,
+		Name:       "Fiksi Populer",
+		Slug:       "fiksi-populer",
+		ImageURL:   &img,
+		TotalBooks: 15,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
 	}
 
 	mockUC.On("FindBySlug", mock.Anything, "fiksi-populer").Return(expected, nil)
@@ -169,6 +174,8 @@ func TestCategoryHandler_FindBySlug_Success(t *testing.T) {
 
 	assert.Equal(t, 200, res.Code)
 	assert.Equal(t, "fiksi-populer", res.Data.Slug)
+	assert.Equal(t, &img, res.Data.ImageURL)
+	assert.Equal(t, int64(15), res.Data.TotalBooks)
 	mockUC.AssertExpectations(t)
 }
 
@@ -189,18 +196,24 @@ func TestCategoryHandler_Create_Success(t *testing.T) {
 	mockUC := new(MockCategoryUsecase)
 	app := setupCategoryApp(mockUC, true, true)
 
-	input := usecase.CreateCategoryInput{Name: "Teknologi"}
+	img := "https://example.com/tech.jpg"
+	input := usecase.CreateCategoryInput{
+		Name:     "Teknologi",
+		ImageURL: &img,
+	}
 	expected := &usecase.CategoryResult{
-		ID:        3,
-		Name:      "Teknologi",
-		Slug:      "teknologi",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:         3,
+		Name:       "Teknologi",
+		Slug:       "teknologi",
+		ImageURL:   &img,
+		TotalBooks: 0,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
 	}
 
 	mockUC.On("Create", mock.Anything, input).Return(expected, nil)
 
-	reqPayload := `{"name": "Teknologi"}`
+	reqPayload := `{"name": "Teknologi", "image_url": "https://example.com/tech.jpg"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/categories", strings.NewReader(reqPayload))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -216,6 +229,7 @@ func TestCategoryHandler_Create_Success(t *testing.T) {
 	_ = json.Unmarshal(body, &res)
 	assert.Equal(t, 201, res.Code)
 	assert.Equal(t, "teknologi", res.Data.Slug)
+	assert.Equal(t, &img, res.Data.ImageURL)
 	mockUC.AssertExpectations(t)
 }
 
@@ -254,19 +268,22 @@ func TestCategoryHandler_Update_Success(t *testing.T) {
 	mockUC := new(MockCategoryUsecase)
 	app := setupCategoryApp(mockUC, true, true)
 
-	input := usecase.UpdateCategoryInput{ID: 1, Name: "Fiksi Ilmiah"}
+	newImg := "https://example.com/scifi.jpg"
+	input := usecase.UpdateCategoryInput{ID: 1, Name: "Fiksi Ilmiah", ImageURL: &newImg}
 	expected := &usecase.CategoryResult{
-		ID:        1,
-		Name:      "Fiksi Ilmiah",
-		Slug:      "fiksi-ilmiah",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:         1,
+		Name:       "Fiksi Ilmiah",
+		Slug:       "fiksi-ilmiah",
+		ImageURL:   &newImg,
+		TotalBooks: 8,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
 	}
 
 	// Signature method menerima: (ctx, uint(1), input)
 	mockUC.On("Update", mock.Anything, uint(1), input).Return(expected, nil)
 
-	reqPayload := `{"name": "Fiksi Ilmiah"}`
+	reqPayload := `{"name": "Fiksi Ilmiah", "image_url": "https://example.com/scifi.jpg"}`
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/categories/1", strings.NewReader(reqPayload))
 	req.Header.Set("Content-Type", "application/json")
 

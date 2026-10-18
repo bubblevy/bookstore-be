@@ -208,15 +208,22 @@ func TestBookUsecase_Create_Success(t *testing.T) {
 	ctx := context.Background()
 
 	isbn := "9789799731234"
+	origPrice := 150000
 	req := usecase.CreateBookInput{
-		CategoryID:  1,
-		AuthorID:    1,
-		PublisherID: 1,
-		Title:       "Bumi Manusia",
-		ISBN:        &isbn,
-		Price:       135000,
-		WeightGrams: 450,
-		Stock:       10,
+		CategoryID:    1,
+		AuthorID:      1,
+		PublisherID:   1,
+		Title:         "Bumi Manusia",
+		ISBN:          &isbn,
+		Price:         135000,
+		OriginalPrice: &origPrice,
+		WeightGrams:   450,
+		Stock:         10,
+		Language:      "Indonesia",
+		Length:        20.0,
+		Width:         13.5,
+		Height:        2.0,
+		Condition:     "100% Baru & Segel Penerbit",
 	}
 
 	cat := &entity.Category{Model: gorm.Model{ID: 1}, Name: "Fiksi", Slug: "fiksi"}
@@ -229,7 +236,10 @@ func TestBookUsecase_Create_Success(t *testing.T) {
 	mockBookRepo.On("ExistsBySlug", ctx, "bumi-manusia").Return(false, nil)
 	mockBookRepo.On("ExistsByISBN", ctx, isbn).Return(false, nil)
 	mockBookRepo.On("Create", ctx, mock.MatchedBy(func(b *entity.Book) bool {
-		return b.Title == "Bumi Manusia" && b.Slug == "bumi-manusia" && b.CategoryID == 1
+		return b.Title == "Bumi Manusia" && b.Slug == "bumi-manusia" && b.CategoryID == 1 &&
+			b.Language == "Indonesia" && b.Length == 20.0 && b.Condition == "100% Baru & Segel Penerbit" &&
+			b.OriginalPrice != nil && *b.OriginalPrice == 150000.0 &&
+			b.DiscountPercentage != nil && *b.DiscountPercentage == 10
 	})).Run(func(args mock.Arguments) {
 		b := args.Get(1).(*entity.Book)
 		b.ID = 1
@@ -243,6 +253,72 @@ func TestBookUsecase_Create_Success(t *testing.T) {
 	assert.Equal(t, uint(1), res.ID)
 	assert.Equal(t, "bumi-manusia", res.Slug)
 	assert.Equal(t, "Fiksi", res.Category.Name)
+	assert.Equal(t, &origPrice, res.OriginalPrice)
+	assert.Equal(t, 10, *res.DiscountPercentage)
+	assert.Equal(t, "Indonesia", res.Language)
+	assert.Equal(t, 20.0, res.Length)
+	assert.Equal(t, 13.5, res.Width)
+	assert.Equal(t, 2.0, res.Height)
+	assert.Equal(t, "100% Baru & Segel Penerbit", res.Condition)
+}
+
+func TestBookUsecase_Create_AutoDiscountFromPercentageOnly(t *testing.T) {
+	mockBookRepo := new(MockBookRepository)
+	mockCatRepo := new(MockCategoryRepositoryForBook)
+	mockAuthRepo := new(MockAuthorRepositoryForBook)
+	mockPubRepo := new(MockPublisherRepositoryForBook)
+	uc := usecase.NewBookUsecase(mockBookRepo, mockCatRepo, mockAuthRepo, mockPubRepo)
+	ctx := context.Background()
+
+	isbn := "9789799739999"
+	discPct := 20
+	req := usecase.CreateBookInput{
+		CategoryID:         1,
+		AuthorID:           1,
+		PublisherID:        1,
+		Title:              "Gadis Kretek",
+		ISBN:               &isbn,
+		Price:              100000,
+		OriginalPrice:      nil,
+		DiscountPercentage: &discPct,
+		WeightGrams:        350,
+		Stock:              10,
+		Language:           "Indonesia",
+		Length:             20.0,
+		Width:              13.5,
+		Height:             1.5,
+		Condition:          "100% Baru & Segel Penerbit",
+	}
+
+	cat := &entity.Category{Model: gorm.Model{ID: 1}, Name: "Fiksi", Slug: "fiksi"}
+	auth := &entity.Author{Model: gorm.Model{ID: 1}, Name: "Ratih Kumala", Slug: "ratih-kumala"}
+	pub := &entity.Publisher{Model: gorm.Model{ID: 1}, Name: "Gramedia", Slug: "gramedia"}
+
+	mockCatRepo.On("FindByID", ctx, uint(1)).Return(cat, nil)
+	mockAuthRepo.On("FindByID", ctx, uint(1)).Return(auth, nil)
+	mockPubRepo.On("FindByID", ctx, uint(1)).Return(pub, nil)
+	mockBookRepo.On("ExistsBySlug", ctx, "gadis-kretek").Return(false, nil)
+	mockBookRepo.On("ExistsByISBN", ctx, isbn).Return(false, nil)
+	mockBookRepo.On("Create", ctx, mock.MatchedBy(func(b *entity.Book) bool {
+		return b.Title == "Gadis Kretek" &&
+			b.Price == 80000.0 &&
+			b.OriginalPrice != nil && *b.OriginalPrice == 100000.0 &&
+			b.DiscountPercentage != nil && *b.DiscountPercentage == 20
+	})).Run(func(args mock.Arguments) {
+		b := args.Get(1).(*entity.Book)
+		b.ID = 2
+		b.CreatedAt = time.Now()
+		b.UpdatedAt = time.Now()
+	}).Return(nil)
+
+	res, err := uc.Create(ctx, req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+	assert.Equal(t, 80000, res.Price)
+	assert.NotNil(t, res.OriginalPrice)
+	assert.Equal(t, 100000, *res.OriginalPrice)
+	assert.NotNil(t, res.DiscountPercentage)
+	assert.Equal(t, 20, *res.DiscountPercentage)
 }
 
 func TestBookUsecase_Create_CategoryNotFound(t *testing.T) {
@@ -272,18 +348,20 @@ func TestBookUsecase_FindAll_Success(t *testing.T) {
 		Offset:       0,
 	}
 
+	origPrice := 100000
 	books := []entity.Book{
 		{
-			Model:       gorm.Model{ID: 1},
-			Title:       "Bumi",
-			Slug:        "bumi",
-			Price:       95000,
-			WeightGrams: 300,
-			Stock:       15,
-			IsActive:    true,
-			Category:    entity.Category{Model: gorm.Model{ID: 1}, Name: "Fiksi", Slug: "fiksi"},
-			Author:      entity.Author{Model: gorm.Model{ID: 2}, Name: "Tere Liye", Slug: "tere-liye"},
-			Publisher:   entity.Publisher{Model: gorm.Model{ID: 3}, Name: "Gramedia", Slug: "gramedia"},
+			Model:         gorm.Model{ID: 1},
+			Title:         "Bumi",
+			Slug:          "bumi",
+			Price:         95000,
+			OriginalPrice: &origPrice,
+			WeightGrams:   300,
+			Stock:         15,
+			IsActive:      true,
+			Category:      entity.Category{Model: gorm.Model{ID: 1}, Name: "Fiksi", Slug: "fiksi"},
+			Author:        entity.Author{Model: gorm.Model{ID: 2}, Name: "Tere Liye", Slug: "tere-liye"},
+			Publisher:     entity.Publisher{Model: gorm.Model{ID: 3}, Name: "Gramedia", Slug: "gramedia"},
 		},
 	}
 
@@ -293,6 +371,8 @@ func TestBookUsecase_FindAll_Success(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, items, 1)
 	assert.Equal(t, "Bumi", items[0].Title)
+	assert.Equal(t, &origPrice, items[0].OriginalPrice)
+	assert.Equal(t, 5, *items[0].DiscountPercentage)
 	assert.Equal(t, int64(1), meta.TotalItems)
 }
 
@@ -310,6 +390,11 @@ func TestBookUsecase_FindBySlug_Success(t *testing.T) {
 		Title:     "Bumi",
 		Slug:      "bumi",
 		Price:     95000,
+		Language:  "Indonesia",
+		Length:    20.0,
+		Width:     13.5,
+		Height:    2.0,
+		Condition: "100% Baru & Segel Penerbit",
 		Category:  entity.Category{Model: gorm.Model{ID: 1}, Name: "Fiksi", Slug: "fiksi"},
 		Author:    entity.Author{Model: gorm.Model{ID: 2}, Name: "Tere Liye", Slug: "tere-liye"},
 		Publisher: entity.Publisher{Model: gorm.Model{ID: 3}, Name: "Gramedia", Slug: "gramedia"},
@@ -322,6 +407,11 @@ func TestBookUsecase_FindBySlug_Success(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 	assert.Equal(t, "bumi", res.Slug)
+	assert.Equal(t, "Indonesia", res.Language)
+	assert.Equal(t, 20.0, res.Length)
+	assert.Equal(t, 13.5, res.Width)
+	assert.Equal(t, 2.0, res.Height)
+	assert.Equal(t, "100% Baru & Segel Penerbit", res.Condition)
 }
 
 func TestBookUsecase_Delete_Success(t *testing.T) {

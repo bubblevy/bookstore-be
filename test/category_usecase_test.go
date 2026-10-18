@@ -78,12 +78,16 @@ func TestCategoryUsecase_Create_Success(t *testing.T) {
 	uc := usecase.NewCategoryUsecase(mockRepo)
 
 	ctx := context.Background()
-	req := usecase.CreateCategoryInput{Name: "Sains & Teknologi"}
+	img := "https://example.com/categories/science.jpg"
+	req := usecase.CreateCategoryInput{
+		Name:     "Sains & Teknologi",
+		ImageURL: &img,
+	}
 	expectedSlug := "sains-and-teknologi"
 
 	mockRepo.On("ExistsBySlug", ctx, expectedSlug).Return(false, nil)
 	mockRepo.On("Create", ctx, mock.MatchedBy(func(cat *entity.Category) bool {
-		return cat.Name == req.Name && cat.Slug == expectedSlug
+		return cat.Name == req.Name && cat.Slug == expectedSlug && cat.ImageURL != nil && *cat.ImageURL == img
 	})).Run(func(args mock.Arguments) {
 		cat := args.Get(1).(*entity.Category)
 		cat.ID = 1
@@ -98,6 +102,8 @@ func TestCategoryUsecase_Create_Success(t *testing.T) {
 	assert.Equal(t, uint(1), res.ID)
 	assert.Equal(t, "Sains & Teknologi", res.Name)
 	assert.Equal(t, expectedSlug, res.Slug)
+	assert.Equal(t, &img, res.ImageURL)
+	assert.Equal(t, int64(0), res.TotalBooks)
 	mockRepo.AssertExpectations(t)
 }
 
@@ -124,9 +130,10 @@ func TestCategoryUsecase_FindAll_Success(t *testing.T) {
 	uc := usecase.NewCategoryUsecase(mockRepo)
 
 	ctx := context.Background()
+	img := "https://example.com/fiction.jpg"
 	categories := []entity.Category{
-		{ID: 1, Name: "Fiksi", Slug: "fiksi"},
-		{ID: 2, Name: "Sains", Slug: "sains"},
+		{ID: 1, Name: "Fiksi", Slug: "fiksi", ImageURL: &img, TotalBooks: 5},
+		{ID: 2, Name: "Sains", Slug: "sains", TotalBooks: 3},
 	}
 
 	mockRepo.On("FindAll", ctx).Return(categories, nil)
@@ -139,6 +146,9 @@ func TestCategoryUsecase_FindAll_Success(t *testing.T) {
 	assert.Equal(t, uint(1), res[0].ID)
 	assert.Equal(t, "Fiksi", res[0].Name)
 	assert.Equal(t, "fiksi", res[0].Slug)
+	assert.Equal(t, &img, res[0].ImageURL)
+	assert.Equal(t, int64(5), res[0].TotalBooks)
+	assert.Equal(t, int64(3), res[1].TotalBooks)
 	mockRepo.AssertExpectations(t)
 }
 
@@ -162,12 +172,15 @@ func TestCategoryUsecase_FindBySlug_Success(t *testing.T) {
 	uc := usecase.NewCategoryUsecase(mockRepo)
 
 	ctx := context.Background()
+	img := "https://example.com/fiction-popular.jpg"
 	category := &entity.Category{
-		ID:        1,
-		Name:      "Fiksi Populer",
-		Slug:      "fiksi-populer",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:         1,
+		Name:       "Fiksi Populer",
+		Slug:       "fiksi-populer",
+		ImageURL:   &img,
+		TotalBooks: 12,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
 	}
 
 	mockRepo.On("FindBySlug", ctx, "fiksi-populer").Return(category, nil)
@@ -179,6 +192,8 @@ func TestCategoryUsecase_FindBySlug_Success(t *testing.T) {
 	assert.Equal(t, uint(1), res.ID)
 	assert.Equal(t, "Fiksi Populer", res.Name)
 	assert.Equal(t, "fiksi-populer", res.Slug)
+	assert.Equal(t, &img, res.ImageURL)
+	assert.Equal(t, int64(12), res.TotalBooks)
 	mockRepo.AssertExpectations(t)
 }
 
@@ -210,15 +225,17 @@ func TestCategoryUsecase_Update_Success(t *testing.T) {
 		UpdatedAt: time.Now(),
 	}
 
+	newImg := "https://example.com/scifi.jpg"
 	req := usecase.UpdateCategoryInput{
-		Name: "Fiksi Ilmiah",
+		Name:     "Fiksi Ilmiah",
+		ImageURL: &newImg,
 	}
 	expectedSlug := "fiksi-ilmiah"
 
 	mockRepo.On("FindByID", ctx, uint(1)).Return(existingCat, nil)
 	mockRepo.On("ExistsBySlug", ctx, expectedSlug, uint(1)).Return(false, nil)
 	mockRepo.On("Update", ctx, mock.MatchedBy(func(cat *entity.Category) bool {
-		return cat.ID == 1 && cat.Name == "Fiksi Ilmiah" && cat.Slug == expectedSlug
+		return cat.ID == 1 && cat.Name == "Fiksi Ilmiah" && cat.Slug == expectedSlug && cat.ImageURL != nil && *cat.ImageURL == newImg
 	})).Return(nil)
 
 	res, err := uc.Update(ctx, 1, req)
@@ -228,6 +245,7 @@ func TestCategoryUsecase_Update_Success(t *testing.T) {
 	assert.Equal(t, uint(1), res.ID)
 	assert.Equal(t, "Fiksi Ilmiah", res.Name)
 	assert.Equal(t, expectedSlug, res.Slug)
+	assert.Equal(t, &newImg, res.ImageURL)
 	mockRepo.AssertExpectations(t)
 }
 

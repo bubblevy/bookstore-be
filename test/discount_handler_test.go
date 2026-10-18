@@ -165,8 +165,8 @@ func TestDiscountHandler_CheckDiscount_Success(t *testing.T) {
 		Data usecase.CheckDiscountResult `json:"data"`
 	}
 	_ = json.Unmarshal(body, &res)
-	assert.Equal(t, 15000.0, res.Data.DiscountAmount)
-	assert.Equal(t, 135000.0, res.Data.FinalAmount)
+	assert.Equal(t, 15000, res.Data.DiscountAmount)
+	assert.Equal(t, 135000, res.Data.FinalAmount)
 	mockUC.AssertExpectations(t)
 }
 

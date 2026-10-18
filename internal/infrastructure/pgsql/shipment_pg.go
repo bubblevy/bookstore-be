@@ -62,6 +62,25 @@ func (r *shipmentRepository) FindByBiteshipOrderID(ctx context.Context, biteship
 	return &s, nil
 }
 
+func (r *shipmentRepository) FindByIdentifier(ctx context.Context, identifier string) (*entity.Shipment, error) {
+	if identifier == "" {
+		return nil, nil
+	}
+	var s entity.Shipment
+	err := r.db.WithContext(ctx).
+		Joins("LEFT JOIN orders ON orders.id = shipments.order_id").
+		Where("shipments.biteship_order_id = ? OR shipments.biteship_tracking_id = ? OR shipments.waybill_number = ? OR orders.invoice_number = ?",
+			identifier, identifier, identifier, identifier).
+		First(&s).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &s, nil
+}
+
 func (r *shipmentRepository) Update(ctx context.Context, shipment *entity.Shipment) error {
 	return r.db.WithContext(ctx).
 		Model(&entity.Shipment{}).

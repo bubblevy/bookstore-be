@@ -11,7 +11,7 @@ type CourierOptionResponse struct {
 	CourierServiceName string  `json:"courier_service_name"`
 	CourierServiceCode string  `json:"courier_service_code"`
 	Description        string  `json:"description"`
-	Price              float64 `json:"price"`
+	Price              int     `json:"price"`
 	ETD                string  `json:"etd"`
 	Type               string  `json:"type"`
 }

@@ -6,7 +6,7 @@ type OrderListItemResponse struct {
 	ID             uint      `json:"id"`
 	InvoiceNumber  string    `json:"invoice_number"`
 	Status         string    `json:"status"`
-	TotalAmount    float64   `json:"total_amount"`
+	TotalAmount    int       `json:"total_amount"`
 	TotalQuantity  int       `json:"total_quantity"`
 	FirstItemTitle string    `json:"first_item_title"`
 	FirstItemCover *string   `json:"first_item_cover,omitempty"`
@@ -48,18 +48,18 @@ type OrderItemResponse struct {
 	BookID      uint    `json:"book_id"`
 	Title       string  `json:"title"`
 	CoverImage  *string `json:"cover_image,omitempty"`
-	Price       float64 `json:"price"`
+	Price       int     `json:"price"`
 	Quantity    int     `json:"quantity"`
 	WeightGrams int     `json:"weight_grams"`
-	Subtotal    float64 `json:"subtotal"`
+	Subtotal    int     `json:"subtotal"`
 }
 
 type OrderPricingResponse struct {
-	ItemsSubtotal  float64 `json:"items_subtotal"`
-	ShippingCost   float64 `json:"shipping_cost"`
-	DiscountAmount float64 `json:"discount_amount"`
-	AdminFee       float64 `json:"admin_fee"`
-	TotalAmount    float64 `json:"total_amount"`
+	ItemsSubtotal  int `json:"items_subtotal"`
+	ShippingCost   int `json:"shipping_cost"`
+	DiscountAmount int `json:"discount_amount"`
+	AdminFee       int `json:"admin_fee"`
+	TotalAmount    int `json:"total_amount"`
 }
 
 type OrderDetailResponse struct {

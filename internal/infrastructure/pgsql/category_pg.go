@@ -25,7 +25,12 @@ func (r *categoryRepository) Create(ctx context.Context, category *entity.Catego
 func (r *categoryRepository) FindByID(ctx context.Context, id uint) (*entity.Category, error) {
 	db := extractDB(ctx, r.db)
 	var category entity.Category
-	err := db.First(&category, id).Error
+	err := db.Model(&entity.Category{}).
+		Select("categories.*, COUNT(CASE WHEN books.deleted_at IS NULL AND books.is_active = true THEN books.id END) AS total_books").
+		Joins("LEFT JOIN books ON books.category_id = categories.id AND books.deleted_at IS NULL").
+		Where("categories.id = ?", id).
+		Group("categories.id").
+		First(&category).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -38,7 +43,12 @@ func (r *categoryRepository) FindByID(ctx context.Context, id uint) (*entity.Cat
 func (r *categoryRepository) FindBySlug(ctx context.Context, slug string) (*entity.Category, error) {
 	db := extractDB(ctx, r.db)
 	var category entity.Category
-	err := db.Where("slug = ?", slug).First(&category).Error
+	err := db.Model(&entity.Category{}).
+		Select("categories.*, COUNT(CASE WHEN books.deleted_at IS NULL AND books.is_active = true THEN books.id END) AS total_books").
+		Joins("LEFT JOIN books ON books.category_id = categories.id AND books.deleted_at IS NULL").
+		Where("categories.slug = ?", slug).
+		Group("categories.id").
+		First(&category).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -51,7 +61,12 @@ func (r *categoryRepository) FindBySlug(ctx context.Context, slug string) (*enti
 func (r *categoryRepository) FindAll(ctx context.Context) ([]entity.Category, error) {
 	db := extractDB(ctx, r.db)
 	var categories []entity.Category
-	err := db.Order("name ASC").Find(&categories).Error
+	err := db.Model(&entity.Category{}).
+		Select("categories.*, COUNT(CASE WHEN books.deleted_at IS NULL AND books.is_active = true THEN books.id END) AS total_books").
+		Joins("LEFT JOIN books ON books.category_id = categories.id AND books.deleted_at IS NULL").
+		Group("categories.id").
+		Order("categories.name ASC").
+		Find(&categories).Error
 	return categories, err
 }
 
