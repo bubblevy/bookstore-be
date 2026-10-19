@@ -8,6 +8,7 @@ import (
 
 	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/repository"
+	"github.com/bubblevy/bookstore/pkg/cache"
 	"github.com/bubblevy/bookstore/pkg/storage"
 	"github.com/gosimple/slug"
 )
@@ -52,6 +53,7 @@ type CategoryUsecase interface {
 type categoryUsecase struct {
 	categoryRepo repository.CategoryRepository
 	storageSvc   storage.StorageService
+	cacheSvc     cache.Cache
 }
 
 func NewCategoryUsecase(categoryRepo repository.CategoryRepository, storageSvc ...storage.StorageService) CategoryUsecase {
@@ -59,9 +61,14 @@ func NewCategoryUsecase(categoryRepo repository.CategoryRepository, storageSvc .
 	if len(storageSvc) > 0 {
 		s = storageSvc[0]
 	}
+	return NewCategoryUsecaseWithCache(categoryRepo, s, nil)
+}
+
+func NewCategoryUsecaseWithCache(categoryRepo repository.CategoryRepository, storageSvc storage.StorageService, cacheSvc cache.Cache) CategoryUsecase {
 	return &categoryUsecase{
 		categoryRepo: categoryRepo,
-		storageSvc:   s,
+		storageSvc:   storageSvc,
+		cacheSvc:     cacheSvc,
 	}
 }
 
@@ -105,10 +112,22 @@ func (u *categoryUsecase) Create(ctx context.Context, req CreateCategoryInput) (
 		return nil, fmt.Errorf("failed to create category: %w", err)
 	}
 
+	if u.cacheSvc != nil {
+		_ = u.cacheSvc.DeletePrefix(ctx, "categories:")
+	}
+
 	return u.toResponse(category), nil
 }
 
 func (u *categoryUsecase) FindAll(ctx context.Context) ([]CategoryList, error) {
+	cacheKey := "categories:all"
+	if u.cacheSvc != nil {
+		var cached []CategoryList
+		if err := u.cacheSvc.Get(ctx, cacheKey, &cached); err == nil && len(cached) > 0 {
+			return cached, nil
+		}
+	}
+
 	categories, err := u.categoryRepo.FindAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get categories: %w", err)
@@ -124,10 +143,23 @@ func (u *categoryUsecase) FindAll(ctx context.Context) ([]CategoryList, error) {
 			TotalBooks: cat.TotalBooks,
 		})
 	}
+
+	if u.cacheSvc != nil && len(responses) > 0 {
+		_ = u.cacheSvc.Set(ctx, cacheKey, responses, 30*time.Minute)
+	}
+
 	return responses, nil
 }
 
 func (u *categoryUsecase) FindBySlug(ctx context.Context, slugStr string) (*CategoryResult, error) {
+	cacheKey := "categories:slug:" + slugStr
+	if u.cacheSvc != nil {
+		var cached CategoryResult
+		if err := u.cacheSvc.Get(ctx, cacheKey, &cached); err == nil {
+			return &cached, nil
+		}
+	}
+
 	category, err := u.categoryRepo.FindBySlug(ctx, slugStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get category: %w", err)
@@ -135,7 +167,12 @@ func (u *categoryUsecase) FindBySlug(ctx context.Context, slugStr string) (*Cate
 	if category == nil {
 		return nil, entity.ErrCategoryNotFound
 	}
-	return u.toResponse(category), nil
+
+	res := u.toResponse(category)
+	if u.cacheSvc != nil {
+		_ = u.cacheSvc.Set(ctx, cacheKey, res, 30*time.Minute)
+	}
+	return res, nil
 }
 
 func (u *categoryUsecase) Update(ctx context.Context, id uint, req UpdateCategoryInput) (*CategoryResult, error) {
@@ -173,6 +210,10 @@ func (u *categoryUsecase) Update(ctx context.Context, id uint, req UpdateCategor
 		return nil, fmt.Errorf("failed to update category: %w", err)
 	}
 
+	if u.cacheSvc != nil {
+		_ = u.cacheSvc.DeletePrefix(ctx, "categories:")
+	}
+
 	if u.storageSvc != nil && oldImageURL != nil && *oldImageURL != "" && (newImageURL == nil || *newImageURL != *oldImageURL) {
 		_ = u.storageSvc.Delete(ctx, *oldImageURL)
 	}
@@ -191,6 +232,10 @@ func (u *categoryUsecase) Delete(ctx context.Context, id uint) error {
 
 	if err := u.categoryRepo.Delete(ctx, id); err != nil {
 		return fmt.Errorf("failed to delete category: %w", err)
+	}
+
+	if u.cacheSvc != nil {
+		_ = u.cacheSvc.DeletePrefix(ctx, "categories:")
 	}
 
 	if u.storageSvc != nil && category.ImageURL != nil && *category.ImageURL != "" {

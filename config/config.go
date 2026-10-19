@@ -7,7 +7,9 @@ import (
 	"strings"
 
 	"github.com/bubblevy/bookstore/internal/usecase"
+	"github.com/bubblevy/bookstore/pkg/cache"
 	"github.com/bubblevy/bookstore/pkg/email"
+	"github.com/bubblevy/bookstore/pkg/rabbitmq"
 	"github.com/bubblevy/bookstore/pkg/storage"
 	"github.com/joho/godotenv"
 	"golang.org/x/oauth2"
@@ -59,6 +61,8 @@ type AppConfig struct {
 	Biteship    BiteshipConfig
 	Midtrans    MidtransConfig
 	Storage     storage.Config
+	Redis       cache.Config
+	RabbitMQ    rabbitmq.Config
 }
 
 func LoadConfig() AppConfig {
@@ -130,6 +134,21 @@ func LoadConfig() AppConfig {
 				PublicCDNURL:    os.Getenv("AWS_S3_CDN_URL"),
 				UsePathStyle:    getEnvBool("AWS_S3_USE_PATH_STYLE", false),
 			},
+		},
+		Redis: cache.Config{
+			Host:     os.Getenv("REDIS_HOST"),
+			Port:     getEnv("REDIS_PORT", "6379"),
+			Password: os.Getenv("REDIS_PASSWORD"),
+			DB:       getEnvInt("REDIS_DB", 0),
+			Enabled:  getEnvBool("REDIS_ENABLED", os.Getenv("REDIS_HOST") != ""),
+		},
+		RabbitMQ: rabbitmq.Config{
+			URL:      os.Getenv("RABBITMQ_URL"),
+			Host:     os.Getenv("RABBITMQ_HOST"),
+			Port:     getEnv("RABBITMQ_PORT", "5672"),
+			User:     getEnv("RABBITMQ_USER", "guest"),
+			Password: getEnv("RABBITMQ_PASSWORD", "guest"),
+			Enabled:  getEnvBool("RABBITMQ_ENABLED", os.Getenv("RABBITMQ_URL") != "" || os.Getenv("RABBITMQ_HOST") != ""),
 		},
 	}
 

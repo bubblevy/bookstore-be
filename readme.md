@@ -32,13 +32,16 @@ bookstore/
 ├── migrations/                  # Database migration files (Golang Migrate)
 ├── pkg/                         # Reusable utilities
 │   ├── biteship/                # Biteship API HTTP client (Rates, Orders, Tracking)
+│   ├── cache/                   # Redis caching service with fail-open fallback
 │   ├── cookie/                  # HTTP-only cookie helpers for JWT tokens
 │   ├── email/                   # SMTP email sender for account activation & password reset
 │   ├── jwt/                     # JWT token generator & validator
 │   ├── logger/                  # Structured zap-based application logger
 │   ├── pagination/              # Query pagination helpers & metadata structures
 │   ├── payment/                 # Midtrans Core API payment client & signature verifier
+│   ├── rabbitmq/                # RabbitMQ client, email producer, worker consumer & retry
 │   ├── response/                # Standardized JSON response envelope helpers
+│   ├── storage/                 # Storage abstraction (Local file system & AWS S3 SDK v2)
 │   └── validator/               # Custom request validator & error messages
 └── public/                      # Static file assets (e.g. uploaded book covers)
 ```
@@ -50,12 +53,15 @@ bookstore/
 - **Language**: Go 1.27+
 - **HTTP Framework**: [GoFiber v3](https://github.com/gofiber/fiber)
 - **Database ORM**: [GORM](https://gorm.io/) with PostgreSQL Driver
-- **Database**: PostgreSQL 14+
+- **Database**: PostgreSQL 16+
+- **In-Memory Cache**: [Redis 7](https://redis.io/) (`go-redis/v9`) for high-throughput query caching & invalidation
+- **Message Broker & Queue**: [RabbitMQ 3](https://www.rabbitmq.com/) (`amqp091-go`) for background asynchronous email processing
+- **Cloud & Local Storage**: AWS S3 SDK v2 (`aws-sdk-go-v2`) and Local File Storage driver
 - **Authentication**: JWT (`golang-jwt/jwt/v5`) with HTTP-only cookies & Google OAuth 2.0
 - **Validation**: `go-playground/validator/v10` with custom strong password rules
 - **Payment Gateway**: [Midtrans Core API](https://midtrans.com/) (Virtual Account, Mandiri Bill, GoPay, QRIS)
 - **Logistics & Shipping**: [Biteship API](https://biteship.com/) (Rates calculation, Area search, Fulfillment dispatch, Tracking)
-- **Email Service**: SMTP with HTML templates (Account activation, password reset)
+- **Email Service**: Asynchronous RabbitMQ queue with SMTP HTML templates (Account activation, password reset)
 - **Database Migrations**: `golang-migrate`
 
 ---
@@ -118,6 +124,19 @@ Supported order statuses:
 - `completed` -> Order successfully delivered to recipient.
 - `cancelled` -> Order cancelled or payment deadline expired (stock restored).
 - `returned` -> Order returned to store (stock restored).
+
+### 9. Performance Caching (Redis)
+- Accelerates page loading and response times by caching frequently viewed books and categories in-memory.
+- Automatically invalidates and refreshes the cache whenever books or categories are modified.
+- Built-in fail-open resilience: if Redis is unavailable, requests seamlessly query the database without disruption.
+
+### 10. Asynchronous Email Queue (RabbitMQ)
+- Offloads account activation and password reset emails to background workers, making user registrations and password requests near-instant.
+- Features automatic retry handling for reliable email delivery and automatic fallback to direct SMTP if the message queue is offline.
+
+### 11. Media & Object Storage (Local & AWS S3)
+- Flexible asset storage supporting both local server filesystem and cloud object storage (AWS S3, MinIO, Cloudflare R2).
+- Automatic file management that organizes book covers and category images, with automated cleanup of unused temporary uploads.
 
 ---
 
@@ -248,6 +267,27 @@ cp .env.example .env
 | `STORE_ORIGIN_NAME`| Store origin facility name | `Central Book Depot` |
 | `STORE_ORIGIN_PHONE`| Store origin facility phone | `081234567890` |
 | `STORE_ORIGIN_ADDRESS`| Store origin pickup physical address | `Jl. Kemang Raya No. 10, Jakarta Selatan` |
+| `STORAGE_DRIVER`| Storage driver (`local` or `s3`) | `local` |
+| `STORAGE_LOCAL_BASE_DIR`| Local filesystem directory for assets | `./public` |
+| `STORAGE_LOCAL_URL_PREFIX`| URL prefix for serving local files | `/api/v1/static` |
+| `AWS_S3_BUCKET`| AWS S3 bucket name (if `STORAGE_DRIVER=s3`) | `my-bookstore-bucket` |
+| `AWS_S3_REGION`| AWS S3 region | `ap-southeast-1` |
+| `AWS_ACCESS_KEY_ID`| AWS access key ID | `AKIAIOSFODNN7EXAMPLE` |
+| `AWS_SECRET_ACCESS_KEY`| AWS secret access key | `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` |
+| `AWS_S3_ENDPOINT`| Custom S3 endpoint URL (MinIO / R2) | `https://s3.ap-southeast-1.amazonaws.com` |
+| `AWS_S3_CDN_URL`| Custom CDN base URL for S3 assets | `https://cdn.example.com` |
+| `AWS_S3_USE_PATH_STYLE`| Force path style for MinIO/custom S3 | `false` |
+| `REDIS_ENABLED`| Enable/disable Redis caching | `true` |
+| `REDIS_HOST`| Redis server hostname | `localhost` (or `redis` in Docker) |
+| `REDIS_PORT`| Redis server port | `6379` |
+| `REDIS_PASSWORD`| Redis server authentication password | `""` |
+| `REDIS_DB`| Redis database index | `0` |
+| `RABBITMQ_ENABLED`| Enable/disable RabbitMQ email queue | `true` |
+| `RABBITMQ_HOST`| RabbitMQ server hostname | `localhost` (or `rabbitmq` in Docker) |
+| `RABBITMQ_PORT`| RabbitMQ AMQP port | `5672` |
+| `RABBITMQ_USER`| RabbitMQ username | `guest` |
+| `RABBITMQ_PASSWORD`| RabbitMQ password | `guest` |
+| `RABBITMQ_URL`| Optional direct AMQP connection URL | `amqp://guest:guest@localhost:5672/` |
 
 ---
 
@@ -255,33 +295,41 @@ cp .env.example .env
 
 ### Option A: Running with Docker (Recommended)
 
-You can run the entire stack (PostgreSQL database, database migrations, and Go API) in isolated containers using Docker Compose with a single command:
+You can run the entire enterprise stack (**PostgreSQL 16**, **Redis 7**, **RabbitMQ 3 with Management Dashboard**, **Golang Migrate**, and **Go API**) in isolated containers with a single command:
 
 1. **Prepare Environment File**:
    ```bash
    cp .env.example .env
    ```
 
-2. **Start Services**:
+2. **Start All Services**:
    ```bash
    docker compose up --build -d
    ```
    This automatically:
-   - Starts PostgreSQL 16 on port `5432` with a persistent volume (`bookstore_postgres_data`).
-   - Waits for PostgreSQL to become healthy.
-   - Executes all database migrations up to the latest version via `golang-migrate`.
-   - Builds and launches the Bookstore Go API container on port `8000`.
+   - Starts **PostgreSQL 16** on port `5432` with persistent storage (`bookstore_postgres_data`).
+   - Starts **Redis 7** on port `6379` with persistent volume (`bookstore_redis_data`).
+   - Starts **RabbitMQ 3 (Management)** on ports `5672` (AMQP) & `15672` (Management Dashboard).
+   - Waits for PostgreSQL, Redis, and RabbitMQ to pass health checks.
+   - Runs database migrations to latest schema via `golang-migrate`.
+   - Compiles and launches the **Bookstore API** container on port `8000`.
 
-3. **Check Logs & Status**:
+3. **Verify RabbitMQ Management Dashboard**:
+   - URL: [http://localhost:15672](http://localhost:15672)
+   - Default Username: `guest`
+   - Default Password: `guest`
+   - You can inspect the exchange `bookstore.direct`, queue `bookstore.email.queue`, and active worker consumers.
+
+4. **Check Logs & Status**:
    ```bash
    # View logs of the API service
    docker compose logs -f app
 
-   # Check container status
+   # Check container health status
    docker compose ps
    ```
 
-4. **Stop Services**:
+5. **Stop Services**:
    ```bash
    docker compose down
    ```

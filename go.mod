@@ -37,6 +37,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.4 // indirect
 	github.com/aws/smithy-go v1.28.5 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
@@ -57,10 +58,13 @@ require (
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/midtrans/midtrans-go v1.3.8 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
+	github.com/rabbitmq/amqp091-go v1.16.0 // indirect
+	github.com/redis/go-redis/v9 v9.23.0 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/tinylib/msgp v1.6.4 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.73.0 // indirect
+	go.uber.org/atomic v1.12.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect

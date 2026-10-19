@@ -13,10 +13,12 @@ import (
 	"github.com/bubblevy/bookstore/internal/infrastructure/pgsql"
 	"github.com/bubblevy/bookstore/internal/usecase"
 	"github.com/bubblevy/bookstore/pkg/biteship"
+	"github.com/bubblevy/bookstore/pkg/cache"
 	"github.com/bubblevy/bookstore/pkg/email"
 	"github.com/bubblevy/bookstore/pkg/jwt"
 	"github.com/bubblevy/bookstore/pkg/logger"
 	"github.com/bubblevy/bookstore/pkg/payment"
+	"github.com/bubblevy/bookstore/pkg/rabbitmq"
 	"github.com/bubblevy/bookstore/pkg/storage"
 	"github.com/bubblevy/bookstore/pkg/validator"
 	"github.com/gofiber/fiber/v3"
@@ -59,11 +61,18 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 				"timestamp": time.Now().UTC(),
 			})
 		}
-		return c.JSON(fiber.Map{
+		healthStatus := fiber.Map{
 			"status":    "ok",
 			"database":  "connected",
 			"timestamp": time.Now().UTC(),
-		})
+		}
+		if cfg.Redis.Enabled {
+			healthStatus["redis"] = "enabled"
+		}
+		if cfg.RabbitMQ.Enabled {
+			healthStatus["rabbitmq"] = "enabled"
+		}
+		return c.JSON(healthStatus)
 	})
 
 	// init dependencies & services
@@ -82,9 +91,27 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 		os.Exit(1)
 	}
 
+	// init redis cache
+	cacheSvc, err := cache.NewRedisCache(cfg.Redis)
+	if err != nil {
+		logger.Warn("redis cache initialization notice", "error", err)
+	}
+
+	// init rabbitmq email queue worker
+	var activeEmailSender email.EmailSender = emailSender
+	rabbitClient, err := rabbitmq.NewRabbitMQClient(cfg.RabbitMQ)
+	if err != nil {
+		logger.Warn("rabbitmq initialization notice, falling back to direct smtp", "error", err)
+	} else if rabbitClient != nil {
+		activeEmailSender = rabbitmq.NewRabbitMQEmailSender(rabbitClient, emailSender)
+		if err := rabbitClient.StartEmailConsumer(context.Background(), emailSender); err != nil {
+			logger.Warn("failed to start rabbitmq email consumer", "error", err)
+		}
+	}
+
 	userRepo := pgsql.NewUserRepository(db)
 	sessionRepo := pgsql.NewSessionRepository(db)
-	authUsecase := usecase.NewAuthUsecase(userRepo, sessionRepo, txManager, jwtService, emailSender)
+	authUsecase := usecase.NewAuthUsecase(userRepo, sessionRepo, txManager, jwtService, activeEmailSender)
 
 	// start background session cleanup (every 6 hours)
 	authUsecase.StartSessionCleanup(context.Background(), 6*time.Hour)
@@ -126,7 +153,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 
 	// category routes
 	categoryRepo := pgsql.NewCategoryRepository(db)
-	categoryUsecase := usecase.NewCategoryUsecase(categoryRepo, storageSvc)
+	categoryUsecase := usecase.NewCategoryUsecaseWithCache(categoryRepo, storageSvc, cacheSvc)
 	handler.NewCategoryHandler(api, categoryUsecase, validate, authMiddleware, adminMiddleware)
 
 	// publisher routes
@@ -141,7 +168,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 
 	// book routes
 	bookRepo := pgsql.NewBookRepository(db)
-	bookUsecase := usecase.NewBookUsecase(bookRepo, categoryRepo, authorRepo, publisherRepo, storageSvc)
+	bookUsecase := usecase.NewBookUsecaseWithCache(bookRepo, categoryRepo, authorRepo, publisherRepo, storageSvc, cacheSvc)
 	handler.NewBookHandler(api, bookUsecase, validate, authMiddleware, adminMiddleware)
 
 	// discount routes

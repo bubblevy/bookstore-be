@@ -41,6 +41,43 @@ services:
     networks:
       - bookstore_network
 
+  redis:
+    image: redis:7-alpine
+    container_name: bookstore_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bookstore_network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: bookstore_rabbitmq
+    restart: unless-stopped
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
+    networks:
+      - bookstore_network
+
   app:
     build:
       context: .
@@ -58,6 +95,10 @@ services:
       - DATABASE_USER=${DATABASE_USER:-postgres}
       - DATABASE_PASSWORD=${DATABASE_PASSWORD:-postgres}
       - DATABASE_NAME=${DATABASE_NAME:-bookstore}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
     volumes:
       - ./public:/app/public
       - ./logs:/app/logs
@@ -66,6 +107,10 @@ services:
         condition: service_healthy
       migration:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - bookstore_network
     logging:
@@ -77,6 +122,10 @@ services:
 volumes:
   postgres_data:
     name: bookstore_postgres_data
+  redis_data:
+    name: bookstore_redis_data
+  rabbitmq_data:
+    name: bookstore_rabbitmq_data
 
 networks:
   bookstore_network:

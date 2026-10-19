@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/repository"
+	"github.com/bubblevy/bookstore/pkg/cache"
 	"github.com/bubblevy/bookstore/pkg/pagination"
 	"github.com/bubblevy/bookstore/pkg/storage"
 	"github.com/gosimple/slug"
@@ -123,6 +125,7 @@ type bookUsecase struct {
 	authorRepo    repository.AuthorRepository
 	publisherRepo repository.PublisherRepository
 	storageSvc    storage.StorageService
+	cacheSvc      cache.Cache
 }
 
 func NewBookUsecase(
@@ -136,12 +139,24 @@ func NewBookUsecase(
 	if len(storageSvc) > 0 {
 		s = storageSvc[0]
 	}
+	return NewBookUsecaseWithCache(bookRepo, categoryRepo, authorRepo, publisherRepo, s, nil)
+}
+
+func NewBookUsecaseWithCache(
+	bookRepo repository.BookRepository,
+	categoryRepo repository.CategoryRepository,
+	authorRepo repository.AuthorRepository,
+	publisherRepo repository.PublisherRepository,
+	storageSvc storage.StorageService,
+	cacheSvc cache.Cache,
+) BookUsecase {
 	return &bookUsecase{
 		bookRepo:      bookRepo,
 		categoryRepo:  categoryRepo,
 		authorRepo:    authorRepo,
 		publisherRepo: publisherRepo,
-		storageSvc:    s,
+		storageSvc:    storageSvc,
+		cacheSvc:      cacheSvc,
 	}
 }
 
@@ -309,6 +324,11 @@ func (u *bookUsecase) Create(ctx context.Context, input CreateBookInput) (*BookD
 		return nil, fmt.Errorf("failed to create book: %w", err)
 	}
 
+	if u.cacheSvc != nil {
+		_ = u.cacheSvc.DeletePrefix(ctx, "books:")
+		_ = u.cacheSvc.DeletePrefix(ctx, "categories:")
+	}
+
 	book.Category = *category
 	book.Author = *author
 	book.Publisher = *publisher
@@ -316,7 +336,61 @@ func (u *bookUsecase) Create(ctx context.Context, input CreateBookInput) (*BookD
 	return u.toDetailResult(book), nil
 }
 
+type cachedBookList struct {
+	Items []BookListItem  `json:"items"`
+	Meta  pagination.Meta `json:"meta"`
+}
+
+func (u *bookUsecase) buildBookListCacheKey(filter repository.BookFilter, pq pagination.Query) string {
+	var sb strings.Builder
+	sb.WriteString("books:list:p=")
+	sb.WriteString(strconv.Itoa(pq.Page))
+	sb.WriteString(":pp=")
+	sb.WriteString(strconv.Itoa(pq.PerPage))
+	if filter.Search != "" {
+		sb.WriteString(":q=")
+		sb.WriteString(strings.TrimSpace(filter.Search))
+	}
+	if filter.CategorySlug != "" {
+		sb.WriteString(":cat=")
+		sb.WriteString(filter.CategorySlug)
+	}
+	if filter.AuthorSlug != "" {
+		sb.WriteString(":aut=")
+		sb.WriteString(filter.AuthorSlug)
+	}
+	if filter.PublisherSlug != "" {
+		sb.WriteString(":pub=")
+		sb.WriteString(filter.PublisherSlug)
+	}
+	if filter.MinPrice != nil {
+		sb.WriteString(":min=")
+		sb.WriteString(strconv.Itoa(*filter.MinPrice))
+	}
+	if filter.MaxPrice != nil {
+		sb.WriteString(":max=")
+		sb.WriteString(strconv.Itoa(*filter.MaxPrice))
+	}
+	if filter.IsActive != nil {
+		sb.WriteString(":act=")
+		sb.WriteString(strconv.FormatBool(*filter.IsActive))
+	}
+	if filter.SortBy != "" {
+		sb.WriteString(":sort=")
+		sb.WriteString(filter.SortBy)
+	}
+	return sb.String()
+}
+
 func (u *bookUsecase) FindAll(ctx context.Context, filter repository.BookFilter, pq pagination.Query) ([]BookListItem, pagination.Meta, error) {
+	cacheKey := u.buildBookListCacheKey(filter, pq)
+	if u.cacheSvc != nil {
+		var cached cachedBookList
+		if err := u.cacheSvc.Get(ctx, cacheKey, &cached); err == nil && len(cached.Items) > 0 {
+			return cached.Items, cached.Meta, nil
+		}
+	}
+
 	filter.Limit = pq.PerPage
 	filter.Offset = pq.Offset()
 
@@ -363,10 +437,26 @@ func (u *bookUsecase) FindAll(ctx context.Context, filter repository.BookFilter,
 	}
 
 	meta := pagination.BuildMeta(total, pq.Page, pq.PerPage)
+
+	if u.cacheSvc != nil && len(items) > 0 {
+		_ = u.cacheSvc.Set(ctx, cacheKey, cachedBookList{
+			Items: items,
+			Meta:  meta,
+		}, 5*time.Minute)
+	}
+
 	return items, meta, nil
 }
 
 func (u *bookUsecase) FindBySlug(ctx context.Context, slugStr string) (*BookDetailResult, error) {
+	cacheKey := "books:slug:" + slugStr
+	if u.cacheSvc != nil {
+		var cached BookDetailResult
+		if err := u.cacheSvc.Get(ctx, cacheKey, &cached); err == nil {
+			return &cached, nil
+		}
+	}
+
 	book, err := u.bookRepo.FindBySlug(ctx, slugStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get book: %w", err)
@@ -374,7 +464,12 @@ func (u *bookUsecase) FindBySlug(ctx context.Context, slugStr string) (*BookDeta
 	if book == nil {
 		return nil, entity.ErrBookNotFound
 	}
-	return u.toDetailResult(book), nil
+
+	res := u.toDetailResult(book)
+	if u.cacheSvc != nil {
+		_ = u.cacheSvc.Set(ctx, cacheKey, res, 15*time.Minute)
+	}
+	return res, nil
 }
 
 func (u *bookUsecase) Update(ctx context.Context, id uint, input UpdateBookInput) (*BookDetailResult, error) {
@@ -458,6 +553,11 @@ func (u *bookUsecase) Update(ctx context.Context, id uint, input UpdateBookInput
 		return nil, fmt.Errorf("failed to update book: %w", err)
 	}
 
+	if u.cacheSvc != nil {
+		_ = u.cacheSvc.DeletePrefix(ctx, "books:")
+		_ = u.cacheSvc.DeletePrefix(ctx, "categories:")
+	}
+
 	if u.storageSvc != nil && oldCover != nil && *oldCover != "" && (newCover == nil || *newCover != *oldCover) {
 		_ = u.storageSvc.Delete(ctx, *oldCover)
 	}
@@ -480,6 +580,11 @@ func (u *bookUsecase) Delete(ctx context.Context, id uint) error {
 
 	if err := u.bookRepo.Delete(ctx, id); err != nil {
 		return fmt.Errorf("failed to delete book: %w", err)
+	}
+
+	if u.cacheSvc != nil {
+		_ = u.cacheSvc.DeletePrefix(ctx, "books:")
+		_ = u.cacheSvc.DeletePrefix(ctx, "categories:")
 	}
 
 	if u.storageSvc != nil && book.CoverImage != nil && *book.CoverImage != "" {
