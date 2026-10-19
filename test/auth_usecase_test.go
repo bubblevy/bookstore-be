@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/bubblevy/bookstore/internal/entity"
+	"github.com/bubblevy/bookstore/internal/repository"
 	"github.com/bubblevy/bookstore/internal/usecase"
 	"github.com/bubblevy/bookstore/pkg/hash"
 	"github.com/bubblevy/bookstore/pkg/logger"
@@ -107,6 +108,20 @@ func (m *mockUserRepo) Update(ctx context.Context, user *entity.User) error {
 	}
 
 	return nil
+}
+
+func (m *mockUserRepo) FindAll(ctx context.Context, filter repository.UserFilter) ([]entity.User, int64, error) {
+	var result []entity.User
+	for _, u := range m.usersByID {
+		if filter.Role != "" && string(u.Role) != filter.Role {
+			continue
+		}
+		if filter.IsActive != nil && u.IsActive != *filter.IsActive {
+			continue
+		}
+		result = append(result, *u)
+	}
+	return result, int64(len(result)), nil
 }
 
 type mockSessionRepo struct {

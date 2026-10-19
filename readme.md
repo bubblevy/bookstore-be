@@ -163,6 +163,8 @@ The complete API specification is available in OpenAPI 3.0.3 format:
 | **Auth** | `POST` | `/api/v1/auth/change-password` | User | Change password for authenticated user |
 | **Auth** | `GET` | `/api/v1/auth/google/login` | Public | Initiate Google OAuth 2.0 login |
 | **Auth** | `GET` | `/api/v1/auth/google/callback` | Public | Google OAuth 2.0 callback URL |
+| **User** | `GET` | `/api/v1/users/me` | User | Get current user profile (safe, non-sensitive) |
+| **User** | `GET` | `/api/v1/users` | Admin | List users with pagination & search filter |
 | **Category** | `GET` | `/api/v1/categories` | Public | List all categories |
 | **Category** | `GET` | `/api/v1/categories/{slug}` | Public | Get category details by slug |
 | **Category** | `POST` | `/api/v1/categories` | Admin | Create category |
