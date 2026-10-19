@@ -1,8 +1,13 @@
-name: Build and Deploy to Azure
+name: Deploy Bookstore API to Azure Container Apps
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
+    paths-ignore:
+      - 'README.md'
+      - '.gitignore'
+      - 'docs/**'
   workflow_dispatch:
 
 jobs:
@@ -13,7 +18,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Log in to Azure Container Registry (ACR)
+      - name: Log in to Azure Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ secrets.ACR_NAME }}.azurecr.io
@@ -28,73 +33,22 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.ACR_NAME }}.azurecr.io/${{ secrets.IMAGE_NAME }}:latest
+          tags: |
+            ${{ secrets.ACR_NAME }}.azurecr.io/bookstore-api:${{ github.sha }}
+            ${{ secrets.ACR_NAME }}.azurecr.io/bookstore-api:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Create Production .env File
-        run: |
-          echo "${{ secrets.ENV_PROD }}" > .env.prod
-          python3 - << 'EOF'
-          import json
-
-          settings = [
-              {"name": "WEBSITES_PORT", "value": "8000", "slotSetting": False},
-              {"name": "WEBSITES_CONTAINER_START_TIME_LIMIT", "value": "1800", "slotSetting": False}
-          ]
-
-          target_keys = {
-              "DATABASE_USER", "DATABASE_PASSWORD", "DATABASE_NAME",
-              "REDIS_PASSWORD", "RABBITMQ_USER", "RABBITMQ_PASSWORD"
-          }
-
-          with open('.env.prod') as f:
-              for line in f:
-                  line = line.strip()
-                  if not line or line.startswith('#'):
-                      continue
-                  if '=' in line:
-                      k, v = line.split('=', 1)
-                      k = k.strip()
-                      v = v.strip("\"'")
-                      if k in target_keys:
-                          settings.append({"name": k, "value": v, "slotSetting": False})
-
-          with open('core_settings.json', 'w') as out:
-              json.dump(settings, out, indent=2)
-          EOF
 
       - name: Azure Login
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Upload .env and Deploy to Azure App Service
+      - name: Deploy Revision to Azure Container Apps
         uses: azure/cli@v2
         with:
           inlineScript: |
-            echo "1. Mengunggah .env ke Azure File Share..."
-            az storage file upload \
-              --account-name ${{ secrets.AZURE_STORAGE_ACCOUNT }} \
-              --account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
-              --share-name ${{ secrets.AZURE_STORAGE_SHARE }} \
-              --source .env.prod \
-              --path .env
-
-            echo "2. Menerapkan docker-compose.prod.yml..."
-            az webapp config container set \
-              --name ${{ secrets.AZURE_WEBAPP_NAME }} \
-              --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-              --multicontainer-config-type COMPOSE \
-              --multicontainer-config-file docker-compose.prod.yml
-
-            echo "3. Menyinkronkan setting dasar container..."
-            az webapp config appsettings set \
-              --name ${{ secrets.AZURE_WEBAPP_NAME }} \
-              --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-              --settings @core_settings.json
-
-            echo "4. Merestart App Service..."
-            az webapp restart \
-              --name ${{ secrets.AZURE_WEBAPP_NAME }} \
-              --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }}
+            az containerapp update \
+              --name bookstore-api \
+              --resource-group rg-bookstore \
+              --image ${{ secrets.ACR_NAME }}.azurecr.io/bookstore-api:${{ github.sha }}
