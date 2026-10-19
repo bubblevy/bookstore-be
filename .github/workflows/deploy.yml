@@ -32,36 +32,50 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Create Production .env File
+      - name: Prepare Production Settings
         run: |
           echo "${{ secrets.ENV_PROD }}" > .env.prod
+          python3 - << 'EOF'
+          import json
+
+          settings = []
+          with open('.env.prod') as f:
+              for line in f:
+                  line = line.strip()
+                  if not line or line.startswith('#'):
+                      continue
+                  if '=' in line:
+                      key, val = line.split('=', 1)
+                      val = val.strip("\"'")
+                      settings.append({"name": key.strip(), "value": val, "slotSetting": False})
+
+          with open('appsettings.json', 'w') as out:
+              json.dump(settings, out, indent=2)
+          EOF
 
       - name: Azure Login
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Deploy Docker Compose and Sync App Settings
+      - name: Deploy Stack and Sync Settings via Azure CLI
         uses: azure/cli@v2
         with:
           inlineScript: |
-            echo "1. Applying docker-compose.prod.yml to ${{ secrets.AZURE_WEBAPP_NAME }} in ${{ secrets.AZURE_RESOURCE_GROUP }}..."
+            echo "Applying docker-compose.prod.yml..."
             az webapp config container set \
               --name ${{ secrets.AZURE_WEBAPP_NAME }} \
               --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
               --multicontainer-config-type COMPOSE \
               --multicontainer-config-file docker-compose.prod.yml
 
-            echo "2. Injecting environment variables from secret into Azure App Service settings..."
-            SETTINGS=$(grep -v '^#' .env.prod | grep '=' | tr '\n' ' ')
-            if [ -n "$SETTINGS" ]; then
-              az webapp config appsettings set \
-                --name ${{ secrets.AZURE_WEBAPP_NAME }} \
-                --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-                --settings $SETTINGS
-            fi
+            echo "Injecting App Settings..."
+            az webapp config appsettings set \
+              --name ${{ secrets.AZURE_WEBAPP_NAME }} \
+              --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+              --settings @appsettings.json
 
-            echo "3. Restarting App Service to apply configurations and load containers..."
+            echo "Restarting Web App..."
             az webapp restart \
               --name ${{ secrets.AZURE_WEBAPP_NAME }} \
               --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }}
