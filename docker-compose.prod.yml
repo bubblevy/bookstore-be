@@ -23,23 +23,23 @@ services:
   redis:
     image: redis:7-alpine
     restart: always
-    command: >
-      sh -c 'if [ -z "$${REDIS_PASSWORD}" ]; then
-        redis-server --appendonly yes;
+    entrypoint: >
+      sh -c "if [ -n \"$REDIS_PASSWORD\" ]; then
+        exec redis-server --appendonly yes --requirepass \"$REDIS_PASSWORD\";
       else
-        redis-server --appendonly yes --requirepass "$${REDIS_PASSWORD}";
-      fi'
+        exec redis-server --appendonly yes;
+      fi"
     environment:
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     volumes:
       - /mounts/azuredata/redis:/data
     healthcheck:
       test: >
-        sh -c 'if [ -z "$${REDIS_PASSWORD}" ]; then
-          redis-cli ping;
+        sh -c "if [ -n \"$REDIS_PASSWORD\" ]; then
+          redis-cli -a \"$REDIS_PASSWORD\" ping | grep PONG;
         else
-          redis-cli -a "$${REDIS_PASSWORD}" ping;
-        fi'
+          redis-cli ping | grep PONG;
+        fi"
       interval: 10s
       timeout: 5s
       retries: 5
@@ -69,8 +69,9 @@ services:
     restart: always
     ports:
       - "8000:8000"
+   
     env_file:
-      - .env
+      - /mounts/azuredata/.env
     environment:
       - WEBSITES_PORT=8000
       - DATABASE_HOST=postgres
@@ -79,8 +80,10 @@ services:
       - REDIS_PORT=6379
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_PORT=5672
+      - STORAGE_LOCAL_BASE_DIR=/mounts/azuredata/public
     volumes:
       - /mounts/azuredata/public:/app/public
+      - /mounts/azuredata/.env:/mounts/azuredata/.env
     depends_on:
       postgres:
         condition: service_healthy
