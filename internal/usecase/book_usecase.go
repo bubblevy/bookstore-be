@@ -10,6 +10,7 @@ import (
 	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/repository"
 	"github.com/bubblevy/bookstore/pkg/pagination"
+	"github.com/bubblevy/bookstore/pkg/storage"
 	"github.com/gosimple/slug"
 )
 
@@ -121,6 +122,7 @@ type bookUsecase struct {
 	categoryRepo  repository.CategoryRepository
 	authorRepo    repository.AuthorRepository
 	publisherRepo repository.PublisherRepository
+	storageSvc    storage.StorageService
 }
 
 func NewBookUsecase(
@@ -128,12 +130,18 @@ func NewBookUsecase(
 	categoryRepo repository.CategoryRepository,
 	authorRepo repository.AuthorRepository,
 	publisherRepo repository.PublisherRepository,
+	storageSvc ...storage.StorageService,
 ) BookUsecase {
+	var s storage.StorageService
+	if len(storageSvc) > 0 {
+		s = storageSvc[0]
+	}
 	return &bookUsecase{
 		bookRepo:      bookRepo,
 		categoryRepo:  categoryRepo,
 		authorRepo:    authorRepo,
 		publisherRepo: publisherRepo,
+		storageSvc:    s,
 	}
 }
 
@@ -266,6 +274,13 @@ func (u *bookUsecase) Create(ctx context.Context, input CreateBookInput) (*BookD
 
 	finalPrice, finalOriginalPrice, finalDiscountPct := resolveBookPricing(input.Price, input.OriginalPrice, input.DiscountPercentage)
 
+	coverImage := input.CoverImage
+	if u.storageSvc != nil && coverImage != nil && strings.TrimSpace(*coverImage) != "" {
+		if _, committedURL, err := u.storageSvc.CommitFile(ctx, *coverImage, "covers"); err == nil {
+			coverImage = &committedURL
+		}
+	}
+
 	book := &entity.Book{
 		CategoryID:         input.CategoryID,
 		AuthorID:           input.AuthorID,
@@ -286,7 +301,7 @@ func (u *bookUsecase) Create(ctx context.Context, input CreateBookInput) (*BookD
 		Height:             input.Height,
 		Condition:          input.Condition,
 		Stock:              input.Stock,
-		CoverImage:         input.CoverImage,
+		CoverImage:         coverImage,
 		IsActive:           isActive,
 	}
 
@@ -414,6 +429,8 @@ func (u *bookUsecase) Update(ctx context.Context, id uint, input UpdateBookInput
 	book.Slug = bookSlug
 	book.ISBN = input.ISBN
 	book.Synopsis = input.Synopsis
+	oldCover := book.CoverImage
+
 	book.Price = finalPrice
 	book.OriginalPrice = finalOriginalPrice
 	book.DiscountPercentage = finalDiscountPct
@@ -426,13 +443,23 @@ func (u *bookUsecase) Update(ctx context.Context, id uint, input UpdateBookInput
 	book.Height = input.Height
 	book.Condition = input.Condition
 	book.Stock = input.Stock
-	book.CoverImage = input.CoverImage
+	newCover := input.CoverImage
+	if u.storageSvc != nil && newCover != nil && strings.TrimSpace(*newCover) != "" {
+		if _, committedURL, err := u.storageSvc.CommitFile(ctx, *newCover, "covers"); err == nil {
+			newCover = &committedURL
+		}
+	}
+	book.CoverImage = newCover
 	if input.IsActive != nil {
 		book.IsActive = *input.IsActive
 	}
 
 	if err := u.bookRepo.Update(ctx, book); err != nil {
 		return nil, fmt.Errorf("failed to update book: %w", err)
+	}
+
+	if u.storageSvc != nil && oldCover != nil && *oldCover != "" && (newCover == nil || *newCover != *oldCover) {
+		_ = u.storageSvc.Delete(ctx, *oldCover)
 	}
 
 	book.Category = *category
@@ -454,5 +481,10 @@ func (u *bookUsecase) Delete(ctx context.Context, id uint) error {
 	if err := u.bookRepo.Delete(ctx, id); err != nil {
 		return fmt.Errorf("failed to delete book: %w", err)
 	}
+
+	if u.storageSvc != nil && book.CoverImage != nil && *book.CoverImage != "" {
+		_ = u.storageSvc.Delete(ctx, *book.CoverImage)
+	}
+
 	return nil
 }

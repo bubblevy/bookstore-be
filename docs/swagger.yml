@@ -31,6 +31,8 @@ tags:
     description: Pre-checkout quotation, order placement, and Midtrans payment webhooks
   - name: Order
     description: User order history, invoice retrieval, and detailed order status
+  - name: Upload
+    description: Image and asset upload management for book covers and categories
 
 
 paths:
@@ -2420,6 +2422,117 @@ paths:
           description: Internal server error
 
   # =========================================================================
+  # UPLOADS
+  # =========================================================================
+  /api/v1/uploads:
+    post:
+      tags:
+        - Upload
+      summary: Upload an image asset
+      description: |
+        Uploads an image file (JPEG, PNG, WebP) to the configured object storage (local disk or AWS S3).
+        Returns the stored file URL and key to be used when creating or updating categories or books.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "Image file to upload (JPEG, PNG, WebP, max 2MB)."
+                folder:
+                  type: string
+                  default: uploads
+                  description: "Optional folder. Defaults to 'uploads' for temporary files, which are later committed to 'covers' or 'categories' upon entity creation/update."
+      responses:
+        '201':
+          description: File uploaded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 201
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "file uploaded successfully"
+                  data:
+                    $ref: '#/components/schemas/UploadFileResponse'
+        '400':
+          description: Bad request (invalid MIME type, empty file, or size exceeds 2MB)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden (Admin role required)
+        '500':
+          description: Internal server error
+    delete:
+      tags:
+        - Upload
+      summary: Delete an uploaded file
+      description: |
+        Deletes a previously uploaded file from storage by its URL or key.
+        Useful when a user replaces an image or abandons a form before submission.
+
+        The target file is specified via query parameters: `?file_url=...` or `?file_key=...`.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: file_url
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Public URL of the file to delete
+        - name: file_key
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Storage key of the file to delete
+      responses:
+        '200':
+          description: File deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Missing file_url or file_key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden (Admin role required)
+        '404':
+          description: File not found in storage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+
+  # =========================================================================
   # STATIC ASSETS
   # =========================================================================
   /api/v1/static/{filepath}:
@@ -2456,6 +2569,34 @@ components:
       description: Webhook signature authentication header for Biteship tracking events.
 
   schemas:
+    UploadFileResponse:
+      type: object
+      properties:
+        file_key:
+          type: string
+          description: Relative storage path/key of the uploaded asset
+          example: "covers/1729255678-a1b2c3d4.jpg"
+        file_url:
+          type: string
+          description: Public URL to access the uploaded file
+          example: "/api/v1/static/covers/1729255678-a1b2c3d4.jpg"
+        file_name:
+          type: string
+          description: Generated unique filename
+          example: "1729255678-a1b2c3d4.jpg"
+        original_name:
+          type: string
+          description: Original filename uploaded by the client
+          example: "pragmatic-programmer.jpg"
+        file_size:
+          type: integer
+          description: File size in bytes
+          example: 204850
+        content_type:
+          type: string
+          description: Detected MIME type
+          example: "image/jpeg"
+
     SuccessResponse:
       type: object
       properties:
@@ -2468,6 +2609,22 @@ components:
         message:
           type: string
           example: "request successful"
+        data:
+          type: object
+          nullable: true
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 400
+        status:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: "invalid request payload"
         data:
           type: object
           nullable: true
@@ -4367,7 +4524,8 @@ components:
       type: object
       properties:
         address:
-          $ref: '#/components/schemas/AddressPreviewResponse'
+          allOf:
+            - $ref: '#/components/schemas/AddressPreviewResponse'
           nullable: true
           description: "Delivery destination details (optional, null if address not found)."
         items:
@@ -4784,7 +4942,8 @@ components:
         shipping:
           $ref: '#/components/schemas/OrderShippingResponse'
         payment:
-          $ref: '#/components/schemas/OrderPaymentResponse'
+          allOf:
+            - $ref: '#/components/schemas/OrderPaymentResponse'
           nullable: true
           description: "Payment transaction info (optional)."
         items:

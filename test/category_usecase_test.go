@@ -325,3 +325,65 @@ func TestCategoryUsecase_Delete_NotFound(t *testing.T) {
 	mockRepo.AssertNotCalled(t, "Delete", mock.Anything, mock.Anything)
 	mockRepo.AssertExpectations(t)
 }
+
+func TestCategoryUsecase_Update_DeletesOldImage(t *testing.T) {
+	mockRepo := new(MockCategoryRepository)
+	mockStorage := new(MockStorageService)
+	uc := usecase.NewCategoryUsecase(mockRepo, mockStorage)
+
+	ctx := context.Background()
+	oldImg := "/api/v1/static/categories/old.png"
+	newImg := "/api/v1/static/categories/new.png"
+	existingCat := &entity.Category{
+		ID:       1,
+		Name:     "Fiksi",
+		Slug:     "fiksi",
+		ImageURL: &oldImg,
+	}
+
+	req := usecase.UpdateCategoryInput{
+		Name:     "Fiksi",
+		ImageURL: &newImg,
+	}
+
+	mockRepo.On("FindByID", ctx, uint(1)).Return(existingCat, nil)
+	mockRepo.On("ExistsBySlug", ctx, "fiksi", uint(1)).Return(false, nil)
+	mockRepo.On("Update", ctx, mock.MatchedBy(func(c *entity.Category) bool {
+		return c.ImageURL != nil && *c.ImageURL == newImg
+	})).Return(nil)
+	mockStorage.On("CommitFile", ctx, newImg, "categories").Return("categories/new.png", newImg, nil).Once()
+	mockStorage.On("Delete", ctx, oldImg).Return(nil).Once()
+
+	res, err := uc.Update(ctx, 1, req)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+	assert.Equal(t, &newImg, res.ImageURL)
+	mockStorage.AssertExpectations(t)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestCategoryUsecase_Delete_DeletesImage(t *testing.T) {
+	mockRepo := new(MockCategoryRepository)
+	mockStorage := new(MockStorageService)
+	uc := usecase.NewCategoryUsecase(mockRepo, mockStorage)
+
+	ctx := context.Background()
+	img := "/api/v1/static/categories/fiction.png"
+	existingCat := &entity.Category{
+		ID:       1,
+		Name:     "Fiksi",
+		ImageURL: &img,
+	}
+
+	mockRepo.On("FindByID", ctx, uint(1)).Return(existingCat, nil)
+	mockRepo.On("Delete", ctx, uint(1)).Return(nil)
+	mockStorage.On("Delete", ctx, img).Return(nil).Once()
+
+	err := uc.Delete(ctx, 1)
+
+	assert.NoError(t, err)
+	mockStorage.AssertExpectations(t)
+	mockRepo.AssertExpectations(t)
+}
+

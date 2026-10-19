@@ -3,10 +3,12 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/repository"
+	"github.com/bubblevy/bookstore/pkg/storage"
 	"github.com/gosimple/slug"
 )
 
@@ -49,10 +51,18 @@ type CategoryUsecase interface {
 
 type categoryUsecase struct {
 	categoryRepo repository.CategoryRepository
+	storageSvc   storage.StorageService
 }
 
-func NewCategoryUsecase(categoryRepo repository.CategoryRepository) CategoryUsecase {
-	return &categoryUsecase{categoryRepo: categoryRepo}
+func NewCategoryUsecase(categoryRepo repository.CategoryRepository, storageSvc ...storage.StorageService) CategoryUsecase {
+	var s storage.StorageService
+	if len(storageSvc) > 0 {
+		s = storageSvc[0]
+	}
+	return &categoryUsecase{
+		categoryRepo: categoryRepo,
+		storageSvc:   s,
+	}
 }
 
 func (u *categoryUsecase) toResponse(cat *entity.Category) *CategoryResult {
@@ -78,10 +88,17 @@ func (u *categoryUsecase) Create(ctx context.Context, req CreateCategoryInput) (
 		return nil, entity.ErrCategorySlugConflict
 	}
 
+	imageURL := req.ImageURL
+	if u.storageSvc != nil && imageURL != nil && strings.TrimSpace(*imageURL) != "" {
+		if _, committedURL, err := u.storageSvc.CommitFile(ctx, *imageURL, "categories"); err == nil {
+			imageURL = &committedURL
+		}
+	}
+
 	category := &entity.Category{
 		Name:     req.Name,
 		Slug:     categorySlug,
-		ImageURL: req.ImageURL,
+		ImageURL: imageURL,
 	}
 
 	if err := u.categoryRepo.Create(ctx, category); err != nil {
@@ -139,12 +156,25 @@ func (u *categoryUsecase) Update(ctx context.Context, id uint, req UpdateCategor
 		return nil, entity.ErrCategorySlugConflict
 	}
 
+	oldImageURL := category.ImageURL
+
+	newImageURL := req.ImageURL
+	if u.storageSvc != nil && newImageURL != nil && strings.TrimSpace(*newImageURL) != "" {
+		if _, committedURL, err := u.storageSvc.CommitFile(ctx, *newImageURL, "categories"); err == nil {
+			newImageURL = &committedURL
+		}
+	}
+
 	category.Name = req.Name
 	category.Slug = categorySlug
-	category.ImageURL = req.ImageURL
+	category.ImageURL = newImageURL
 
 	if err := u.categoryRepo.Update(ctx, category); err != nil {
 		return nil, fmt.Errorf("failed to update category: %w", err)
+	}
+
+	if u.storageSvc != nil && oldImageURL != nil && *oldImageURL != "" && (newImageURL == nil || *newImageURL != *oldImageURL) {
+		_ = u.storageSvc.Delete(ctx, *oldImageURL)
 	}
 
 	return u.toResponse(category), nil
@@ -162,5 +192,10 @@ func (u *categoryUsecase) Delete(ctx context.Context, id uint) error {
 	if err := u.categoryRepo.Delete(ctx, id); err != nil {
 		return fmt.Errorf("failed to delete category: %w", err)
 	}
+
+	if u.storageSvc != nil && category.ImageURL != nil && *category.ImageURL != "" {
+		_ = u.storageSvc.Delete(ctx, *category.ImageURL)
+	}
+
 	return nil
 }

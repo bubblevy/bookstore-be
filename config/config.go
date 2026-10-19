@@ -8,6 +8,7 @@ import (
 
 	"github.com/bubblevy/bookstore/internal/usecase"
 	"github.com/bubblevy/bookstore/pkg/email"
+	"github.com/bubblevy/bookstore/pkg/storage"
 	"github.com/joho/godotenv"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -57,6 +58,7 @@ type AppConfig struct {
 	GoogleOAuth *oauth2.Config
 	Biteship    BiteshipConfig
 	Midtrans    MidtransConfig
+	Storage     storage.Config
 }
 
 func LoadConfig() AppConfig {
@@ -115,9 +117,36 @@ func LoadConfig() AppConfig {
 			ClientKey:    os.Getenv("MIDTRANS_CLIENT_KEY"),
 			IsProduction: getEnvBool("MIDTRANS_IS_PRODUCTION", false),
 		},
+		Storage: storage.Config{
+			Driver:         getEnv("STORAGE_DRIVER", "local"),
+			LocalBaseDir:   getEnv("STORAGE_LOCAL_BASE_DIR", "./public"),
+			LocalURLPrefix: getEnv("STORAGE_LOCAL_URL_PREFIX", "/api/v1/static"),
+			S3: storage.S3Config{
+				Bucket:          os.Getenv("AWS_S3_BUCKET"),
+				Region:          getEnv("AWS_S3_REGION", "ap-southeast-1"),
+				AccessKeyID:     os.Getenv("AWS_ACCESS_KEY_ID"),
+				SecretAccessKey: os.Getenv("AWS_SECRET_ACCESS_KEY"),
+				Endpoint:        os.Getenv("AWS_S3_ENDPOINT"),
+				PublicCDNURL:    os.Getenv("AWS_S3_CDN_URL"),
+				UsePathStyle:    getEnvBool("AWS_S3_USE_PATH_STYLE", false),
+			},
+		},
 	}
 
 	cfg.Biteship.BaseURL = strings.TrimSuffix(cfg.Biteship.BaseURL, "/")
+	cfg.BaseURL = strings.TrimRight(cfg.BaseURL, "/")
+
+	// Ensure local storage URL prefix is a full absolute URL using BASE_URL
+	if !strings.HasPrefix(cfg.Storage.LocalURLPrefix, "http://") && !strings.HasPrefix(cfg.Storage.LocalURLPrefix, "https://") {
+		if cfg.BaseURL != "" {
+			trimmedPrefix := strings.Trim(cfg.Storage.LocalURLPrefix, "/")
+			if trimmedPrefix == "" {
+				cfg.Storage.LocalURLPrefix = cfg.BaseURL
+			} else {
+				cfg.Storage.LocalURLPrefix = cfg.BaseURL + "/" + trimmedPrefix
+			}
+		}
+	}
 
 	if cfg.SMTP.AppName == "" || cfg.JWTSecret == "" || cfg.BaseURL == "" {
 		fmt.Fprintln(os.Stderr, "fatal: required environment variables are missing: APP_NAME, JWT_SECRET, BASE_URL")

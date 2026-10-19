@@ -1,4 +1,4 @@
 .env
 logs/
 *.log
-public/images/*
+public/*

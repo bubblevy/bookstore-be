@@ -2,6 +2,9 @@ package http
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/bubblevy/bookstore/config"
@@ -12,7 +15,9 @@ import (
 	"github.com/bubblevy/bookstore/pkg/biteship"
 	"github.com/bubblevy/bookstore/pkg/email"
 	"github.com/bubblevy/bookstore/pkg/jwt"
+	"github.com/bubblevy/bookstore/pkg/logger"
 	"github.com/bubblevy/bookstore/pkg/payment"
+	"github.com/bubblevy/bookstore/pkg/storage"
 	"github.com/bubblevy/bookstore/pkg/validator"
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/helmet"
@@ -70,6 +75,13 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	txManager := pgsql.NewTransactionManager(db)
 	midtransSvc := payment.NewMidtransService(cfg.Midtrans.ServerKey, cfg.Midtrans.IsProduction)
 
+	// init storage service
+	storageSvc, err := storage.NewStorageService(cfg.Storage)
+	if err != nil {
+		logger.Error("failed initializing storage service", "error", err)
+		os.Exit(1)
+	}
+
 	userRepo := pgsql.NewUserRepository(db)
 	sessionRepo := pgsql.NewSessionRepository(db)
 	authUsecase := usecase.NewAuthUsecase(userRepo, sessionRepo, txManager, jwtService, emailSender)
@@ -79,7 +91,25 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 
 	// routing group
 	api := app.Group("/api/v1")
-	api.Get("/static/*", static.New("./public"))
+	api.Get("/static/*", static.New(cfg.Storage.LocalBaseDir))
+
+	// Serve static asset folders directly from root domain for STORAGE_LOCAL_URL_PREFIX=/ or full URL configurations
+	app.Get("/covers/*", static.New(filepath.Join(cfg.Storage.LocalBaseDir, "covers")))
+	app.Get("/categories/*", static.New(filepath.Join(cfg.Storage.LocalBaseDir, "categories")))
+	app.Get("/uploads/*", static.New(filepath.Join(cfg.Storage.LocalBaseDir, "uploads")))
+	app.Get("/temp/*", static.New(filepath.Join(cfg.Storage.LocalBaseDir, "temp")))
+
+	cleanPrefix := strings.TrimSpace(cfg.Storage.LocalURLPrefix)
+	if cleanPrefix != "" && cleanPrefix != "/" && cleanPrefix != "/api/v1/static" && !strings.HasPrefix(cleanPrefix, "http://") && !strings.HasPrefix(cleanPrefix, "https://") {
+		trimmed := strings.TrimRight(cleanPrefix, "/")
+		app.Get(trimmed+"/*", static.New(cfg.Storage.LocalBaseDir))
+	}
+
+	// uploads routes (Admin)
+	uploadUsecase := usecase.NewUploadUsecase(storageSvc, db)
+	// start background orphaned file cleanup (runs every 12 hours, removes abandoned files older than 2 hours)
+	uploadUsecase.StartOrphanedFilesCleanup(context.Background(), 12*time.Hour, 2*time.Hour)
+	handler.NewUploadHandler(api, uploadUsecase, authMiddleware, adminMiddleware)
 
 	// auth routes
 	authGroup := api.Group("/auth")
@@ -96,7 +126,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 
 	// category routes
 	categoryRepo := pgsql.NewCategoryRepository(db)
-	categoryUsecase := usecase.NewCategoryUsecase(categoryRepo)
+	categoryUsecase := usecase.NewCategoryUsecase(categoryRepo, storageSvc)
 	handler.NewCategoryHandler(api, categoryUsecase, validate, authMiddleware, adminMiddleware)
 
 	// publisher routes
@@ -111,7 +141,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 
 	// book routes
 	bookRepo := pgsql.NewBookRepository(db)
-	bookUsecase := usecase.NewBookUsecase(bookRepo, categoryRepo, authorRepo, publisherRepo)
+	bookUsecase := usecase.NewBookUsecase(bookRepo, categoryRepo, authorRepo, publisherRepo, storageSvc)
 	handler.NewBookHandler(api, bookUsecase, validate, authMiddleware, adminMiddleware)
 
 	// discount routes

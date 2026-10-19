@@ -426,3 +426,79 @@ func TestBookUsecase_Delete_Success(t *testing.T) {
 	err := uc.Delete(ctx, 1)
 	assert.NoError(t, err)
 }
+
+func TestBookUsecase_Update_DeletesOldCover(t *testing.T) {
+	mockBookRepo := new(MockBookRepository)
+	mockCatRepo := new(MockCategoryRepository)
+	mockAuthorRepo := new(MockAuthorRepository)
+	mockPublisherRepo := new(MockPublisherRepository)
+	mockStorage := new(MockStorageService)
+
+	uc := usecase.NewBookUsecase(mockBookRepo, mockCatRepo, mockAuthorRepo, mockPublisherRepo, mockStorage)
+	ctx := context.Background()
+
+	oldCover := "/api/v1/static/covers/old-cover.jpg"
+	newCover := "/api/v1/static/covers/new-cover.jpg"
+
+	existingBook := &entity.Book{
+		Model:      gorm.Model{ID: 1},
+		Title:      "Old Title",
+		Slug:       "old-title",
+		CoverImage: &oldCover,
+	}
+
+	category := &entity.Category{Model: gorm.Model{ID: 1}, Name: "Fiksi"}
+	author := &entity.Author{Model: gorm.Model{ID: 2}, Name: "Author"}
+	publisher := &entity.Publisher{Model: gorm.Model{ID: 3}, Name: "Publisher"}
+
+	mockBookRepo.On("FindByID", ctx, uint(1)).Return(existingBook, nil)
+	mockCatRepo.On("FindByID", ctx, uint(1)).Return(category, nil)
+	mockAuthorRepo.On("FindByID", ctx, uint(2)).Return(author, nil)
+	mockPublisherRepo.On("FindByID", ctx, uint(3)).Return(publisher, nil)
+	mockBookRepo.On("ExistsBySlug", ctx, "new-title", uint(1)).Return(false, nil)
+	mockBookRepo.On("Update", ctx, mock.MatchedBy(func(b *entity.Book) bool {
+		return b.CoverImage != nil && *b.CoverImage == newCover
+	})).Return(nil)
+	mockStorage.On("CommitFile", ctx, newCover, "covers").Return("covers/new-cover.jpg", newCover, nil).Once()
+	mockStorage.On("Delete", ctx, oldCover).Return(nil).Once()
+
+	req := usecase.UpdateBookInput{
+		CategoryID:  1,
+		AuthorID:    2,
+		PublisherID: 3,
+		Title:       "New Title",
+		Price:       100000,
+		CoverImage:  &newCover,
+	}
+
+	res, err := uc.Update(ctx, 1, req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+	assert.Equal(t, &newCover, res.CoverImage)
+	mockStorage.AssertExpectations(t)
+	mockBookRepo.AssertExpectations(t)
+}
+
+func TestBookUsecase_Delete_DeletesCover(t *testing.T) {
+	mockBookRepo := new(MockBookRepository)
+	mockStorage := new(MockStorageService)
+
+	uc := usecase.NewBookUsecase(mockBookRepo, nil, nil, nil, mockStorage)
+	ctx := context.Background()
+
+	cover := "/api/v1/static/covers/sample.jpg"
+	book := &entity.Book{
+		Model:      gorm.Model{ID: 1},
+		CoverImage: &cover,
+	}
+
+	mockBookRepo.On("FindByID", ctx, uint(1)).Return(book, nil)
+	mockBookRepo.On("Delete", ctx, uint(1)).Return(nil)
+	mockStorage.On("Delete", ctx, cover).Return(nil).Once()
+
+	err := uc.Delete(ctx, 1)
+	assert.NoError(t, err)
+	mockStorage.AssertExpectations(t)
+	mockBookRepo.AssertExpectations(t)
+}
+
