@@ -179,17 +179,29 @@ paths:
           description: Invalid, missing, or expired refresh token
 
   /api/v1/auth/logout:
-    delete:
+    post:
       tags:
         - Auth
       summary: User logout
-      description: Revokes the current refresh token and clears authentication cookies. Accepts refresh token via HTTP-only cookie or request body.
+      description: Revokes the current refresh token and clears authentication cookies. Accepts refresh token via JSON request body (recommended for mobile clients) or HTTP-only cookie.
       requestBody:
         required: false
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+    delete:
+      tags:
+        - Auth
+      summary: User logout (via cookie)
+      description: Revokes the current refresh token and clears authentication cookies via HTTP-only cookie.
       responses:
         '200':
           description: Logout successful

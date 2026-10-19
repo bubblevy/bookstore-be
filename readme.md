@@ -155,7 +155,7 @@ The complete API specification is available in OpenAPI 3.0.3 format:
 | **Auth** | `POST` | `/api/v1/auth/register` | Public | Register new user account |
 | **Auth** | `POST` | `/api/v1/auth/login` | Public | Login with email and password |
 | **Auth** | `POST` | `/api/v1/auth/refresh-token` | Public | Refresh JWT access token |
-| **Auth** | `DELETE` | `/api/v1/auth/logout` | Public | Invalidate refresh token & clear cookies |
+| **Auth** | `POST` / `DELETE` | `/api/v1/auth/logout` | Public | Invalidate refresh token & clear cookies |
 | **Auth** | `POST` | `/api/v1/auth/activate-account` | Public | Activate account using email token |
 | **Auth** | `POST` | `/api/v1/auth/resend-activation` | Public | Request new activation email |
 | **Auth** | `POST` | `/api/v1/auth/forgot-password` | Public | Request password reset email |

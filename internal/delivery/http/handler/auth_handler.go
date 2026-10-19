@@ -42,6 +42,7 @@ func NewAuthHandler(r fiber.Router, u usecase.AuthUsecase, v *validator.Validate
 	r.Post("/forgot-password", middleware.RateLimit(middleware.StrictRateLimit), h.ForgotPassword)
 	r.Post("/reset-password", middleware.RateLimit(middleware.StrictRateLimit), h.ResetPassword)
 	r.Post("/change-password", authMiddleware, middleware.RateLimit(middleware.StrictRateLimit), h.ChangePassword)
+	r.Post("/logout", middleware.RateLimit(middleware.StandardRateLimit), h.Logout)
 	r.Delete("/logout", middleware.RateLimit(middleware.StandardRateLimit), h.Logout)
 	r.Post("/resend-activation", middleware.RateLimit(middleware.StandardRateLimit), h.ResendActivation)
 	r.Post("/activate-account", middleware.RateLimit(middleware.StandardRateLimit), h.ActivateAccount)
