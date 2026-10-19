@@ -2,8 +2,10 @@ package test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -109,6 +111,14 @@ func (m *MockAuthUsecase) ChangePassword(ctx context.Context, input usecase.Chan
 
 func (m *MockAuthUsecase) GoogleLogin(ctx context.Context, code string, cfg *oauth2.Config) (*usecase.AuthResult, error) {
 	args := m.Called(ctx, code, cfg)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*usecase.AuthResult), args.Error(1)
+}
+
+func (m *MockAuthUsecase) GoogleMobileLogin(ctx context.Context, idToken, code string, cfg *oauth2.Config) (*usecase.AuthResult, error) {
+	args := m.Called(ctx, idToken, code, cfg)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -275,6 +285,22 @@ func TestAuthHandler_Login_Success(t *testing.T) {
 	resp, err := app.Test(req)
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	var body struct {
+		Code    int    `json:"code"`
+		Status  bool   `json:"status"`
+		Message string `json:"message"`
+		Data    struct {
+			AccessToken  string `json:"access_token"`
+			RefreshToken string `json:"refresh_token"`
+		} `json:"data"`
+	}
+	err = json.Unmarshal(bodyBytes, &body)
+	assert.NoError(t, err)
+	assert.Equal(t, "mock-access-token", body.Data.AccessToken)
+	assert.Equal(t, "mock-refresh-token", body.Data.RefreshToken)
+
 	mockUC.AssertExpectations(t)
 }
 
@@ -316,6 +342,59 @@ func TestAuthHandler_RefreshToken_FromCookie_Success(t *testing.T) {
 	resp, err := app.Test(req)
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	var body struct {
+		Code    int    `json:"code"`
+		Status  bool   `json:"status"`
+		Message string `json:"message"`
+		Data    struct {
+			AccessToken  string `json:"access_token"`
+			RefreshToken string `json:"refresh_token"`
+		} `json:"data"`
+	}
+	err = json.Unmarshal(bodyBytes, &body)
+	assert.NoError(t, err)
+	assert.Equal(t, "new-access-token", body.Data.AccessToken)
+	assert.Equal(t, "new-refresh-token", body.Data.RefreshToken)
+
+	mockUC.AssertExpectations(t)
+}
+
+func TestAuthHandler_RefreshToken_FromBody_Success(t *testing.T) {
+	mockUC := new(MockAuthUsecase)
+	app, _ := setupAuthApp(mockUC, false)
+
+	result := &usecase.AuthResult{
+		AccessToken:  "body-access-token",
+		RefreshToken: "body-refresh-token",
+	}
+
+	mockUC.On("RefreshToken", mock.Anything, "body-refresh-token-val").Return(result, nil)
+
+	payload := `{"refresh_token":"body-refresh-token-val"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh-token", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	var body struct {
+		Code    int    `json:"code"`
+		Status  bool   `json:"status"`
+		Message string `json:"message"`
+		Data    struct {
+			AccessToken  string `json:"access_token"`
+			RefreshToken string `json:"refresh_token"`
+		} `json:"data"`
+	}
+	err = json.Unmarshal(bodyBytes, &body)
+	assert.NoError(t, err)
+	assert.Equal(t, "body-access-token", body.Data.AccessToken)
+	assert.Equal(t, "body-refresh-token", body.Data.RefreshToken)
+
 	mockUC.AssertExpectations(t)
 }
 
@@ -339,6 +418,22 @@ func TestAuthHandler_Logout_Success(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/auth/logout", nil)
 	req.Header.Set("Cookie", "refresh_token=active-refresh-token")
+
+	resp, err := app.Test(req)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	mockUC.AssertExpectations(t)
+}
+
+func TestAuthHandler_Logout_FromBody_Success(t *testing.T) {
+	mockUC := new(MockAuthUsecase)
+	app, _ := setupAuthApp(mockUC, true)
+
+	mockUC.On("Logout", mock.Anything, "active-body-refresh-token").Return(nil)
+
+	payload := `{"refresh_token":"active-body-refresh-token"}`
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/auth/logout", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := app.Test(req)
 	assert.NoError(t, err)
@@ -509,9 +604,111 @@ func TestAuthHandler_GoogleCallback_UsecaseFailure(t *testing.T) {
 
 	resp, err := app.Test(req)
 	assert.NoError(t, err)
-	assert.Equal(t, fiber.StatusSeeOther, resp.StatusCode) // Ganti dari http.StatusFound (302) ke 303
+	assert.Equal(t, fiber.StatusSeeOther, resp.StatusCode)
 
 	expectedRedirect := fmt.Sprintf("%s/login?error=oauth_failed", cfg.SMTP.FrontendURL)
 	assert.Equal(t, expectedRedirect, resp.Header.Get("Location"))
+	mockUC.AssertExpectations(t)
+}
+
+func TestAuthHandler_GoogleMobileLogin_IDToken_Success(t *testing.T) {
+	mockUC := new(MockAuthUsecase)
+	app, cfg := setupAuthApp(mockUC, false)
+
+	mockResult := &usecase.AuthResult{
+		AccessToken:  "mobile-google-access-token",
+		RefreshToken: "mobile-google-refresh-token",
+	}
+
+	mockUC.On("GoogleMobileLogin", mock.Anything, "valid-google-id-token", "", cfg.GoogleOAuth).Return(mockResult, nil)
+
+	payload := `{"id_token":"valid-google-id-token"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/google/mobile", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	var body struct {
+		Code    int    `json:"code"`
+		Status  bool   `json:"status"`
+		Message string `json:"message"`
+		Data    struct {
+			AccessToken  string `json:"access_token"`
+			RefreshToken string `json:"refresh_token"`
+		} `json:"data"`
+	}
+	err = json.Unmarshal(bodyBytes, &body)
+	assert.NoError(t, err)
+	assert.Equal(t, "mobile-google-access-token", body.Data.AccessToken)
+	assert.Equal(t, "mobile-google-refresh-token", body.Data.RefreshToken)
+	mockUC.AssertExpectations(t)
+}
+
+func TestAuthHandler_GoogleMobileLogin_Code_Success(t *testing.T) {
+	mockUC := new(MockAuthUsecase)
+	app, cfg := setupAuthApp(mockUC, false)
+
+	mockResult := &usecase.AuthResult{
+		AccessToken:  "mobile-code-access-token",
+		RefreshToken: "mobile-code-refresh-token",
+	}
+
+	mockUC.On("GoogleMobileLogin", mock.Anything, "", "valid-server-code", cfg.GoogleOAuth).Return(mockResult, nil)
+
+	payload := `{"code":"valid-server-code"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/google/mobile", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	var body struct {
+		Code    int    `json:"code"`
+		Status  bool   `json:"status"`
+		Message string `json:"message"`
+		Data    struct {
+			AccessToken  string `json:"access_token"`
+			RefreshToken string `json:"refresh_token"`
+		} `json:"data"`
+	}
+	err = json.Unmarshal(bodyBytes, &body)
+	assert.NoError(t, err)
+	assert.Equal(t, "mobile-code-access-token", body.Data.AccessToken)
+	assert.Equal(t, "mobile-code-refresh-token", body.Data.RefreshToken)
+	mockUC.AssertExpectations(t)
+}
+
+func TestAuthHandler_GoogleMobileLogin_MissingTokens(t *testing.T) {
+	mockUC := new(MockAuthUsecase)
+	app, _ := setupAuthApp(mockUC, false)
+
+	payload := `{}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/google/mobile", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	mockUC.AssertNotCalled(t, "GoogleMobileLogin", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestAuthHandler_GoogleMobileLogin_UsecaseFailure(t *testing.T) {
+	mockUC := new(MockAuthUsecase)
+	app, cfg := setupAuthApp(mockUC, false)
+
+	mockUC.On("GoogleMobileLogin", mock.Anything, "invalid-token", "", cfg.GoogleOAuth).Return(nil, errors.New("invalid google id_token"))
+
+	payload := `{"id_token":"invalid-token"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/google/mobile", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	mockUC.AssertExpectations(t)
 }

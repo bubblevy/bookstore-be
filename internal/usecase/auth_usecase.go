@@ -20,6 +20,9 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/oauth2"
+	"net/http"
+	"net/url"
+	"strings"
 )
 
 type RegisterInput struct {
@@ -70,6 +73,7 @@ type AuthUsecase interface {
 	ResetPassword(ctx context.Context, i ResetPasswordInput) error
 	ChangePassword(ctx context.Context, i ChangePasswordInput) error
 	GoogleLogin(ctx context.Context, code string, oauthConfig *oauth2.Config) (*AuthResult, error)
+	GoogleMobileLogin(ctx context.Context, idToken, code string, oauthConfig *oauth2.Config) (*AuthResult, error)
 }
 
 type authUsecase struct {
@@ -591,28 +595,9 @@ func (u *authUsecase) ChangePassword(ctx context.Context, i ChangePasswordInput)
 	return nil
 }
 
-func (u *authUsecase) GoogleLogin(ctx context.Context, code string, oauthConfig *oauth2.Config) (*AuthResult, error) {
-	token, err := oauthConfig.Exchange(ctx, code)
-	if err != nil {
-		logger.Error("google login - failed to exchange token", "error", err)
-		return nil, errors.New("failed to exchange google token")
-	}
-
-	client := oauthConfig.Client(ctx, token)
-	response, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
-	if err != nil {
-		logger.Error("google login - failed to get user info", "error", err)
-		return nil, errors.New("failed to get user info from google")
-	}
-	defer response.Body.Close()
-
-	var googleUser GoogleUser
-	if err := json.NewDecoder(response.Body).Decode(&googleUser); err != nil {
-		return nil, errors.New("failed to decode google user info")
-	}
-
+func (u *authUsecase) processGoogleUser(ctx context.Context, googleUser GoogleUser) (*AuthResult, error) {
 	var accessToken, refreshToken string
-	err = u.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+	err := u.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
 		user, err := u.userRepo.FindByEmail(txCtx, googleUser.Email)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -677,4 +662,86 @@ func (u *authUsecase) GoogleLogin(ctx context.Context, code string, oauthConfig 
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 	}, nil
+}
+
+func (u *authUsecase) GoogleLogin(ctx context.Context, code string, oauthConfig *oauth2.Config) (*AuthResult, error) {
+	if oauthConfig == nil {
+		return nil, errors.New("oauth config not initialized")
+	}
+
+	token, err := oauthConfig.Exchange(ctx, code)
+	if err != nil {
+		logger.Error("google login - failed to exchange token", "error", err)
+		return nil, errors.New("failed to exchange google token")
+	}
+
+	client := oauthConfig.Client(ctx, token)
+	response, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
+	if err != nil {
+		logger.Error("google login - failed to get user info", "error", err)
+		return nil, errors.New("failed to get user info from google")
+	}
+	defer response.Body.Close()
+
+	var googleUser GoogleUser
+	if err := json.NewDecoder(response.Body).Decode(&googleUser); err != nil {
+		return nil, errors.New("failed to decode google user info")
+	}
+
+	return u.processGoogleUser(ctx, googleUser)
+}
+
+func (u *authUsecase) GoogleMobileLogin(ctx context.Context, idToken, code string, oauthConfig *oauth2.Config) (*AuthResult, error) {
+	if idToken != "" {
+		tokenURL := "https://oauth2.googleapis.com/tokeninfo?id_token=" + url.QueryEscape(idToken)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, tokenURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create google request: %w", err)
+		}
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			logger.Error("google mobile login - tokeninfo request error", "error", err)
+			return nil, errors.New("failed to verify google token with provider")
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			logger.Warn("google mobile login - invalid id_token", "status", resp.StatusCode)
+			return nil, errors.New("invalid google id_token")
+		}
+
+		var tokenInfo struct {
+			Sub   string `json:"sub"`
+			Email string `json:"email"`
+			Name  string `json:"name"`
+			Error string `json:"error"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&tokenInfo); err != nil {
+			return nil, errors.New("failed to parse google token response")
+		}
+
+		if tokenInfo.Error != "" || tokenInfo.Email == "" {
+			return nil, errors.New("invalid google token payload")
+		}
+
+		name := tokenInfo.Name
+		if name == "" {
+			name = strings.Split(tokenInfo.Email, "@")[0]
+		}
+
+		googleUser := GoogleUser{
+			ID:    tokenInfo.Sub,
+			Email: tokenInfo.Email,
+			Name:  name,
+		}
+
+		return u.processGoogleUser(ctx, googleUser)
+	}
+
+	if code != "" {
+		return u.GoogleLogin(ctx, code, oauthConfig)
+	}
+
+	return nil, errors.New("either id_token or code is required")
 }

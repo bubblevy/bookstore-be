@@ -57,7 +57,7 @@ bookstore/
 - **In-Memory Cache**: [Redis 7](https://redis.io/) (`go-redis/v9`) for high-throughput query caching & invalidation
 - **Message Broker & Queue**: [RabbitMQ 3](https://www.rabbitmq.com/) (`amqp091-go`) for background asynchronous email processing
 - **Cloud & Local Storage**: AWS S3 SDK v2 (`aws-sdk-go-v2`) and Local File Storage driver
-- **Authentication**: JWT (`golang-jwt/jwt/v5`) with HTTP-only cookies & Google OAuth 2.0
+- **Authentication**: JWT (`golang-jwt/jwt/v5`) with dual support for Bearer tokens (mobile/SPA JSON response) & HTTP-only cookies, plus Google OAuth 2.0
 - **Validation**: `go-playground/validator/v10` with custom strong password rules
 - **Payment Gateway**: [Midtrans Core API](https://midtrans.com/) (Virtual Account, Mandiri Bill, GoPay, QRIS)
 - **Logistics & Shipping**: [Biteship API](https://biteship.com/) (Rates calculation, Area search, Fulfillment dispatch, Tracking)
@@ -70,8 +70,8 @@ bookstore/
 
 ### 1. Authentication & Account Management
 - **Registration**: Email verification workflow with activation tokens.
-- **Login / Logout**: Issues Access and Refresh tokens stored in secure HTTP-only cookies (or Bearer Authorization header).
-- **Token Refreshing**: Automatic token renewal with single-use refresh token invalidation.
+- **Login / Logout**: Issues Access and Refresh tokens in the JSON response body (`access_token`, `refresh_token`, `token_type: "Bearer"`) for mobile applications (Flutter/React Native/iOS/Android), while simultaneously setting secure HTTP-only cookies for web clients.
+- **Token Refreshing**: Automatic token renewal with single-use refresh token invalidation; supports reading refresh tokens from JSON body (mobile) or HTTP-only cookies (web).
 - **Password Management**: Forgot password links, token verification, and authenticated password changes.
 - **Google OAuth 2.0**: Seamless single sign-on redirect and callback handling.
 - **Security**: Strict rate limiting on authentication routes and background session cleanup.
@@ -163,6 +163,7 @@ The complete API specification is available in OpenAPI 3.0.3 format:
 | **Auth** | `POST` | `/api/v1/auth/change-password` | User | Change password for authenticated user |
 | **Auth** | `GET` | `/api/v1/auth/google/login` | Public | Initiate Google OAuth 2.0 login |
 | **Auth** | `GET` | `/api/v1/auth/google/callback` | Public | Google OAuth 2.0 callback URL |
+| **Auth** | `POST` | `/api/v1/auth/google/mobile` | Public | Native Google OAuth 2.0 login for mobile apps (id_token / code) |
 | **User** | `GET` | `/api/v1/users/me` | User | Get current user profile (safe, non-sensitive) |
 | **User** | `GET` | `/api/v1/users` | Admin | List users with pagination & search filter |
 | **Category** | `GET` | `/api/v1/categories` | Public | List all categories |

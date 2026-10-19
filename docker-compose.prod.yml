@@ -9,10 +9,11 @@ services:
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_DB: ${DATABASE_NAME:-bookstore}
       TZ: Asia/Jakarta
+      PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - /mounts/azuredata/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-postgres} -d ${DATABASE_NAME:-bookstore}"]
       interval: 10s
@@ -32,6 +33,7 @@ services:
       - DATABASE_PORT=5432
       - DATABASE_USER=${DATABASE_USER:-postgres}
       - DATABASE_PASSWORD=${DATABASE_PASSWORD}
+      - DATABASE_NAME=${DATABASE_NAME:-bookstore}
     depends_on:
       postgres:
         condition: service_healthy
@@ -45,8 +47,9 @@ services:
   redis:
     image: redis:7-alpine
     restart: always
+    command: redis-server --appendonly yes
     volumes:
-      - redis_data:/data
+      - /mounts/azuredata/redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -61,21 +64,17 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+      RABBITMQ_MNESIA_BASE: /var/lib/rabbitmq/mnesia
     volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
+      - /mounts/azuredata/rabbitmq:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
       interval: 10s
       timeout: 10s
       retries: 10
-      start_period: 15s
+      start_period: 20s
     networks:
       - bookstore_network
-
-volumes:
-  postgres_data:
-  redis_data:
-  rabbitmq_data:
 
 networks:
   bookstore_network:

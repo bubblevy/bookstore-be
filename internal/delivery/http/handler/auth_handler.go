@@ -47,6 +47,7 @@ func NewAuthHandler(r fiber.Router, u usecase.AuthUsecase, v *validator.Validate
 	r.Post("/activate-account", middleware.RateLimit(middleware.StandardRateLimit), h.ActivateAccount)
 	r.Get("/google/login", h.GoogleLogin)
 	r.Get("/google/callback", h.GoogleCallback)
+	r.Post("/google/mobile", middleware.RateLimit(middleware.StrictRateLimit), h.GoogleMobileLogin)
 }
 
 func (h *AuthHandler) Register(c fiber.Ctx) error {
@@ -132,7 +133,10 @@ func (h *AuthHandler) Login(c fiber.Ctx) error {
 
 	// set cookie
 	cookie.SetAuthCookies(c, result.AccessToken, result.RefreshToken)
-	return response.Success(c, fiber.StatusOK, "login successful", nil)
+	return response.Success(c, fiber.StatusOK, "login successful", dto.AuthResponse{
+		AccessToken:  result.AccessToken,
+		RefreshToken: result.RefreshToken,
+	})
 }
 
 func (h *AuthHandler) RefreshToken(c fiber.Ctx) error {
@@ -157,11 +161,21 @@ func (h *AuthHandler) RefreshToken(c fiber.Ctx) error {
 
 	// set cookie
 	cookie.SetAuthCookies(c, result.AccessToken, result.RefreshToken)
-	return response.Success(c, fiber.StatusOK, "token refreshed successfully", nil)
+	return response.Success(c, fiber.StatusOK, "token refreshed successfully", dto.AuthResponse{
+		AccessToken:  result.AccessToken,
+		RefreshToken: result.RefreshToken,
+	})
 }
 
 func (h *AuthHandler) Logout(c fiber.Ctx) error {
 	refreshToken := cookie.GetRefreshToken(c)
+
+	if refreshToken == "" {
+		var req dto.RefreshTokenRequest
+		if err := c.Bind().Body(&req); err == nil && req.RefreshToken != "" {
+			refreshToken = req.RefreshToken
+		}
+	}
 
 	if refreshToken != "" {
 		_ = h.u.Logout(c.Context(), refreshToken)
@@ -222,6 +236,9 @@ func (h *AuthHandler) ChangePassword(c fiber.Ctx) error {
 
 	userID := c.Locals("user_id").(uint)
 	currentRefreshToken := cookie.GetRefreshToken(c)
+	if currentRefreshToken == "" && req.RefreshToken != "" {
+		currentRefreshToken = req.RefreshToken
+	}
 
 	i := usecase.ChangePasswordInput{
 		UserID:              userID,
@@ -277,3 +294,26 @@ func (h *AuthHandler) GoogleCallback(c fiber.Ctx) error {
 	cookie.SetAuthCookies(c, result.AccessToken, result.RefreshToken)
 	return c.Redirect().To(fmt.Sprintf("%s/dashboard", h.frontendURL))
 }
+
+func (h *AuthHandler) GoogleMobileLogin(c fiber.Ctx) error {
+	var req dto.GoogleMobileLoginRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", nil)
+	}
+
+	if req.IDToken == "" && req.Code == "" {
+		return response.Error(c, fiber.StatusBadRequest, "either id_token or code is required", nil)
+	}
+
+	result, err := h.u.GoogleMobileLogin(c.Context(), req.IDToken, req.Code, h.oauthConfig)
+	if err != nil {
+		return response.Error(c, fiber.StatusUnauthorized, err.Error(), nil)
+	}
+
+	cookie.SetAuthCookies(c, result.AccessToken, result.RefreshToken)
+	return response.Success(c, fiber.StatusOK, "google login successful", dto.AuthResponse{
+		AccessToken:  result.AccessToken,
+		RefreshToken: result.RefreshToken,
+	})
+}
+

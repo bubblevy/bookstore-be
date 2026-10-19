@@ -105,7 +105,7 @@ paths:
       tags:
         - Auth
       summary: User login
-      description: Authenticates a user and sets HTTP-only cookies for access and refresh tokens.
+      description: Authenticates a user, returns access & refresh tokens in the JSON response payload, and sets HTTP-only cookies.
       requestBody:
         required: true
         content:
@@ -123,7 +123,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SuccessResponse'
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "login successful"
+                  data:
+                    $ref: '#/components/schemas/AuthResponse'
         '401':
           description: Invalid credentials or inactive account
 
@@ -132,7 +144,7 @@ paths:
       tags:
         - Auth
       summary: Refresh access token
-      description: Generates a new access and refresh token pair. Accepts refresh token via HTTP-only cookie or request body.
+      description: Generates a new access and refresh token pair. Accepts refresh token via HTTP-only cookie or request body (recommended for mobile clients). Returns tokens in response payload and updates cookies.
       requestBody:
         required: false
         content:
@@ -142,10 +154,27 @@ paths:
       responses:
         '200':
           description: Token refreshed successfully
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: access_token=abcde12345; Path=/; HttpOnly
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SuccessResponse'
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "token refreshed successfully"
+                  data:
+                    $ref: '#/components/schemas/AuthResponse'
         '401':
           description: Invalid, missing, or expired refresh token
 
@@ -154,7 +183,13 @@ paths:
       tags:
         - Auth
       summary: User logout
-      description: Revokes the current refresh token and clears authentication cookies.
+      description: Revokes the current refresh token and clears authentication cookies. Accepts refresh token via HTTP-only cookie or request body.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
       responses:
         '200':
           description: Logout successful
@@ -307,6 +342,50 @@ paths:
           description: Missing code or invalid request.
         '401':
           description: Invalid OAuth state (CSRF failure).
+
+  /api/v1/auth/google/mobile:
+    post:
+      tags:
+        - Auth
+      summary: Google Login for Mobile Apps
+      description: |
+        Authenticates a user from mobile apps (Flutter, React Native, iOS, Android).
+        Accepts a Google `id_token` obtained from native mobile Google Sign-In SDK (recommended) or server authorization `code`.
+        Returns `access_token` and `refresh_token` in the JSON response payload and sets auth cookies.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoogleMobileLoginRequest'
+      responses:
+        '200':
+          description: Google login successful
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: access_token=abcde12345; Path=/; HttpOnly
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "google login successful"
+                  data:
+                    $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid request payload or missing id_token/code
+        '401':
+          description: Invalid or expired Google token
 
   # =========================================================================
   # USER & PROFILE MANAGEMENT
@@ -3942,6 +4021,30 @@ components:
           description: "Refresh token string (optional if refresh_token HTTP-only cookie is set, otherwise required)."
           example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 
+    AuthResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: "JWT access token used in Authorization: Bearer <token> header"
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refresh_token:
+          type: string
+          description: "JWT refresh token used to obtain new token pairs"
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+    GoogleMobileLoginRequest:
+      type: object
+      properties:
+        id_token:
+          type: string
+          description: "Google ID Token obtained from native mobile Google Sign-In SDK (recommended)"
+          example: "eyJhbGciOiJSUzI1NiIsImtpZCI6IjEyMzQ1NiJ9..."
+        code:
+          type: string
+          description: "Google Server Authorization Code (alternative)"
+          example: "4/0AeanS0b..."
+
     ActivateAccountRequest:
       type: object
       required:
@@ -4009,6 +4112,12 @@ components:
           type: string
           format: password
           example: "NewStr0ngP@ss!"
+        refresh_token:
+          type: string
+          nullable: true
+          description: "Current refresh token string (optional if passed via HTTP-only cookie, recommended for mobile apps)."
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
 
     # =========================================================================
     # ADDRESS SCHEMAS
