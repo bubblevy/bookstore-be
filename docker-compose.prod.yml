@@ -10,8 +10,6 @@ services:
       POSTGRES_DB: ${DATABASE_NAME:-bookstore}
       TZ: Asia/Jakarta
       PGDATA: /var/lib/postgresql/data/pgdata
-    ports:
-      - "5432:5432"
     volumes:
       - /mounts/azuredata/postgres:/var/lib/postgresql/data
     healthcheck:
@@ -22,36 +20,26 @@ services:
     networks:
       - bookstore_network
 
-  app:
-    image: bookstoreapiregistry.azurecr.io/bookstore-api:latest
-    restart: always
-    ports:
-      - "8000:8000"
-    environment:
-      - WEBSITES_PORT=8000
-      - DATABASE_HOST=postgres
-      - DATABASE_PORT=5432
-      - DATABASE_USER=${DATABASE_USER:-postgres}
-      - DATABASE_PASSWORD=${DATABASE_PASSWORD}
-      - DATABASE_NAME=${DATABASE_NAME:-bookstore}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - bookstore_network
-
   redis:
     image: redis:7-alpine
     restart: always
-    command: redis-server --appendonly yes
+    command: >
+      sh -c 'if [ -z "$${REDIS_PASSWORD}" ]; then
+        redis-server --appendonly yes;
+      else
+        redis-server --appendonly yes --requirepass "$${REDIS_PASSWORD}";
+      fi'
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     volumes:
       - /mounts/azuredata/redis:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: >
+        sh -c 'if [ -z "$${REDIS_PASSWORD}" ]; then
+          redis-cli ping;
+        else
+          redis-cli -a "$${REDIS_PASSWORD}" ping;
+        fi'
       interval: 10s
       timeout: 5s
       retries: 5
@@ -72,7 +60,34 @@ services:
       interval: 10s
       timeout: 10s
       retries: 10
-      start_period: 20s
+      start_period: 25s
+    networks:
+      - bookstore_network
+
+  app:
+    image: bookstoreapiregistry.azurecr.io/bookstore-api:latest
+    restart: always
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - WEBSITES_PORT=8000
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+    volumes:
+      - /mounts/azuredata/public:/app/public
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - bookstore_network
 

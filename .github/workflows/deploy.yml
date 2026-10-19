@@ -5,9 +5,6 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
-env:
-  IMAGE_NAME: bookstore-api
-
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -31,11 +28,40 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
+          tags: ${{ secrets.ACR_NAME }}.azurecr.io/${{ secrets.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Deploy Docker Compose to Azure Web App
-        uses: azure/webapps-deploy@v3
+      - name: Create Production .env File
+        run: |
+          echo "${{ secrets.ENV_PROD }}" > .env.prod
+
+      - name: Azure Login
+        uses: azure/login@v2
         with:
-          app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          configuration-file: docker-compose.prod.yml
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy Docker Compose and Sync App Settings
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            echo "1. Applying docker-compose.prod.yml to ${{ secrets.AZURE_WEBAPP_NAME }} in ${{ secrets.AZURE_RESOURCE_GROUP }}..."
+            az webapp config container set \
+              --name ${{ secrets.AZURE_WEBAPP_NAME }} \
+              --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+              --multicontainer-config-type COMPOSE \
+              --multicontainer-config-file docker-compose.prod.yml
+
+            echo "2. Injecting environment variables from secret into Azure App Service settings..."
+            SETTINGS=$(grep -v '^#' .env.prod | grep '=' | tr '\n' ' ')
+            if [ -n "$SETTINGS" ]; then
+              az webapp config appsettings set \
+                --name ${{ secrets.AZURE_WEBAPP_NAME }} \
+                --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+                --settings $SETTINGS
+            fi
+
+            echo "3. Restarting App Service to apply configurations and load containers..."
+            az webapp restart \
+              --name ${{ secrets.AZURE_WEBAPP_NAME }} \
+              --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }}
