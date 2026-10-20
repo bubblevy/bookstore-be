@@ -82,7 +82,8 @@ func (h *CheckoutHandler) PreviewCheckout(c fiber.Ctx) error {
 			errors.Is(err, entity.ErrDiscountQuotaExhaust),
 			errors.Is(err, entity.ErrDiscountMinPurchase),
 			errors.Is(err, entity.ErrDiscountNotApplicable),
-			errors.Is(err, entity.ErrDiscountBookNotFound):
+			errors.Is(err, entity.ErrDiscountBookNotFound),
+			errors.Is(err, entity.ErrInvalidPaymentMethod):
 			return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
 		case errors.Is(err, entity.ErrAddressNotFound):
 			return response.Error(c, fiber.StatusNotFound, err.Error(), nil)
@@ -167,7 +168,8 @@ func (h *CheckoutHandler) CreateOrder(c fiber.Ctx) error {
 			errors.Is(err, entity.ErrDiscountExpired),
 			errors.Is(err, entity.ErrDiscountQuotaExhaust),
 			errors.Is(err, entity.ErrDiscountMinPurchase),
-			errors.Is(err, entity.ErrDiscountNotApplicable):
+			errors.Is(err, entity.ErrDiscountNotApplicable),
+			errors.Is(err, entity.ErrInvalidPaymentMethod):
 			return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
 		case errors.Is(err, entity.ErrAddressNotFound), errors.Is(err, entity.ErrCartItemNotFound):
 			return response.Error(c, fiber.StatusNotFound, err.Error(), nil)

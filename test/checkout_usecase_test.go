@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -591,6 +592,102 @@ func TestCheckoutUsecase_PreviewCheckout(t *testing.T) {
 		assert.ErrorIs(t, err, entity.ErrInsufficientStock)
 		assert.Nil(t, res)
 	})
+
+	t.Run("failed invalid payment method returns ErrInvalidPaymentMethod in preview", func(t *testing.T) {
+		gormDB, _ := setupGormSqlmock(t)
+		mockCheckoutRepo := new(MockCheckoutRepository)
+		mockAddressRepo := new(MockAddressRepositoryForCheckout)
+		mockBiteship := new(MockBiteshipClientForCheckout)
+
+		uc := usecase.NewCheckoutUsecase(gormDB, mockCheckoutRepo, nil, mockAddressRepo, nil, nil, mockBiteship, nil)
+
+		dummyAddr := &entity.Address{UserID: userID, BiteshipAreaID: "IDNP6"}
+		dummyAddr.ID = addrID
+		mockAddressRepo.On("FindByID", mock.Anything, addrID).Return(dummyAddr, nil).Once()
+
+		dummyCartItems := []entity.CartItem{
+			{
+				ID:       cartItemID,
+				BookID:   bookID,
+				Quantity: 1,
+				Book: entity.Book{
+					ID:          bookID,
+					Stock:       10,
+					IsActive:    true,
+					WeightGrams: 500,
+				},
+			},
+		}
+		mockCheckoutRepo.On("GetCartItemsWithBooks", mock.Anything, userID, []uint{cartItemID}).Return(dummyCartItems, nil).Once()
+
+		mockRates := []biteship.ShippingRatePricing{
+			{CourierCode: "jne", CourierServiceCode: "reg", Price: 20000},
+		}
+		mockBiteship.On("CalculateRatesByAreaID", mock.Anything, dummyAddr.BiteshipAreaID, "jne", mock.Anything).
+			Return(mockRates, nil).Once()
+
+		input := usecase.PreviewCheckoutInput{
+			CartItemIDs:    []uint{cartItemID},
+			AddressID:      &addrID,
+			Courier:        "jne",
+			CourierService: "reg",
+			PaymentMethod:  "bitcoin",
+		}
+
+		res, err := uc.PreviewCheckout(context.Background(), userID, input)
+		assert.ErrorIs(t, err, entity.ErrInvalidPaymentMethod)
+		assert.Nil(t, res)
+	})
+
+	t.Run("success preview with shopeepay calculates 0.7 percent admin fee", func(t *testing.T) {
+		gormDB, _ := setupGormSqlmock(t)
+		mockCheckoutRepo := new(MockCheckoutRepository)
+		mockAddressRepo := new(MockAddressRepositoryForCheckout)
+		mockBiteship := new(MockBiteshipClientForCheckout)
+
+		uc := usecase.NewCheckoutUsecase(gormDB, mockCheckoutRepo, nil, mockAddressRepo, nil, nil, mockBiteship, nil)
+
+		dummyAddr := &entity.Address{UserID: userID, BiteshipAreaID: "IDNP6"}
+		dummyAddr.ID = addrID
+		mockAddressRepo.On("FindByID", mock.Anything, addrID).Return(dummyAddr, nil).Once()
+
+		dummyCartItems := []entity.CartItem{
+			{
+				ID:       cartItemID,
+				BookID:   bookID,
+				Quantity: 1,
+				Book: entity.Book{
+					ID:          bookID,
+					Price:       100000,
+					Stock:       10,
+					IsActive:    true,
+					WeightGrams: 500,
+				},
+			},
+		}
+		mockCheckoutRepo.On("GetCartItemsWithBooks", mock.Anything, userID, []uint{cartItemID}).Return(dummyCartItems, nil).Once()
+
+		mockRates := []biteship.ShippingRatePricing{
+			{CourierCode: "jne", CourierServiceCode: "reg", Price: 20000},
+		}
+		mockBiteship.On("CalculateRatesByAreaID", mock.Anything, dummyAddr.BiteshipAreaID, "jne", mock.Anything).
+			Return(mockRates, nil).Once()
+
+		input := usecase.PreviewCheckoutInput{
+			CartItemIDs:    []uint{cartItemID},
+			AddressID:      &addrID,
+			Courier:        "jne",
+			CourierService: "reg",
+			PaymentMethod:  "shopeepay",
+		}
+
+		res, err := uc.PreviewCheckout(context.Background(), userID, input)
+		assert.NoError(t, err)
+		assert.NotNil(t, res)
+		assert.Equal(t, 100000, res.ItemsSubtotal)
+		assert.Equal(t, 700, res.AdminFee) // 0.7% of 100000
+		assert.Equal(t, 120700, res.TotalPayment)
+	})
 }
 
 func TestCheckoutUsecase_CreateOrder(t *testing.T) {
@@ -753,6 +850,179 @@ func TestCheckoutUsecase_CreateOrder(t *testing.T) {
 
 		res, err := uc.CreateOrder(context.Background(), userID, input)
 		assert.ErrorIs(t, err, entity.ErrInsufficientStock)
+		assert.Nil(t, res)
+		assert.NoError(t, sqlMock.ExpectationsWereMet())
+	})
+
+	t.Run("failed invalid payment method returns ErrInvalidPaymentMethod without touching database", func(t *testing.T) {
+		gormDB, sqlMock := setupGormSqlmock(t)
+		uc := usecase.NewCheckoutUsecase(gormDB, nil, nil, nil, nil, nil, nil, nil)
+
+		input := usecase.CreateOrderInput{
+			CartItemIDs:    []uint{cartItemID},
+			AddressID:      &addrID,
+			Courier:        "jne",
+			CourierService: "reg",
+			PaymentMethod:  "bitcoin",
+		}
+
+		res, err := uc.CreateOrder(context.Background(), userID, input)
+		assert.ErrorIs(t, err, entity.ErrInvalidPaymentMethod)
+		assert.Nil(t, res)
+		assert.NoError(t, sqlMock.ExpectationsWereMet())
+	})
+
+	t.Run("success create order with shopeepay charges shopeepay and deletes cart only after charge", func(t *testing.T) {
+		gormDB, sqlMock := setupGormSqlmock(t)
+		mockCheckoutRepo := new(MockCheckoutRepository)
+		mockOrderRepo := new(MockOrderRepository)
+		mockAddressRepo := new(MockAddressRepositoryForCheckout)
+		mockBiteship := new(MockBiteshipClientForCheckout)
+		mockMidtrans := new(MockMidtransServiceForCheckout)
+
+		uc := usecase.NewCheckoutUsecase(gormDB, mockCheckoutRepo, mockOrderRepo, mockAddressRepo, nil, nil, mockBiteship, mockMidtrans)
+
+		dummyAddr := &entity.Address{UserID: userID, BiteshipAreaID: "IDNP6"}
+		dummyAddr.ID = addrID
+		mockAddressRepo.On("FindByID", mock.Anything, addrID).Return(dummyAddr, nil).Once()
+
+		dummyCartItems := []entity.CartItem{
+			{
+				ID:       cartItemID,
+				BookID:   bookID,
+				Quantity: 1,
+				Book: entity.Book{
+					ID:          bookID,
+					Title:       "Buku Go",
+					Price:       100000,
+					Stock:       10,
+					WeightGrams: 500,
+					IsActive:    true,
+				},
+			},
+		}
+		mockCheckoutRepo.On("GetCartItemsWithBooks", mock.Anything, userID, []uint{cartItemID}).Return(dummyCartItems, nil).Once()
+
+		mockRates := []biteship.ShippingRatePricing{
+			{CourierCode: "jne", CourierServiceCode: "reg", Price: 20000},
+		}
+		mockBiteship.On("CalculateRatesByAreaID", mock.Anything, dummyAddr.BiteshipAreaID, "jne", mock.Anything).
+			Return(mockRates, nil).Once()
+
+		sqlMock.ExpectBegin()
+
+		mockCheckoutRepo.On("WithTx", mock.Anything).Return(mockCheckoutRepo).Once()
+		mockOrderRepo.On("WithTx", mock.Anything).Return(mockOrderRepo).Once()
+
+		bookMap := map[uint]*entity.Book{
+			bookID: {ID: bookID, Stock: 10},
+		}
+		mockCheckoutRepo.On("LockAndValidateBooks", mock.Anything, []uint{bookID}).Return(bookMap, nil).Once()
+		mockCheckoutRepo.On("DeductBookStock", mock.Anything, bookID, 1).Return(nil).Once()
+		mockOrderRepo.On("CreateOrder", mock.Anything, mock.MatchedBy(func(o *entity.Order) bool {
+			return o.UserID == userID &&
+				o.Status == entity.OrderStatusWaitingPayment &&
+				o.TotalAmount == 120700
+		}), mock.Anything).Return(nil).Once()
+
+		sqlMock.ExpectCommit()
+
+		qrURL := "https://api.sandbox.midtrans.com/v2/shopeepay/backend/qr-code"
+		mockCharge := &payment.ChargeResponse{
+			TransactionID: "trx-shopee-12345",
+			PaymentType:   "shopeepay",
+			QRURL:         qrURL,
+		}
+		mockMidtrans.On("Charge", mock.Anything, mock.Anything, int64(120700), "shopeepay").Return(mockCharge, nil).Once()
+		mockCheckoutRepo.On("DeleteCartItems", mock.Anything, []uint{cartItemID}).Return(nil).Once()
+		mockOrderRepo.On("CreatePayment", mock.Anything, mock.MatchedBy(func(p *entity.Payment) bool {
+			return p.PaymentType == "shopeepay" && p.Status == entity.PaymentStatusPending
+		})).Return(nil).Once()
+
+		input := usecase.CreateOrderInput{
+			CartItemIDs:    []uint{cartItemID},
+			AddressID:      &addrID,
+			Courier:        "jne",
+			CourierService: "reg",
+			PaymentMethod:  "shopeepay",
+		}
+
+		res, err := uc.CreateOrder(context.Background(), userID, input)
+		assert.NoError(t, err)
+		assert.NotNil(t, res)
+		assert.Equal(t, string(entity.OrderStatusWaitingPayment), res.Status)
+		assert.Equal(t, 120700, res.TotalAmount)
+		assert.Equal(t, qrURL, *res.PaymentInfo.QRURL)
+		assert.NoError(t, sqlMock.ExpectationsWereMet())
+	})
+
+	t.Run("failed midtrans charge rolls back order to cancelled and restores stock without deleting cart", func(t *testing.T) {
+		gormDB, sqlMock := setupGormSqlmock(t)
+		mockCheckoutRepo := new(MockCheckoutRepository)
+		mockOrderRepo := new(MockOrderRepository)
+		mockAddressRepo := new(MockAddressRepositoryForCheckout)
+		mockBiteship := new(MockBiteshipClientForCheckout)
+		mockMidtrans := new(MockMidtransServiceForCheckout)
+
+		uc := usecase.NewCheckoutUsecase(gormDB, mockCheckoutRepo, mockOrderRepo, mockAddressRepo, nil, nil, mockBiteship, mockMidtrans)
+
+		dummyAddr := &entity.Address{UserID: userID, BiteshipAreaID: "IDNP6"}
+		dummyAddr.ID = addrID
+		mockAddressRepo.On("FindByID", mock.Anything, addrID).Return(dummyAddr, nil).Once()
+
+		dummyCartItems := []entity.CartItem{
+			{
+				ID:       cartItemID,
+				BookID:   bookID,
+				Quantity: 2,
+				Book: entity.Book{
+					ID:          bookID,
+					Title:       "Buku Go",
+					Price:       100000,
+					Stock:       10,
+					WeightGrams: 500,
+					IsActive:    true,
+				},
+			},
+		}
+		mockCheckoutRepo.On("GetCartItemsWithBooks", mock.Anything, userID, []uint{cartItemID}).Return(dummyCartItems, nil).Once()
+
+		mockRates := []biteship.ShippingRatePricing{
+			{CourierCode: "jne", CourierServiceCode: "reg", Price: 20000},
+		}
+		mockBiteship.On("CalculateRatesByAreaID", mock.Anything, dummyAddr.BiteshipAreaID, "jne", mock.Anything).
+			Return(mockRates, nil).Once()
+
+		sqlMock.ExpectBegin()
+		mockCheckoutRepo.On("WithTx", mock.Anything).Return(mockCheckoutRepo)
+		mockOrderRepo.On("WithTx", mock.Anything).Return(mockOrderRepo)
+
+		bookMap := map[uint]*entity.Book{
+			bookID: {ID: bookID, Stock: 10},
+		}
+		mockCheckoutRepo.On("LockAndValidateBooks", mock.Anything, []uint{bookID}).Return(bookMap, nil).Once()
+		mockCheckoutRepo.On("DeductBookStock", mock.Anything, bookID, 2).Return(nil).Once()
+		mockOrderRepo.On("CreateOrder", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+		sqlMock.ExpectCommit()
+
+		mockMidtrans.On("Charge", mock.Anything, mock.Anything, int64(225000), "bca_va").
+			Return(nil, errors.New("midtrans connection timeout")).Once()
+
+		sqlMock.ExpectBegin()
+		mockOrderRepo.On("UpdateOrderStatus", mock.Anything, uint(0), entity.OrderStatusCancelled).Return(nil).Once()
+		mockCheckoutRepo.On("RestoreBookStock", mock.Anything, bookID, 2).Return(nil).Once()
+		sqlMock.ExpectCommit()
+
+		input := usecase.CreateOrderInput{
+			CartItemIDs:    []uint{cartItemID},
+			AddressID:      &addrID,
+			Courier:        "jne",
+			CourierService: "reg",
+			PaymentMethod:  "bca_va",
+		}
+
+		res, err := uc.CreateOrder(context.Background(), userID, input)
+		assert.ErrorIs(t, err, entity.ErrMidtransChargeFailed)
 		assert.Nil(t, res)
 		assert.NoError(t, sqlMock.ExpectationsWereMet())
 	})

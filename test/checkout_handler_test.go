@@ -224,6 +224,22 @@ func TestCheckoutHandler_CreateOrder(t *testing.T) {
 		assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
 		mockUC.AssertExpectations(t)
 	})
+
+	t.Run("invalid payment method returns 400 Bad Request", func(t *testing.T) {
+		mockUC := new(MockCheckoutUsecase)
+		app := setupCheckoutApp(mockUC, true)
+
+		mockUC.On("CreateOrder", mock.Anything, uint(1), mock.Anything).
+			Return(nil, entity.ErrInvalidPaymentMethod).Once()
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/checkout/order", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
 }
 
 func TestCheckoutHandler_HandleMidtransWebhook(t *testing.T) {

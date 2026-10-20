@@ -238,7 +238,11 @@ func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, inpu
 		}
 	}
 
-	// 5. Calculate administrative fees
+	// 5. Validate payment method & calculate administrative fees
+	if !payment.IsSupportedPaymentMethod(input.PaymentMethod) {
+		return nil, entity.ErrInvalidPaymentMethod
+	}
+
 	adminFee := 0
 	switch strings.ToLower(input.PaymentMethod) {
 	case "bca_va", "bni_va", "bri_va", "permata_va", "cimb_va":
@@ -247,10 +251,6 @@ func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, inpu
 		adminFee = 4000 // Mandiri Bill
 	case "gopay", "qris", "shopeepay":
 		adminFee = int(math.Round(float64(itemsSubtotal) * 0.007))
-	case "credit_card":
-		adminFee = int(math.Round((float64(itemsSubtotal) * 0.029) + 2000.0))
-	case "alfamart", "indomaret":
-		adminFee = 5000 // Flat rate Convenience Store
 	default:
 		adminFee = 0
 	}
@@ -278,6 +278,10 @@ func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, inpu
 }
 
 func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input CreateOrderInput) (*CreateOrderResult, error) {
+	if !payment.IsSupportedPaymentMethod(input.PaymentMethod) {
+		return nil, entity.ErrInvalidPaymentMethod
+	}
+
 	preview, err := u.PreviewCheckout(ctx, userID, PreviewCheckoutInput(input))
 	if err != nil {
 		return nil, err
@@ -312,7 +316,7 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 		PaymentDeadline:   deadline,
 	}
 
-	// Atomic Database Transaction: Lock Stock -> Deduct Stock -> Save Order -> Increment Voucher -> Clear Cart
+	// Atomic Database Transaction: Lock Stock -> Deduct Stock -> Save Order -> Increment Voucher
 	err = u.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		txCheckoutRepo := u.checkoutRepo.WithTx(tx)
 		txOrderRepo := u.orderRepo.WithTx(tx)
@@ -348,7 +352,7 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 			}
 		}
 
-		return txCheckoutRepo.DeleteCartItems(ctx, input.CartItemIDs)
+		return nil
 	})
 	if err != nil {
 		logger.Error("create order failed - transaction error", "user_id", userID, "error", err)
@@ -359,8 +363,21 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 	chargeRes, err := u.midtransSvc.Charge(ctx, invoiceNumber, int64(order.TotalAmount), input.PaymentMethod)
 	if err != nil {
 		logger.Error("create order failed - midtrans charge error", "invoice", invoiceNumber, "error", err)
+		// Rollback order and restore book stock so user can retry without stock being held or cart being deleted
+		_ = u.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			txCheckoutRepo := u.checkoutRepo.WithTx(tx)
+			txOrderRepo := u.orderRepo.WithTx(tx)
+			_ = txOrderRepo.UpdateOrderStatus(ctx, order.ID, entity.OrderStatusCancelled)
+			for _, item := range preview.Items {
+				_ = txCheckoutRepo.RestoreBookStock(ctx, item.BookID, item.Quantity)
+			}
+			return nil
+		})
 		return nil, entity.ErrMidtransChargeFailed
 	}
+
+	// Delete cart items ONLY AFTER payment charge has successfully been created
+	_ = u.checkoutRepo.DeleteCartItems(ctx, input.CartItemIDs)
 
 	bank := nilIfEmpty(chargeRes.Bank)
 	vaNumber := nilIfEmpty(chargeRes.VANumber)

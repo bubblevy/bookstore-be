@@ -38,7 +38,9 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 
 	// root
 	app.Get("/", func(c fiber.Ctx) error {
-		return c.SendString("Hello World!")
+		return c.JSON(fiber.Map{
+			"message": "Hello World!",
+		})
 	})
 
 	// health check
