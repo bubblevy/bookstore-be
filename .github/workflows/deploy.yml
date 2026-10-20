@@ -36,5 +36,7 @@ jobs:
             cd /home/azureuser/bookstore
             
             mkdir -p public logs
+            sudo chown -R 1001:1001 public/uploads logs
+            sudo chmod -R 775 public/uploads logs
 
             docker compose -f docker-compose.prod.yml up -d --build --remove-orphans

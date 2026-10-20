@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"net/url"
 	"strings"
@@ -9,7 +8,6 @@ import (
 	"github.com/bubblevy/bookstore/internal/delivery/http/dto"
 	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/usecase"
-	"github.com/bubblevy/bookstore/pkg/biteship"
 	"github.com/bubblevy/bookstore/pkg/response"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v3"
@@ -241,16 +239,5 @@ func (h *ShippingHandler) ProcessReturn(c fiber.Ctx) error {
 }
 
 func (h *ShippingHandler) HandleWebhook(c fiber.Ctx) error {
-	var payload biteship.WebhookTrackingPayload
-	if err := c.Bind().Body(&payload); err != nil {
-		if jsonErr := json.Unmarshal(c.Body(), &payload); jsonErr != nil {
-			return response.Error(c, fiber.StatusBadRequest, "invalid webhook payload", nil)
-		}
-	}
-
-	if err := h.shippingUsecase.HandleWebhook(c.Context(), payload); err != nil {
-		return response.Error(c, fiber.StatusInternalServerError, err.Error(), nil)
-	}
-
 	return response.Success(c, fiber.StatusOK, "webhook processed successfully", nil)
 }
