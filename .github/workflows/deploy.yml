@@ -1,4 +1,4 @@
-name: Deploy Bookstore API to Azure Container Apps
+name: Deploy to Azure VM
 
 on:
   push:
@@ -11,76 +11,30 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Log in to Azure Container Registry
-        uses: docker/login-action@v3
+      - name: Copy Files to VM via SCP
+        uses: appleboy/scp-action@v0.1.7
         with:
-          registry: ${{ secrets.ACR_NAME }}.azurecr.io
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USERNAME }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          source: ".,!vendor,!bin,!tmp"
+          target: "/home/azureuser/bookstore"
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and Push Docker Image
-        uses: docker/build-push-action@v5
+      - name: Build & Run Services on VM
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          context: .
-          push: true
-          tags: |
-            ${{ secrets.ACR_NAME }}.azurecr.io/bookstore-api:${{ github.sha }}
-            ${{ secrets.ACR_NAME }}.azurecr.io/bookstore-api:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USERNAME }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            cd /home/azureuser/bookstore
+            
+            mkdir -p public logs
 
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Deploy Revision to Azure Container Apps
-        uses: azure/cli@v2
-        env:
-          RAW_ENV_FILE: ${{ secrets.ENV_FILE }}
-          ACR_NAME: ${{ secrets.ACR_NAME }}
-          IMAGE_TAG: ${{ github.sha }}
-        with:
-          inlineScript: |
-            python3 -c '
-            import os, subprocess
-
-            raw_env = os.environ.get("RAW_ENV_FILE", "")
-            acr_name = os.environ.get("ACR_NAME", "")
-            image_tag = os.environ.get("IMAGE_TAG", "")
-
-            env_vars = []
-            for line in raw_env.splitlines():
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                if "=" in line:
-                    k, v = line.split("=", 1)
-                    k = k.strip()
-                    v = v.strip().strip("\"").strip("\x27")
-                    if v:
-                        env_vars.append(f"{k}={v}")
-
-            cmd = [
-                "az", "containerapp", "update",
-                "--name", "bookstore-api",
-                "--resource-group", "rg-bookstore",
-                "--image", f"{acr_name}.azurecr.io/bookstore-api:{image_tag}",
-                "--set-env-vars"
-            ] + env_vars
-
-            print(f"Mengirim {len(env_vars)} variabel environment ke Azure...")
-            res = subprocess.run(cmd)
-            if res.returncode != 0:
-                exit(res.returncode)
-            '
+            docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
