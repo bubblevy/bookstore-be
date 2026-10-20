@@ -23,7 +23,7 @@ jobs:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USERNAME }}
           key: ${{ secrets.VM_SSH_KEY }}
-          source: ".,!vendor,!bin,!tmp"
+          source: ".,!vendor,!bin,!tmp,!public"
           target: "/home/azureuser/bookstore"
 
       - name: Build & Run Services on VM
@@ -36,7 +36,8 @@ jobs:
             cd /home/azureuser/bookstore
             
             mkdir -p public logs
-            sudo chown -R 1001:1001 public/uploads logs
-            sudo chmod -R 775 public/uploads logs
+            sudo chown -R 1001:1001 public logs
+            sudo chmod -R 775 public logs
+            sudo chmod -R g+s public logs
 
             docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
