@@ -36,6 +36,11 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	app.Use(helmet.New())
 	app.Use(middleware.CORS([]string{cfg.SMTP.FrontendURL}))
 
+	// root
+	app.Get("/", func(c fiber.Ctx) error {
+		return c.SendString("Hello World!")
+	})
+
 	// health check
 	app.Get("/health", func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{
