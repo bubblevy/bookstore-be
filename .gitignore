@@ -3,3 +3,4 @@ logs/
 *.log
 public/*
 !public/.gitkeep
+.env.production
