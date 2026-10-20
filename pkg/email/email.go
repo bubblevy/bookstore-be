@@ -72,7 +72,6 @@ func (s *smtpEmailSender) SendActivationEmail(ctx context.Context, toEmail, reci
 		CTAURL:        activationLink,
 		WarningNote:   "Jika tombol di atas tidak berfungsi, salin dan tempel link berikut ke browser Anda. Link ini hanya berlaku selama 24 jam.",
 	}
-
 	return s.send(ctx, toEmail, recipientName, payload)
 }
 
@@ -87,7 +86,6 @@ func (s *smtpEmailSender) SendResetPasswordEmail(ctx context.Context, toEmail, r
 		CTAURL:        resetLink,
 		WarningNote:   "Jika Anda tidak meminta reset kata sandi, silakan abaikan email ini. Link ini hanya berlaku selama 30 Menit.",
 	}
-
 	return s.send(ctx, toEmail, recipientName, payload)
 }
 
@@ -127,7 +125,7 @@ func (s *smtpEmailSender) send(ctx context.Context, toEmail, recipientName strin
 }
 
 func (s *smtpEmailSender) sendWithTLS(addr, toEmail string, msg []byte) error {
-	host, _, err := net.SplitHostPort(addr)
+	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return fmt.Errorf("failed to parse SMTP address: %w", err)
 	}
@@ -138,26 +136,52 @@ func (s *smtpEmailSender) sendWithTLS(addr, toEmail string, msg []byte) error {
 		MinVersion:         tls.VersionTLS12,
 	}
 
-	conn, err := tls.Dial("tcp", addr, tlsConfig)
-	if err != nil {
-		return fmt.Errorf("failed to connect to SMTP server with TLS: %w", err)
-	}
-	defer conn.Close()
+	var client *smtp.Client
+	if port == "465" {
+		dialer := &net.Dialer{Timeout: 10 * time.Second}
+		conn, err := tls.DialWithDialer(dialer, "tcp", addr, tlsConfig)
+		if err != nil {
+			return fmt.Errorf("failed to connect to SMTP server with TLS: %w", err)
+		}
+		defer conn.Close()
 
-	client, err := smtp.NewClient(conn, host)
-	if err != nil {
-		return fmt.Errorf("failed to create SMTP client: %w", err)
+		c, err := smtp.NewClient(conn, host)
+		if err != nil {
+			return fmt.Errorf("failed to create SMTP client: %w", err)
+		}
+		client = c
+	} else {
+		conn, err := net.DialTimeout("tcp", addr, 10*time.Second)
+		if err != nil {
+			return fmt.Errorf("failed to dial SMTP server: %w", err)
+		}
+		defer conn.Close()
+
+		c, err := smtp.NewClient(conn, host)
+		if err != nil {
+			return fmt.Errorf("failed to create SMTP client: %w", err)
+		}
+		client = c
+
+		// Upgrade koneksi ke TLS jika didukung oleh server SMTP
+		if ok, _ := client.Extension("STARTTLS"); ok {
+			if err := client.StartTLS(tlsConfig); err != nil {
+				client.Close()
+				return fmt.Errorf("STARTTLS handshake failed: %w", err)
+			}
+		}
 	}
 	defer client.Close()
 
-	if err := client.Auth(smtp.PlainAuth("", s.config.AuthUser, s.config.AuthPass, host)); err != nil {
+	// Authenticate
+	auth := smtp.PlainAuth("", s.config.AuthUser, s.config.AuthPass, host)
+	if err := client.Auth(auth); err != nil {
 		return fmt.Errorf("SMTP authentication failed: %w", err)
 	}
 
 	if err := client.Mail(s.config.FromEmail); err != nil {
 		return fmt.Errorf("SMTP MAIL FROM failed: %w", err)
 	}
-
 	if err := client.Rcpt(toEmail); err != nil {
 		return fmt.Errorf("SMTP RCPT TO failed: %w", err)
 	}
@@ -166,11 +190,9 @@ func (s *smtpEmailSender) sendWithTLS(addr, toEmail string, msg []byte) error {
 	if err != nil {
 		return fmt.Errorf("SMTP DATA failed: %w", err)
 	}
-
 	if _, err := w.Write(msg); err != nil {
 		return fmt.Errorf("failed to write email body: %w", err)
 	}
-
 	if err := w.Close(); err != nil {
 		return fmt.Errorf("failed to close email writer: %w", err)
 	}
