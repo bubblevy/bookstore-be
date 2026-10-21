@@ -261,12 +261,7 @@ func (h *AuthHandler) GoogleLogin(c fiber.Ctx) error {
 	rand.Read(b)
 	state := base64.URLEncoding.EncodeToString(b)
 
-	c.Cookie(&fiber.Cookie{
-		Name:     "oauth_state",
-		Value:    state,
-		MaxAge:   300,
-		HTTPOnly: true,
-	})
+	cookie.SetOAuthState(c, state)
 
 	url := h.oauthConfig.AuthCodeURL(state)
 	return c.Redirect().To(url)
@@ -280,7 +275,7 @@ func (h *AuthHandler) GoogleCallback(c fiber.Ctx) error {
 		return response.Error(c, fiber.StatusUnauthorized, "invalid oauth state", nil)
 	}
 
-	c.Cookie(&fiber.Cookie{Name: "oauth_state", MaxAge: -1})
+	cookie.ClearOAuthState(c)
 
 	code := c.Query("code")
 	if code == "" {

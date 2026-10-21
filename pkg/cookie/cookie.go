@@ -66,6 +66,32 @@ func ClearAuthCookies(c fiber.Ctx) {
 	})
 }
 
+func SetOAuthState(c fiber.Ctx, state string) {
+	c.Cookie(&fiber.Cookie{
+		Name:     "oauth_state",
+		Value:    state,
+		MaxAge:   300,
+		Expires:  time.Now().Add(5 * time.Minute),
+		HTTPOnly: true,
+		Secure:   isProduction(),
+		SameSite: fiber.CookieSameSiteLaxMode,
+		Path:     RootPath,
+	})
+}
+
+func ClearOAuthState(c fiber.Ctx) {
+	c.Cookie(&fiber.Cookie{
+		Name:     "oauth_state",
+		Value:    "",
+		MaxAge:   -1,
+		Expires:  time.Now().Add(-1 * time.Hour),
+		HTTPOnly: true,
+		Secure:   isProduction(),
+		SameSite: fiber.CookieSameSiteLaxMode,
+		Path:     RootPath,
+	})
+}
+
 func GetRefreshToken(c fiber.Ctx) string {
 	return c.Cookies(RefreshTokenName)
 }
