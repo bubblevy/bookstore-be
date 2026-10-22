@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/bubblevy/bookstore/internal/delivery/http/dto"
 	"github.com/bubblevy/bookstore/internal/entity"
+	"github.com/bubblevy/bookstore/internal/repository"
 	"github.com/bubblevy/bookstore/internal/usecase"
+	"github.com/bubblevy/bookstore/pkg/pagination"
 	"github.com/bubblevy/bookstore/pkg/response"
 	"github.com/gofiber/fiber/v3"
 )
@@ -17,11 +20,15 @@ type OrderHandler struct {
 	orderUsecase usecase.OrderUsecase
 }
 
-func NewOrderHandler(r fiber.Router, orderUC usecase.OrderUsecase, authMiddleware fiber.Handler) {
+func NewOrderHandler(r fiber.Router, orderUC usecase.OrderUsecase, authMiddleware fiber.Handler, adminMiddleware fiber.Handler) {
 	h := &OrderHandler{orderUsecase: orderUC}
 
+	// Order routes
 	orders := r.Group("/orders", authMiddleware)
+	orders.Get("/all", adminMiddleware, h.AdminFindAllOrders)
+	orders.Get("/detail/:invoice_number", adminMiddleware, h.AdminGetOrderDetail)
 	orders.Get("/", h.GetUserOrders)
+	orders.Get("/:invoice_number/pdf", h.DownloadInvoicePDF)
 	orders.Get("/:invoice_number", h.GetOrderDetail)
 }
 
@@ -187,4 +194,89 @@ func (h *OrderHandler) GetOrderDetail(c fiber.Ctx) error {
 	}
 
 	return response.Success(c, fiber.StatusOK, "order detail retrieved successfully", detail)
+}
+
+func (h *OrderHandler) AdminFindAllOrders(c fiber.Ctx) error {
+	pq := pagination.FromFiber(c)
+
+	filter := repository.AdminOrderFilter{
+		Status: strings.TrimSpace(c.Query("status")),
+		Search: strings.TrimSpace(c.Query("search")),
+		SortBy: strings.TrimSpace(c.Query("sort_by", "newest")),
+	}
+
+	if start := strings.TrimSpace(c.Query("start_date")); start != "" {
+		if t, err := time.Parse("2006-01-02", start); err == nil {
+			utc := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+			filter.StartDate = &utc
+		} else {
+			return response.Error(c, fiber.StatusBadRequest, "invalid start_date format, expected YYYY-MM-DD", nil)
+		}
+	}
+
+	if end := strings.TrimSpace(c.Query("end_date")); end != "" {
+		if t, err := time.Parse("2006-01-02", end); err == nil {
+			utc := time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, time.UTC)
+			filter.EndDate = &utc
+		} else {
+			return response.Error(c, fiber.StatusBadRequest, "invalid end_date format, expected YYYY-MM-DD", nil)
+		}
+	}
+
+	items, meta, err := h.orderUsecase.AdminFindAllOrders(c.Context(), filter, pq)
+	if err != nil {
+		return response.Error(c, fiber.StatusInternalServerError, err.Error(), nil)
+	}
+
+	return response.SuccessWithPagination(c, fiber.StatusOK, "orders retrieved successfully", items, meta)
+}
+
+func (h *OrderHandler) AdminGetOrderDetail(c fiber.Ctx) error {
+	rawInvoice := c.Params("invoice_number")
+	invoiceNumber, err := url.QueryUnescape(rawInvoice)
+	if err != nil {
+		invoiceNumber = rawInvoice
+	}
+	invoiceNumber = strings.TrimSpace(invoiceNumber)
+
+	if invoiceNumber == "" {
+		return response.Error(c, fiber.StatusBadRequest, "invoice number is required", nil)
+	}
+
+	detail, err := h.orderUsecase.AdminGetOrderDetail(c.Context(), invoiceNumber)
+	if err != nil {
+		if errors.Is(err, entity.ErrOrderNotFound) {
+			return response.Error(c, fiber.StatusNotFound, "order not found", nil)
+		}
+		return response.Error(c, fiber.StatusInternalServerError, err.Error(), nil)
+	}
+
+	return response.Success(c, fiber.StatusOK, "order detail retrieved successfully", detail)
+}
+
+func (h *OrderHandler) DownloadInvoicePDF(c fiber.Ctx) error {
+	userID, err := h.getUserID(c)
+	if err != nil {
+		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
+	}
+
+	rawInvoice := c.Params("invoice_number")
+	invoiceNumber, err := url.QueryUnescape(rawInvoice)
+	if err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "invalid invoice number", nil)
+	}
+
+	isAdmin, _ := c.Locals("is_admin").(bool)
+
+	pdfBytes, filename, err := h.orderUsecase.GetOrderInvoicePDF(c.Context(), userID, invoiceNumber, isAdmin)
+	if err != nil {
+		if errors.Is(err, entity.ErrOrderNotFound) {
+			return response.Error(c, fiber.StatusNotFound, "order not found", nil)
+		}
+		return response.Error(c, fiber.StatusInternalServerError, err.Error(), nil)
+	}
+
+	c.Set("Content-Type", "application/pdf")
+	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	return c.Send(pdfBytes)
 }

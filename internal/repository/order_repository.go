@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/bubblevy/bookstore/internal/entity"
+	"github.com/bubblevy/bookstore/pkg/pagination"
 	"gorm.io/gorm"
 )
 
@@ -24,4 +25,14 @@ type OrderRepository interface {
 	FindByInvoice(ctx context.Context, invoice string) (*entity.Order, error)
 	FindUserOrders(ctx context.Context, userID uint, statusFilter string) ([]entity.Order, error)
 	FindOrderDetailByInvoice(ctx context.Context, userID uint, invoice string) (*entity.Order, error)
+	FindAllOrders(ctx context.Context, filter AdminOrderFilter, pq pagination.Query) ([]entity.Order, int64, error)
+	GetOrdersForReport(ctx context.Context, startDate, endDate *time.Time, status string) ([]entity.Order, error)
+}
+
+type AdminOrderFilter struct {
+	Status    string
+	Search    string
+	StartDate *time.Time
+	EndDate   *time.Time
+	SortBy    string
 }

@@ -132,6 +132,22 @@ func (m *MockOrderRepository) MarkAsReturned(ctx context.Context, orderID uint, 
 	return m.Called(ctx, orderID, reason).Error(0)
 }
 
+func (m *MockOrderRepository) FindAllOrders(ctx context.Context, filter repository.AdminOrderFilter, pq pagination.Query) ([]entity.Order, int64, error) {
+	args := m.Called(ctx, filter, pq)
+	if res := args.Get(0); res != nil {
+		return res.([]entity.Order), args.Get(1).(int64), args.Error(2)
+	}
+	return nil, 0, args.Error(2)
+}
+
+func (m *MockOrderRepository) GetOrdersForReport(ctx context.Context, startDate, endDate *time.Time, status string) ([]entity.Order, error) {
+	args := m.Called(ctx, startDate, endDate, status)
+	if res := args.Get(0); res != nil {
+		return res.([]entity.Order), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
 type MockAddressRepositoryForCheckout struct {
 	mock.Mock
 }
@@ -555,6 +571,37 @@ func TestCheckoutUsecase_PreviewCheckout(t *testing.T) {
 		res, err := uc.PreviewCheckout(context.Background(), userID, input)
 		assert.ErrorIs(t, err, entity.ErrAddressNotFound)
 		assert.Nil(t, res)
+	})
+
+	t.Run("success preview when user has no address returns items with nil address", func(t *testing.T) {
+		gormDB, _ := setupGormSqlmock(t)
+		mockCheckoutRepo := new(MockCheckoutRepository)
+		mockAddressRepo := new(MockAddressRepositoryForCheckout)
+
+		uc := usecase.NewCheckoutUsecase(gormDB, mockCheckoutRepo, nil, mockAddressRepo, nil, nil, nil, nil)
+
+		// Primary address not found (user has not added address yet)
+		mockAddressRepo.On("FindPrimaryByUserID", mock.Anything, userID).Return(nil, nil).Once()
+
+		book := entity.Book{Price: 100000, WeightGrams: 200, Stock: 10, IsActive: true}
+		book.ID = 10
+		cartItem := entity.CartItem{BookID: 10, Quantity: 2, Book: book}
+		cartItem.ID = cartItemID
+		mockCheckoutRepo.On("GetCartItemsWithBooks", mock.Anything, userID, []uint{cartItemID}).Return([]entity.CartItem{cartItem}, nil).Once()
+
+		input := usecase.PreviewCheckoutInput{
+			CartItemIDs: []uint{cartItemID},
+			AddressID:   nil, // no address ID provided
+		}
+
+		res, err := uc.PreviewCheckout(context.Background(), userID, input)
+		assert.NoError(t, err)
+		assert.NotNil(t, res)
+		assert.Nil(t, res.Address)
+		assert.Equal(t, 0, res.ShippingCost)
+		assert.Equal(t, 200000, res.ItemsSubtotal)
+		assert.Equal(t, 200000, res.TotalPayment)
+		assert.Len(t, res.Items, 1)
 	})
 
 	t.Run("failed when stock insufficient in preview", func(t *testing.T) {

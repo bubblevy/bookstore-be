@@ -7,8 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bubblevy/bookstore/internal/delivery/http/dto"
 	"github.com/bubblevy/bookstore/internal/delivery/http/handler"
 	"github.com/bubblevy/bookstore/internal/entity"
+	"github.com/bubblevy/bookstore/internal/repository"
+	"github.com/bubblevy/bookstore/pkg/pagination"
 	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -34,6 +37,30 @@ func (m *MockOrderUsecase) GetOrderDetail(ctx context.Context, userID uint, invo
 	return nil, args.Error(1)
 }
 
+func (m *MockOrderUsecase) AdminFindAllOrders(ctx context.Context, filter repository.AdminOrderFilter, pq pagination.Query) ([]dto.AdminOrderListItemResponse, pagination.Meta, error) {
+	args := m.Called(ctx, filter, pq)
+	if res := args.Get(0); res != nil {
+		return res.([]dto.AdminOrderListItemResponse), args.Get(1).(pagination.Meta), args.Error(2)
+	}
+	return nil, pagination.Meta{}, args.Error(2)
+}
+
+func (m *MockOrderUsecase) AdminGetOrderDetail(ctx context.Context, invoiceNumber string) (*dto.AdminOrderDetailResponse, error) {
+	args := m.Called(ctx, invoiceNumber)
+	if res := args.Get(0); res != nil {
+		return res.(*dto.AdminOrderDetailResponse), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+func (m *MockOrderUsecase) GetOrderInvoicePDF(ctx context.Context, userID uint, invoiceNumber string, isAdmin bool) ([]byte, string, error) {
+	args := m.Called(ctx, userID, invoiceNumber, isAdmin)
+	if res := args.Get(0); res != nil {
+		return res.([]byte), args.String(1), args.Error(2)
+	}
+	return nil, "", args.Error(2)
+}
+
 func setupOrderApp(mockUC *MockOrderUsecase, authenticated bool, currentUserID uint) *fiber.App {
 	app := fiber.New()
 
@@ -46,11 +73,16 @@ func setupOrderApp(mockUC *MockOrderUsecase, authenticated bool, currentUserID u
 			})
 		}
 		c.Locals("user_id", currentUserID)
+		c.Locals("is_admin", true)
+		return c.Next()
+	}
+
+	adminMiddleware := func(c fiber.Ctx) error {
 		return c.Next()
 	}
 
 	api := app.Group("/api/v1")
-	handler.NewOrderHandler(api, mockUC, authMiddleware)
+	handler.NewOrderHandler(api, mockUC, authMiddleware, adminMiddleware)
 	return app
 }
 
@@ -170,3 +202,109 @@ func TestOrderHandler_GetOrderDetail(t *testing.T) {
 		mockUC.AssertExpectations(t)
 	})
 }
+
+func TestOrderHandler_AdminFindAllOrders(t *testing.T) {
+	userID := uint(1)
+
+	t.Run("success admin list orders with pagination returns 200", func(t *testing.T) {
+		mockUC := new(MockOrderUsecase)
+		app := setupOrderApp(mockUC, true, userID)
+
+		items := []dto.AdminOrderListItemResponse{
+			{
+				ID:            1,
+				InvoiceNumber: "INV-20261021-000101",
+				Status:        "paid",
+				TotalAmount:   150000,
+				Customer: dto.AdminCustomerResponse{
+					ID:    1,
+					Name:  "Test User",
+					Email: "test@example.com",
+				},
+				CreatedAt: time.Now(),
+			},
+		}
+		meta := pagination.BuildMeta(1, 1, 10)
+
+		mockUC.On("AdminFindAllOrders", mock.Anything, mock.Anything, mock.Anything).
+			Return(items, meta, nil).Once()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/orders/all?page=1&per_page=10", nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
+}
+
+func TestOrderHandler_DownloadInvoicePDF(t *testing.T) {
+	userID := uint(1)
+	invoice := "INV-20261021-000101"
+
+	t.Run("success download invoice pdf returns 200 and application/pdf", func(t *testing.T) {
+		mockUC := new(MockOrderUsecase)
+		app := setupOrderApp(mockUC, true, userID)
+
+		dummyPDF := []byte("%PDF-1.4 dummy pdf bytes")
+		mockUC.On("GetOrderInvoicePDF", mock.Anything, userID, invoice, true).
+			Return(dummyPDF, "invoice-"+invoice+".pdf", nil).Once()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/orders/"+invoice+"/pdf", nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "application/pdf", resp.Header.Get("Content-Type"))
+		mockUC.AssertExpectations(t)
+	})
+}
+
+func TestOrderHandler_AdminGetOrderDetail(t *testing.T) {
+	invoice := "INV-20261021-000101"
+
+	t.Run("success admin gets order detail returns 200", func(t *testing.T) {
+		mockUC := new(MockOrderUsecase)
+		app := setupOrderApp(mockUC, true, 1)
+
+		detail := &dto.AdminOrderDetailResponse{
+			ID:            1,
+			InvoiceNumber: invoice,
+			Status:        "paid",
+			Customer: dto.AdminCustomerResponse{
+				ID:    10,
+				Name:  "Customer Name",
+				Email: "customer@example.com",
+			},
+			Pricing: dto.OrderPricingResponse{
+				TotalAmount: 150000,
+			},
+		}
+
+		mockUC.On("AdminGetOrderDetail", mock.Anything, invoice).
+			Return(detail, nil).Once()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/orders/detail/"+invoice, nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
+
+	t.Run("order not found returns 404", func(t *testing.T) {
+		mockUC := new(MockOrderUsecase)
+		app := setupOrderApp(mockUC, true, 1)
+
+		mockUC.On("AdminGetOrderDetail", mock.Anything, "INV-NONEXISTENT").
+			Return(nil, entity.ErrOrderNotFound).Once()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/orders/detail/INV-NONEXISTENT", nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
+}
+

@@ -115,7 +115,7 @@ bookstore/
 - **Order Placement**: Atomically reserves book stock, applies discounts, records shipping details, and generates payment credentials.
 - **Midtrans Webhook**: Listens for asynchronous payment status notifications (Settlement, Expire, Cancel, Deny) with SHA512 signature validation.
 
-### 8. Order Lifecycle
+### 8. Order Lifecycle & Invoices
 Supported order statuses:
 - `waiting_payment` -> Order placed, waiting for customer payment before deadline.
 - `paid` -> Payment verified via Midtrans webhook.
@@ -125,16 +125,24 @@ Supported order statuses:
 - `cancelled` -> Order cancelled or payment deadline expired (stock restored).
 - `returned` -> Order returned to store (stock restored).
 
-### 9. Performance Caching (Redis)
+Features:
+- **Order Tracking & Admin Oversight**: List customer orders or view all orders system-wide with pagination, search keywords (invoice, customer, recipient), status, and date range filters (`/api/v1/orders/all`).
+- **PDF Invoice Download**: Generate and stream official, beautifully styled PDF order invoice receipts with itemized pricing, recipient information, and waybill numbers (`/api/v1/orders/{invoice_number}/pdf`).
+
+### 9. Executive Reporting & Analytics (PDF & JSON)
+- **Analytics Dashboard Data**: Aggregate performance metrics including gross revenue, net revenue, shipping, discounts, average order value, top-selling books leaderboard, daily sales trends, and order status summaries (`/api/v1/reports`).
+- **Executive PDF Export**: Download executive-grade performance reports in PDF format with KPI summary cards, leaderboard tables, and order logs (`/api/v1/reports/pdf`).
+
+### 10. Performance Caching (Redis)
 - Accelerates page loading and response times by caching frequently viewed books and categories in-memory.
 - Automatically invalidates and refreshes the cache whenever books or categories are modified.
 - Built-in fail-open resilience: if Redis is unavailable, requests seamlessly query the database without disruption.
 
-### 10. Asynchronous Email Queue (RabbitMQ)
+### 11. Asynchronous Email Queue (RabbitMQ)
 - Offloads account activation and password reset emails to background workers, making user registrations and password requests near-instant.
 - Features automatic retry handling for reliable email delivery and automatic fallback to direct SMTP if the message queue is offline.
 
-### 11. Media & Object Storage (Local & AWS S3)
+### 12. Media & Object Storage (Local & AWS S3)
 - Flexible asset storage supporting both local server filesystem and cloud object storage (AWS S3, MinIO, Cloudflare R2).
 - Automatic file management that organizes book covers and category images, with automated cleanup of unused temporary uploads.
 
@@ -216,7 +224,12 @@ The complete API specification is available in OpenAPI 3.0.3 format:
 | **Checkout** | `POST` | `/api/v1/checkout/order` | User | Create order and charge via Midtrans |
 | **Checkout** | `POST` | `/api/v1/payments/midtrans/webhook` | Webhook | Handle Midtrans payment notification |
 | **Order** | `GET` | `/api/v1/orders` | User | List order history (status filter optional) |
-| **Order** | `GET` | `/api/v1/orders/{invoice_number}` | User | Get complete order detail by invoice |
+| **Order** | `GET` | `/api/v1/orders/all` | Admin | List all orders with pagination, search, status & date filters (concise summary) |
+| **Order** | `GET` | `/api/v1/orders/detail/{invoice_number}` | Admin | Get complete order detail with customer account profile & transaction info |
+| **Order** | `GET` | `/api/v1/orders/{invoice_number}` | User/Admin | Get complete order detail by invoice |
+| **Order** | `GET` | `/api/v1/orders/{invoice_number}/pdf` | User/Admin | Download official order invoice receipt in Neo-Brutalist PDF |
+| **Report** | `GET` | `/api/v1/reports` | Admin | Get comprehensive executive sales & orders report analytics |
+| **Report** | `GET` | `/api/v1/reports/pdf` | Admin | Download executive sales performance report in Neo-Brutalist PDF |
 
 ---
 

@@ -9,6 +9,7 @@ import (
 	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/repository"
 	"github.com/bubblevy/bookstore/internal/usecase"
+	"github.com/bubblevy/bookstore/pkg/pagination"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"gorm.io/gorm"
@@ -79,6 +80,22 @@ func (m *MockOrderRepoForOrderUC) MarkAsReturned(ctx context.Context, orderID ui
 	return m.Called(ctx, orderID, reason).Error(0)
 }
 
+func (m *MockOrderRepoForOrderUC) FindAllOrders(ctx context.Context, filter repository.AdminOrderFilter, pq pagination.Query) ([]entity.Order, int64, error) {
+	args := m.Called(ctx, filter, pq)
+	if res := args.Get(0); res != nil {
+		return res.([]entity.Order), args.Get(1).(int64), args.Error(2)
+	}
+	return nil, 0, args.Error(2)
+}
+
+func (m *MockOrderRepoForOrderUC) GetOrdersForReport(ctx context.Context, startDate, endDate *time.Time, status string) ([]entity.Order, error) {
+	args := m.Called(ctx, startDate, endDate, status)
+	if res := args.Get(0); res != nil {
+		return res.([]entity.Order), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
 func TestOrderUsecase_GetUserOrders(t *testing.T) {
 	userID := uint(1)
 
@@ -145,3 +162,148 @@ func TestOrderUsecase_GetOrderDetail(t *testing.T) {
 		mockRepo.AssertExpectations(t)
 	})
 }
+
+func TestOrderUsecase_AdminFindAllOrders(t *testing.T) {
+	t.Run("success returns paginated admin orders with mapping", func(t *testing.T) {
+		mockRepo := new(MockOrderRepoForOrderUC)
+		uc := usecase.NewOrderUsecase(mockRepo)
+
+		orders := []entity.Order{
+			{
+				ID:            1,
+				UserID:        10,
+				InvoiceNumber: "INV-20261021-000101",
+				Status:        entity.OrderStatusPaid,
+				TotalAmount:   200000,
+				RecipientName: "John Doe",
+				User: &entity.User{
+					Name:  "John Doe",
+					Email: "john@example.com",
+				},
+				Items: []entity.OrderItem{
+					{
+						BookID:   1,
+						Title:    "Golang Architecture",
+						Quantity: 2,
+					},
+				},
+				CreatedAt: time.Now(),
+			},
+		}
+
+		filter := repository.AdminOrderFilter{Status: "paid"}
+		pq := pagination.Query{Page: 1, PerPage: 10}
+
+		mockRepo.On("FindAllOrders", mock.Anything, filter, pq).
+			Return(orders, int64(1), nil).Once()
+
+		items, meta, err := uc.AdminFindAllOrders(context.Background(), filter, pq)
+		assert.NoError(t, err)
+		assert.Len(t, items, 1)
+		assert.Equal(t, "INV-20261021-000101", items[0].InvoiceNumber)
+		assert.Equal(t, "John Doe", items[0].Customer.Name)
+		assert.Equal(t, 2, items[0].TotalQuantity)
+		assert.Equal(t, 200000, items[0].TotalAmount)
+		assert.Equal(t, 1, meta.TotalPages)
+		assert.Equal(t, int64(1), meta.TotalItems)
+		mockRepo.AssertExpectations(t)
+	})
+}
+
+func TestOrderUsecase_GetOrderInvoicePDF(t *testing.T) {
+	invoice := "INV-20261021-000101"
+	userID := uint(10)
+
+	t.Run("success generates invoice pdf for order", func(t *testing.T) {
+		mockRepo := new(MockOrderRepoForOrderUC)
+		uc := usecase.NewOrderUsecase(mockRepo)
+
+		order := &entity.Order{
+			ID:               1,
+			UserID:           userID,
+			InvoiceNumber:    invoice,
+			Status:           entity.OrderStatusPaid,
+			ItemsSubtotal:    150000,
+			ShippingCost:     15000,
+			TotalAmount:      165000,
+			Courier:          "jne",
+			CourierService:   "REG",
+			TotalWeightGrams: 300,
+			RecipientName:    "Jane Doe",
+			RecipientPhone:   "08123456789",
+			RecipientAddress: "Jl. Sudirman No. 1",
+			CityName:         "Jakarta Selatan",
+			ProvinceName:     "DKI Jakarta",
+			PostalCode:       "12190",
+			PaymentDeadline:  time.Now().Add(24 * time.Hour),
+			Items: []entity.OrderItem{
+				{
+					BookID:      1,
+					Title:       "Clean Code",
+					Price:       150000,
+					Quantity:    1,
+					WeightGrams: 300,
+					Subtotal:    150000,
+				},
+			},
+			CreatedAt: time.Now(),
+		}
+
+		mockRepo.On("FindOrderDetailByInvoice", mock.Anything, uint(0), invoice).
+			Return(order, nil).Once()
+
+		pdfBytes, filename, err := uc.GetOrderInvoicePDF(context.Background(), userID, invoice, true)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, pdfBytes)
+		assert.Equal(t, "invoice-"+invoice+".pdf", filename)
+		assert.True(t, len(pdfBytes) > 100)
+		mockRepo.AssertExpectations(t)
+	})
+}
+
+func TestOrderUsecase_AdminGetOrderDetail(t *testing.T) {
+	invoice := "INV-20261021-000101"
+
+	t.Run("success returns admin order detail", func(t *testing.T) {
+		mockRepo := new(MockOrderRepoForOrderUC)
+		uc := usecase.NewOrderUsecase(mockRepo)
+
+		order := &entity.Order{
+			ID:            1,
+			UserID:        10,
+			InvoiceNumber: invoice,
+			Status:        entity.OrderStatusPaid,
+			TotalAmount:   200000,
+			RecipientName: "John Doe",
+			User: &entity.User{
+				Name:  "John Doe",
+				Email: "john@example.com",
+			},
+			Items: []entity.OrderItem{
+				{
+					BookID:      1,
+					Title:       "Clean Code",
+					Price:       200000,
+					Quantity:    1,
+					WeightGrams: 300,
+					Subtotal:    200000,
+				},
+			},
+			CreatedAt: time.Now(),
+		}
+
+		mockRepo.On("FindOrderDetailByInvoice", mock.Anything, uint(0), invoice).
+			Return(order, nil).Once()
+
+		res, err := uc.AdminGetOrderDetail(context.Background(), invoice)
+		assert.NoError(t, err)
+		assert.NotNil(t, res)
+		assert.Equal(t, invoice, res.InvoiceNumber)
+		assert.Equal(t, "John Doe", res.Customer.Name)
+		assert.Equal(t, "john@example.com", res.Customer.Email)
+		assert.Equal(t, 200000, res.Pricing.TotalAmount)
+		assert.Len(t, res.Items, 1)
+		mockRepo.AssertExpectations(t)
+	})
+}
+

@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -124,16 +125,19 @@ func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, inpu
 		return nil, entity.ErrCartEmpty
 	}
 
-	// 1. Fetch destination address snapshot
+	// 1. Fetch destination address snapshot (optional for preview, required for create order)
 	var address *entity.Address
 	var err error
 	if input.AddressID != nil && *input.AddressID > 0 {
 		address, err = u.addressRepo.FindByID(ctx, *input.AddressID)
+		if err != nil || address == nil || address.UserID != userID {
+			return nil, entity.ErrAddressNotFound
+		}
 	} else {
-		address, err = u.addressRepo.FindPrimaryByUserID(ctx, userID)
-	}
-	if err != nil || address == nil || address.UserID != userID {
-		return nil, entity.ErrAddressNotFound
+		address, _ = u.addressRepo.FindPrimaryByUserID(ctx, userID)
+		if address != nil && address.UserID != userID {
+			address = nil
+		}
 	}
 
 	// 2. Fetch cart items with book details
@@ -202,23 +206,25 @@ func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, inpu
 		}
 	}
 
-	// 3. Calculate shipping cost via Biteship Area ID
-	rates, err := u.biteshipSvc.CalculateRatesByAreaID(ctx, address.BiteshipAreaID, input.Courier, rateItems)
-	if err != nil || len(rates) == 0 {
-		return nil, entity.ErrShippingRateFailed
-	}
-
+	// 3. Calculate shipping cost via Biteship Area ID if address & courier are provided
 	var shippingCost int
-	foundService := false
-	for _, r := range rates {
-		if strings.EqualFold(r.CourierServiceCode, input.CourierService) {
-			shippingCost = int(r.Price)
-			foundService = true
-			break
+	if address != nil && address.BiteshipAreaID != "" && input.Courier != "" && input.CourierService != "" {
+		rates, err := u.biteshipSvc.CalculateRatesByAreaID(ctx, address.BiteshipAreaID, input.Courier, rateItems)
+		if err != nil || len(rates) == 0 {
+			return nil, entity.ErrShippingRateFailed
 		}
-	}
-	if !foundService {
-		shippingCost = int(rates[0].Price)
+
+		foundService := false
+		for _, r := range rates {
+			if strings.EqualFold(r.CourierServiceCode, input.CourierService) {
+				shippingCost = int(r.Price)
+				foundService = true
+				break
+			}
+		}
+		if !foundService {
+			shippingCost = int(rates[0].Price)
+		}
 	}
 
 	// 4. Validate and calculate discount voucher if provided
@@ -238,21 +244,23 @@ func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, inpu
 		}
 	}
 
-	// 5. Validate payment method & calculate administrative fees
-	if !payment.IsSupportedPaymentMethod(input.PaymentMethod) {
-		return nil, entity.ErrInvalidPaymentMethod
-	}
-
+	// 5. Validate payment method & calculate administrative fees if specified
 	adminFee := 0
-	switch strings.ToLower(input.PaymentMethod) {
-	case "bca_va", "bni_va", "bri_va", "permata_va", "cimb_va":
-		adminFee = 5000 // Flat rate Virtual Account
-	case "mandiri_bill", "echannel":
-		adminFee = 4000 // Mandiri Bill
-	case "gopay", "qris", "shopeepay":
-		adminFee = int(math.Round(float64(itemsSubtotal) * 0.007))
-	default:
-		adminFee = 0
+	if input.PaymentMethod != "" {
+		if !payment.IsSupportedPaymentMethod(input.PaymentMethod) {
+			return nil, entity.ErrInvalidPaymentMethod
+		}
+
+		switch strings.ToLower(input.PaymentMethod) {
+		case "bca_va", "bni_va", "bri_va", "permata_va", "cimb_va":
+			adminFee = 5000 // Flat rate Virtual Account
+		case "mandiri_bill", "echannel":
+			adminFee = 4000 // Mandiri Bill
+		case "gopay", "qris", "shopeepay":
+			adminFee = int(math.Round(float64(itemsSubtotal) * 0.007))
+		default:
+			adminFee = 0
+		}
 	}
 
 	totalPayment := itemsSubtotal + shippingCost + adminFee - discountAmount
@@ -285,6 +293,13 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 	preview, err := u.PreviewCheckout(ctx, userID, PreviewCheckoutInput(input))
 	if err != nil {
 		return nil, err
+	}
+
+	if preview.Address == nil {
+		return nil, entity.ErrAddressNotFound
+	}
+	if input.Courier == "" || input.CourierService == "" {
+		return nil, errors.New("courier and courier service are required")
 	}
 
 	invoiceNumber := fmt.Sprintf("INV-%s-%06d", time.Now().Format("20060102"), time.Now().UnixNano()%1000000)

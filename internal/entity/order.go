@@ -64,6 +64,7 @@ type Order struct {
 	Items                  []OrderItem `gorm:"foreignKey:OrderID;constraint:OnDelete:CASCADE" json:"items"`
 	Payment                *Payment    `gorm:"foreignKey:OrderID;constraint:OnDelete:CASCADE" json:"payment,omitempty"`
 	Shipment               *Shipment   `gorm:"foreignKey:OrderID" json:"shipment,omitempty"`
+	User                   *User       `gorm:"foreignKey:UserID" json:"user,omitempty"`
 }
 
 func (Order) TableName() string {

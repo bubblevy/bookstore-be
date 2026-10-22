@@ -79,3 +79,39 @@ type OrderDetailResponse struct {
 	Items              []OrderItemResponse    `json:"items"`
 	Pricing            OrderPricingResponse   `json:"pricing"`
 }
+
+type AdminCustomerResponse struct {
+	ID    uint   `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+type AdminOrderListItemResponse struct {
+	ID            uint                  `json:"id"`
+	InvoiceNumber string                `json:"invoice_number"`
+	Status        string                `json:"status"`
+	Customer      AdminCustomerResponse `json:"customer"`
+	TotalAmount   int                   `json:"total_amount"`
+	TotalQuantity int                   `json:"total_quantity"`
+	PaymentMethod *string               `json:"payment_method,omitempty"`
+	CreatedAt     time.Time             `json:"created_at"`
+}
+
+type AdminOrderDetailResponse struct {
+	ID                 uint                   `json:"id"`
+	InvoiceNumber      string                 `json:"invoice_number"`
+	Status             string                 `json:"status"`
+	Customer           AdminCustomerResponse  `json:"customer"`
+	PaymentDeadline    time.Time              `json:"payment_deadline"`
+	PaidAt             *time.Time             `json:"paid_at,omitempty"`
+	CancelledAt        *time.Time             `json:"cancelled_at,omitempty"`
+	CancellationReason *string                `json:"cancellation_reason,omitempty"`
+	ReturnedAt         *time.Time             `json:"returned_at,omitempty"`
+	ReturnReason       *string                `json:"return_reason,omitempty"`
+	CreatedAt          time.Time              `json:"created_at"`
+	Recipient          OrderRecipientResponse `json:"recipient"`
+	Shipping           OrderShippingResponse  `json:"shipping"`
+	Payment            *OrderPaymentResponse  `json:"payment,omitempty"`
+	Items              []OrderItemResponse    `json:"items"`
+	Pricing            OrderPricingResponse   `json:"pricing"`
+}

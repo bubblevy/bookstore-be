@@ -2,10 +2,12 @@ package pgsql
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/repository"
+	"github.com/bubblevy/bookstore/pkg/pagination"
 	"gorm.io/gorm"
 )
 
@@ -140,6 +142,7 @@ func (r *orderRepository) FindOrderDetailByInvoice(ctx context.Context, userID u
 	var order entity.Order
 	query := r.db.WithContext(ctx).
 		Preload("Items").
+		Preload("User").
 		Preload("Payment").
 		Preload("Shipment").
 		Where("invoice_number = ?", invoice)
@@ -153,4 +156,87 @@ func (r *orderRepository) FindOrderDetailByInvoice(ctx context.Context, userID u
 		return nil, err
 	}
 	return &order, nil
+}
+
+func (r *orderRepository) FindAllOrders(ctx context.Context, filter repository.AdminOrderFilter, pq pagination.Query) ([]entity.Order, int64, error) {
+	var orders []entity.Order
+	var total int64
+
+	db := r.db.WithContext(ctx).Model(&entity.Order{})
+
+	if filter.Status != "" && filter.Status != "all" {
+		db = db.Where("status = ?", filter.Status)
+	}
+
+	if filter.Search != "" {
+		searchTerm := "%" + strings.TrimSpace(filter.Search) + "%"
+		db = db.Where("invoice_number ILIKE ? OR recipient_name ILIKE ? OR recipient_phone ILIKE ?", searchTerm, searchTerm, searchTerm)
+	}
+
+	if filter.StartDate != nil {
+		db = db.Where("created_at >= ?", *filter.StartDate)
+	}
+	if filter.EndDate != nil {
+		db = db.Where("created_at <= ?", *filter.EndDate)
+	}
+
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// Apply Sorting
+	switch strings.ToLower(filter.SortBy) {
+	case "oldest":
+		db = db.Order("created_at ASC")
+	case "highest_amount":
+		db = db.Order("total_amount DESC")
+	case "lowest_amount":
+		db = db.Order("total_amount ASC")
+	default:
+		db = db.Order("created_at DESC")
+	}
+
+	err := db.Preload("Items").
+		Preload("User").
+		Preload("Payment").
+		Preload("Shipment").
+		Offset(pq.Offset()).
+		Limit(pq.PerPage).
+		Find(&orders).Error
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return orders, total, nil
+}
+
+func (r *orderRepository) GetOrdersForReport(ctx context.Context, startDate, endDate *time.Time, status string) ([]entity.Order, error) {
+	var orders []entity.Order
+
+	db := r.db.WithContext(ctx).Model(&entity.Order{})
+
+	if startDate != nil {
+		db = db.Where("created_at >= ?", *startDate)
+	}
+	if endDate != nil {
+		db = db.Where("created_at <= ?", *endDate)
+	}
+
+	if status != "" && status != "all" {
+		db = db.Where("status = ?", status)
+	}
+
+	err := db.Preload("Items").
+		Preload("User").
+		Preload("Payment").
+		Preload("Shipment").
+		Order("created_at ASC").
+		Find(&orders).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return orders, nil
 }

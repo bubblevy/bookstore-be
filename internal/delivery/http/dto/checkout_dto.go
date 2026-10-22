@@ -5,10 +5,10 @@ import "time"
 type CheckoutPreviewRequest struct {
 	CartItemIDs    []uint  `json:"cart_item_ids" validate:"required,min=1"`
 	AddressID      *uint   `json:"address_id,omitempty"`
-	Courier        string  `json:"courier" validate:"required"`
-	CourierService string  `json:"courier_service" validate:"required"`
+	Courier        string  `json:"courier"`
+	CourierService string  `json:"courier_service"`
 	DiscountCode   *string `json:"discount_code,omitempty"`
-	PaymentMethod  string  `json:"payment_method" validate:"required"`
+	PaymentMethod  string  `json:"payment_method"`
 }
 
 type CheckoutItemPreview struct {

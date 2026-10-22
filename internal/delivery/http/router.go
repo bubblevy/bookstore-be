@@ -200,7 +200,11 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	handler.NewCheckoutHandler(api, checkoutUsecase, validate, authMiddleware)
 
 	orderUsecase := usecase.NewOrderUsecase(orderRepo)
-	handler.NewOrderHandler(api, orderUsecase, authMiddleware)
+	handler.NewOrderHandler(api, orderUsecase, authMiddleware, adminMiddleware)
+
+	// reports routes
+	reportUsecase := usecase.NewReportUsecase(orderRepo)
+	handler.NewReportHandler(api, reportUsecase, authMiddleware, adminMiddleware)
 
 	// shipping routes
 	shipmentRepo := pgsql.NewShipmentRepository(db)
