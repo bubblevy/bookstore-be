@@ -85,6 +85,12 @@ func (r *orderRepository) UpdatePaymentDetails(ctx context.Context, orderID uint
 		Updates(updates).Error
 }
 
+func (r *orderRepository) UpdateOrderPaymentDeadline(ctx context.Context, orderID uint, deadline time.Time) error {
+	return r.db.WithContext(ctx).Model(&entity.Order{}).
+		Where("id = ?", orderID).
+		Update("payment_deadline", deadline).Error
+}
+
 func (r *orderRepository) MarkAsReturned(ctx context.Context, orderID uint, reason string) error {
 	now := time.Now()
 	return r.db.WithContext(ctx).Model(&entity.Order{}).

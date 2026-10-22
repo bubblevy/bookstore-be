@@ -84,7 +84,7 @@ func TestGenerateSamplePDFs(t *testing.T) {
 		CityName:         "Jakarta Selatan",
 		ProvinceName:     "DKI Jakarta",
 		PostalCode:       "12190",
-		PaymentDeadline:  time.Now().Add(24 * time.Hour),
+		PaymentDeadline:  time.Now().Add(3 * time.Hour),
 		Items: []entity.OrderItem{
 			{
 				BookID:      1,

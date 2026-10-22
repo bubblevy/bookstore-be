@@ -303,7 +303,8 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 	}
 
 	invoiceNumber := fmt.Sprintf("INV-%s-%06d", time.Now().Format("20060102"), time.Now().UnixNano()%1000000)
-	deadline := time.Now().Add(24 * time.Hour)
+	// Default payment deadline is 3 hours for all payment methods
+	deadline := time.Now().Add(3 * time.Hour)
 
 	order := &entity.Order{
 		UserID:            userID,
@@ -418,6 +419,13 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 		RawResponse:           rawResp,
 	}
 	_ = u.orderRepo.CreatePayment(ctx, paymentRecord)
+
+	// Synchronize deadline from payment gateway response if provided
+	if chargeRes.ExpiryTime != nil {
+		deadline = *chargeRes.ExpiryTime
+		order.PaymentDeadline = deadline
+		_ = u.orderRepo.UpdateOrderPaymentDeadline(ctx, order.ID, deadline)
+	}
 
 	logger.Info("order created successfully",
 		"invoice", invoiceNumber,

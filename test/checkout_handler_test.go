@@ -176,7 +176,7 @@ func TestCheckoutHandler_CreateOrder(t *testing.T) {
 			InvoiceNumber:   "INV-20261017-000101",
 			Status:          "waiting_payment",
 			TotalAmount:     223000,
-			PaymentDeadline: time.Now().Add(24 * time.Hour),
+			PaymentDeadline: time.Now().Add(3 * time.Hour),
 		}
 		expectedRes.PaymentInfo.PaymentType = "bank_transfer"
 		expectedRes.PaymentInfo.Bank = &bank

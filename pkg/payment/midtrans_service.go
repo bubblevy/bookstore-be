@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/midtrans/midtrans-go"
 	"github.com/midtrans/midtrans-go/coreapi"
@@ -21,6 +22,7 @@ type ChargeResponse struct {
 	BillerCode    string
 	QRURL         string
 	Status        string
+	ExpiryTime    *time.Time
 	RawResponse   string
 }
 
@@ -71,6 +73,10 @@ func (s *midtransService) Charge(ctx context.Context, invoiceNumber string, gros
 		TransactionDetails: midtrans.TransactionDetails{
 			OrderID:  invoiceNumber,
 			GrossAmt: grossAmount,
+		},
+		CustomExpiry: &coreapi.CustomExpiry{
+			ExpiryDuration: 3,
+			Unit:           "hour",
 		},
 	}
 
@@ -126,10 +132,19 @@ func (s *midtransService) Charge(ctx context.Context, invoiceNumber string, gros
 	}
 
 	rawJSON, _ := json.Marshal(resp)
+
+	var expiryTime *time.Time
+	if resp.ExpiryTime != "" {
+		if t, err := parseMidtransExpiryTime(resp.ExpiryTime); err == nil {
+			expiryTime = &t
+		}
+	}
+
 	result := &ChargeResponse{
 		TransactionID: resp.TransactionID,
 		PaymentType:   resp.PaymentType,
 		Status:        resp.TransactionStatus,
+		ExpiryTime:    expiryTime,
 		RawResponse:   string(rawJSON),
 	}
 
@@ -176,4 +191,28 @@ func (s *midtransService) VerifyNotification(orderID, statusCode, grossAmount, s
 	hash := sha512.Sum512([]byte(input))
 	expected := hex.EncodeToString(hash[:])
 	return strings.EqualFold(expected, signatureKey)
+}
+
+func parseMidtransExpiryTime(expiryStr string) (time.Time, error) {
+	loc, _ := time.LoadLocation("Asia/Jakarta")
+	if loc == nil {
+		loc = time.FixedZone("WIB", 7*3600)
+	}
+
+	layouts := []string{
+		"2006-01-02 15:04:05",
+		"2006-01-02 15:04:05 -0700",
+		"2006-01-02 15:04:05 MST",
+		time.RFC3339,
+		"2006-01-02T15:04:05Z07:00",
+		"2006-01-02T15:04:05",
+	}
+
+	trimmed := strings.TrimSpace(expiryStr)
+	for _, layout := range layouts {
+		if t, err := time.ParseInLocation(layout, trimmed, loc); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("unable to parse midtrans expiry time: %s", expiryStr)
 }

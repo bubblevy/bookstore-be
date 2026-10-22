@@ -76,6 +76,10 @@ func (m *MockOrderRepoForOrderUC) UpdatePaymentDetails(ctx context.Context, orde
 	return args.Error(0)
 }
 
+func (m *MockOrderRepoForOrderUC) UpdateOrderPaymentDeadline(ctx context.Context, orderID uint, deadline time.Time) error {
+	return m.Called(ctx, orderID, deadline).Error(0)
+}
+
 func (m *MockOrderRepoForOrderUC) MarkAsReturned(ctx context.Context, orderID uint, reason string) error {
 	return m.Called(ctx, orderID, reason).Error(0)
 }
@@ -235,7 +239,7 @@ func TestOrderUsecase_GetOrderInvoicePDF(t *testing.T) {
 			CityName:         "Jakarta Selatan",
 			ProvinceName:     "DKI Jakarta",
 			PostalCode:       "12190",
-			PaymentDeadline:  time.Now().Add(24 * time.Hour),
+			PaymentDeadline:  time.Now().Add(3 * time.Hour),
 			Items: []entity.OrderItem{
 				{
 					BookID:      1,

@@ -18,6 +18,7 @@ type OrderRepository interface {
 	UpdateOrderStatus(ctx context.Context, orderID uint, status entity.OrderStatus) error
 	UpdatePaymentStatus(ctx context.Context, orderID uint, status entity.PaymentStatus) error
 	UpdatePaymentDetails(ctx context.Context, orderID uint, status entity.PaymentStatus, rawResponse *string, paidAt *time.Time) error
+	UpdateOrderPaymentDeadline(ctx context.Context, orderID uint, deadline time.Time) error
 	MarkAsReturned(ctx context.Context, orderID uint, reason string) error
 
 	// read operation

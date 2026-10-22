@@ -1,4 +1,4 @@
-package payment_test
+package test
 
 import (
 	"testing"
