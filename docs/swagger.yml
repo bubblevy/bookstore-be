@@ -25,6 +25,8 @@ tags:
     description: Discount & voucher management
   - name: Cart
     description: User shopping cart management
+  - name: Wishlist
+    description: User book wishlist and favorite items management
   - name: Address
     description: User shipping address management
   - name: Shipping
@@ -1852,6 +1854,232 @@ paths:
           description: Unauthorized request
         '404':
           description: One or more selected cart items not found in user's cart
+        '500':
+          description: Internal server error
+
+  # =========================================================================
+  # WISHLIST
+  # =========================================================================
+  /api/v1/wishlist:
+    get:
+      tags:
+        - Wishlist
+      summary: Get user wishlist
+      description: Retrieves paginated wishlist for the authenticated user, including detailed book information (title, price, cover, stock, category, author, publisher).
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Page number
+          required: false
+          schema:
+            type: integer
+            default: 1
+            example: 1
+        - name: per_page
+          in: query
+          description: Items per page (max 100)
+          required: false
+          schema:
+            type: integer
+            default: 10
+            example: 10
+      responses:
+        '200':
+          description: Wishlist retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "wishlist retrieved successfully"
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WishlistItemResponse'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          description: Unauthorized request
+        '500':
+          description: Internal server error
+    delete:
+      tags:
+        - Wishlist
+      summary: Clear wishlist
+      description: Removes all items from the authenticated user's wishlist.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Wishlist cleared successfully
+          content:
+            application/json:
+              example:
+                code: 200
+                status: true
+                message: "wishlist cleared successfully"
+        '401':
+          description: Unauthorized request
+        '500':
+          description: Internal server error
+
+  /api/v1/wishlist/items:
+    post:
+      tags:
+        - Wishlist
+      summary: Add book to wishlist
+      description: Adds a book to the authenticated user's wishlist. Validates that the book exists and is active.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddWishlistRequest'
+      responses:
+        '201':
+          description: Book added to wishlist successfully
+          content:
+            application/json:
+              example:
+                code: 201
+                status: true
+                message: "book added to wishlist successfully"
+        '400':
+          description: Validation error or book is not active
+        '401':
+          description: Unauthorized request
+        '404':
+          description: Book not found
+        '409':
+          description: Book is already in wishlist
+        '500':
+          description: Internal server error
+
+  /api/v1/wishlist/items/{book_id}:
+    delete:
+      tags:
+        - Wishlist
+      summary: Remove book from wishlist
+      description: Removes a specific book from the authenticated user's wishlist.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: book_id
+          in: path
+          required: true
+          description: Book ID to remove from wishlist
+          schema:
+            type: integer
+            example: 10
+      responses:
+        '200':
+          description: Book removed from wishlist successfully
+          content:
+            application/json:
+              example:
+                code: 200
+                status: true
+                message: "book removed from wishlist successfully"
+        '400':
+          description: Invalid book ID
+        '401':
+          description: Unauthorized request
+        '404':
+          description: Wishlist item not found
+        '500':
+          description: Internal server error
+
+  /api/v1/wishlist/check/{book_id}:
+    get:
+      tags:
+        - Wishlist
+      summary: Check if book is wishlisted
+      description: Quickly checks whether a specific book is in the authenticated user's wishlist.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: book_id
+          in: path
+          required: true
+          description: Book ID to check
+          schema:
+            type: integer
+            example: 10
+      responses:
+        '200':
+          description: Wishlist status retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "wishlist status retrieved"
+                  data:
+                    $ref: '#/components/schemas/WishlistCheckResponse'
+        '400':
+          description: Invalid book ID
+        '401':
+          description: Unauthorized request
+        '500':
+          description: Internal server error
+
+  /api/v1/wishlist/items/{book_id}/move-to-cart:
+    post:
+      tags:
+        - Wishlist
+      summary: Move wishlisted book to cart
+      description: Moves a book from the authenticated user's wishlist into their active shopping cart, validating book stock, and removes it from the wishlist upon success.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: book_id
+          in: path
+          required: true
+          description: Book ID to move into cart
+          schema:
+            type: integer
+            example: 10
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveToCartRequest'
+      responses:
+        '200':
+          description: Book moved to cart successfully
+          content:
+            application/json:
+              example:
+                code: 200
+                status: true
+                message: "book moved to cart successfully"
+        '400':
+          description: Book inactive or insufficient stock
+        '401':
+          description: Unauthorized request
+        '404':
+          description: Wishlist item or book not found
         '500':
           description: Internal server error
 
@@ -4256,6 +4484,100 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CartItemResult'
+
+    # =========================================================================
+    # WISHLIST SCHEMAS
+    # =========================================================================
+    AddWishlistRequest:
+      type: object
+      required:
+        - book_id
+      properties:
+        book_id:
+          type: integer
+          minimum: 1
+          example: 10
+
+    MoveToCartRequest:
+      type: object
+      properties:
+        quantity:
+          type: integer
+          minimum: 1
+          default: 1
+          example: 1
+
+    WishlistCheckResponse:
+      type: object
+      properties:
+        book_id:
+          type: integer
+          example: 10
+        is_wishlisted:
+          type: boolean
+          example: true
+
+    WishlistBookSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 10
+        title:
+          type: string
+          example: "Laskar Pelangi"
+        slug:
+          type: string
+          example: "laskar-pelangi"
+        price:
+          type: integer
+          example: 85000
+        original_price:
+          type: integer
+          nullable: true
+          example: 100000
+        discount_percentage:
+          type: integer
+          nullable: true
+          example: 15
+        weight_grams:
+          type: integer
+          example: 300
+        stock:
+          type: integer
+          example: 15
+        cover_image:
+          type: string
+          nullable: true
+          example: "https://example.com/covers/laskar-pelangi.jpg"
+        is_active:
+          type: boolean
+          example: true
+        category_name:
+          type: string
+          example: "Fiction"
+        author_name:
+          type: string
+          example: "Andrea Hirata"
+        publisher_name:
+          type: string
+          example: "Bentang Pustaka"
+
+    WishlistItemResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        book_id:
+          type: integer
+          example: 10
+        book:
+          $ref: '#/components/schemas/WishlistBookSummary'
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-10-23T12:00:00Z"
 
     # =========================================================================
     # AUTH SCHEMAS

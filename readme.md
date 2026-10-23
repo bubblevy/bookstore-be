@@ -2,7 +2,7 @@
 
 A robust, enterprise-grade RESTful API for an online bookstore e-commerce platform built with **Go 1.27**, **GoFiber v3**, and **PostgreSQL**, following Clean Architecture principles.
 
-The platform includes end-to-end e-commerce capabilities: customer authentication (JWT & Google OAuth 2.0), catalog management, flexible tiered discount promotions, shopping cart, multi-address management, dynamic courier shipping rates with automated order fulfillment via **Biteship**, payment gateway processing with **Midtrans**, and background session maintenance.
+The platform includes end-to-end e-commerce capabilities: customer authentication (JWT & Google OAuth 2.0), catalog management, flexible tiered discount promotions, shopping cart, wishlist & favorites, multi-address management, dynamic courier shipping rates with automated order fulfillment via **Biteship**, payment gateway processing with **Midtrans**, and background session maintenance.
 
 ---
 
@@ -96,12 +96,18 @@ bookstore/
 - Real-time inventory checks and aggregate weight calculation in grams for accurate shipping quotes.
 - Selected cart item evaluation for pre-checkout previews.
 
-### 5. Multi-Address Management
+### 5. Wishlist & Favorites
+- Persistent customer book wishlist management.
+- Real-time wishlist status check (`/api/v1/wishlist/check/{book_id}`) for instant frontend UI heart icons & badges.
+- Single-action "Move to Cart" endpoint with real-time stock verification, moving items straight into the active cart and removing them from the wishlist.
+- Full pagination support with detailed book relations (Category, Author, Publisher, Cover Image, and active pricing).
+
+### 6. Multi-Address Management
 - Customers can store multiple shipping destinations (up to 5 addresses per account).
 - Primary address setting with automatic fallback during checkout.
 - Stores standardized Biteship Destination Area IDs for precise shipping calculations.
 
-### 6. Shipping & Logistics (Biteship Integration)
+### 7. Shipping & Logistics (Biteship Integration)
 - **Area Lookup**: Public location search powered by Biteship Maps API (minimum 3 characters).
 - **Couriers**: List all active couriers and service tiers (JNE, SiCepat, J&T, Anteraja, ID Express, etc.).
 - **Dynamic Rates**: Real-time rate estimation based on combined book weight and destination address.
@@ -110,12 +116,12 @@ bookstore/
 - **Live Tracking**: Real-time milestone tracking for customers and admins.
 - **Webhook Processing**: Secure tracking status updates authenticated with `X-Biteship-Signature`.
 
-### 7. Checkout & Payments (Midtrans Integration)
+### 8. Checkout & Payments (Midtrans Integration)
 - **Checkout Preview**: Simulates pricing, discounts, shipping fees, admin fees, and payable totals.
 - **Order Placement**: Atomically reserves book stock, applies discounts, records shipping details, and generates payment credentials.
 - **Midtrans Webhook**: Listens for asynchronous payment status notifications (Settlement, Expire, Cancel, Deny) with SHA512 signature validation.
 
-### 8. Order Lifecycle & Invoices
+### 9. Order Lifecycle & Invoices
 Supported order statuses:
 - `waiting_payment` -> Order placed, waiting for customer payment before deadline.
 - `paid` -> Payment verified via Midtrans webhook.
@@ -129,20 +135,20 @@ Features:
 - **Order Tracking & Admin Oversight**: List customer orders or view all orders system-wide with pagination, search keywords (invoice, customer, recipient), status, and date range filters (`/api/v1/orders/all`).
 - **PDF Invoice Download**: Generate and stream official, beautifully styled PDF order invoice receipts with itemized pricing, recipient information, and waybill numbers (`/api/v1/orders/{invoice_number}/pdf`).
 
-### 9. Executive Reporting & Analytics (PDF & JSON)
+### 10. Executive Reporting & Analytics (PDF & JSON)
 - **Analytics Dashboard Data**: Aggregate performance metrics including gross revenue, net revenue, shipping, discounts, average order value, top-selling books leaderboard, daily sales trends, and order status summaries (`/api/v1/reports`).
 - **Executive PDF Export**: Download executive-grade performance reports in PDF format with KPI summary cards, leaderboard tables, and order logs (`/api/v1/reports/pdf`).
 
-### 10. Performance Caching (Redis)
+### 11. Performance Caching (Redis)
 - Accelerates page loading and response times by caching frequently viewed books and categories in-memory.
 - Automatically invalidates and refreshes the cache whenever books or categories are modified.
 - Built-in fail-open resilience: if Redis is unavailable, requests seamlessly query the database without disruption.
 
-### 11. Asynchronous Email Queue (RabbitMQ)
+### 12. Asynchronous Email Queue (RabbitMQ)
 - Offloads account activation and password reset emails to background workers, making user registrations and password requests near-instant.
 - Features automatic retry handling for reliable email delivery and automatic fallback to direct SMTP if the message queue is offline.
 
-### 12. Media & Object Storage (Local & AWS S3)
+### 13. Media & Object Storage (Local & AWS S3)
 - Flexible asset storage supporting both local server filesystem and cloud object storage (AWS S3, MinIO, Cloudflare R2).
 - Automatic file management that organizes book covers and category images, with automated cleanup of unused temporary uploads.
 
@@ -206,6 +212,12 @@ The complete API specification is available in OpenAPI 3.0.3 format:
 | **Cart** | `PATCH` | `/api/v1/cart/items/{id}` | User | Update item quantity in cart |
 | **Cart** | `DELETE` | `/api/v1/cart/items/{id}` | User | Remove item from cart |
 | **Cart** | `POST` | `/api/v1/cart/selected` | User | Calculate totals for selected items |
+| **Wishlist** | `GET` | `/api/v1/wishlist` | User | Get user wishlist (paginated) |
+| **Wishlist** | `GET` | `/api/v1/wishlist/check/{book_id}` | User | Check if book is in user's wishlist |
+| **Wishlist** | `POST` | `/api/v1/wishlist/items` | User | Add book to wishlist |
+| **Wishlist** | `DELETE` | `/api/v1/wishlist/items/{book_id}` | User | Remove book from wishlist |
+| **Wishlist** | `POST` | `/api/v1/wishlist/items/{book_id}/move-to-cart` | User | Move wishlisted book to shopping cart |
+| **Wishlist** | `DELETE` | `/api/v1/wishlist` | User | Clear all items from wishlist |
 | **Address** | `GET` | `/api/v1/addresses` | User | List all user saved addresses |
 | **Address** | `POST` | `/api/v1/addresses` | User | Create a new address (max 5) |
 | **Address** | `GET` | `/api/v1/addresses/primary` | User | Retrieve current primary address |

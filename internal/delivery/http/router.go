@@ -192,6 +192,11 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	cartUsecase := usecase.NewCartUsecase(cartRepo, bookRepo)
 	handler.NewCartHandler(api, cartUsecase, validate, authMiddleware)
 
+	// wishlist routes
+	wishlistRepo := pgsql.NewWishlistRepository(db)
+	wishlistUsecase := usecase.NewWishlistUsecase(wishlistRepo, bookRepo, cartUsecase)
+	handler.NewWishlistHandler(api, wishlistUsecase, validate, authMiddleware)
+
 	// checkout & order routes
 	checkoutRepo := pgsql.NewCheckoutRepository(db)
 	orderRepo := pgsql.NewOrderRepository(db)
