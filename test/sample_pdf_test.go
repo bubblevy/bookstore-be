@@ -35,28 +35,32 @@ func TestGenerateSamplePDFs(t *testing.T) {
 		},
 		Orders: []dto.OrderReportItem{
 			{
-				ID:            1,
-				InvoiceNumber: "INV-20261021-000101",
-				CustomerName:  "Budi Santoso",
-				Status:        "paid",
-				TotalAmount:   245000,
-				ItemsSubtotal: 230000,
-				ShippingCost:  20000,
-				PaymentMethod: "BCA VA",
-				TotalQuantity: 2,
-				CreatedAt:     time.Now().Add(-2 * time.Hour),
+				ID:             1,
+				InvoiceNumber:  "INV-20261021-000101",
+				CustomerName:   "Budi Santoso",
+				Status:         "paid",
+				TotalAmount:    245000,
+				ItemsSubtotal:  230000,
+				ShippingCost:   20000,
+				DiscountAmount: 10000,
+				AdminFee:       5000,
+				PaymentMethod:  "BCA VA",
+				TotalQuantity:  2,
+				CreatedAt:      time.Now().Add(-2 * time.Hour),
 			},
 			{
-				ID:            2,
-				InvoiceNumber: "INV-20261021-000102",
-				CustomerName:  "Siti Nurhaliza",
-				Status:        "waiting_payment",
-				TotalAmount:   180000,
-				ItemsSubtotal: 160000,
-				ShippingCost:  20000,
-				PaymentMethod: "GOPAY",
-				TotalQuantity: 1,
-				CreatedAt:     time.Now().Add(-1 * time.Hour),
+				ID:             2,
+				InvoiceNumber:  "INV-20261021-000102",
+				CustomerName:   "Siti Nurhaliza",
+				Status:         "waiting_payment",
+				TotalAmount:    180000,
+				ItemsSubtotal:  160000,
+				ShippingCost:   20000,
+				DiscountAmount: 0,
+				AdminFee:       0,
+				PaymentMethod:  "GOPAY",
+				TotalQuantity:  1,
+				CreatedAt:      time.Now().Add(-1 * time.Hour),
 			},
 		},
 	}
@@ -112,7 +116,7 @@ func TestGenerateSamplePDFs(t *testing.T) {
 		t.Fatalf("failed to generate invoice pdf: %v", err)
 	}
 
-	artifactDir := `C:\Users\hp5cd\.gemini\antigravity-ide\brain\c5c3215f-586b-41ed-9e55-61277986d539\scratch`
+	artifactDir := `C:\Users\hp5cd\.gemini\antigravity-ide\brain\dd8545e3-668b-4558-8119-c1e933367731\scratch`
 	_ = os.MkdirAll(artifactDir, 0755)
 	_ = os.WriteFile(filepath.Join(artifactDir, "sample_report.pdf"), reportBytes, 0644)
 	_ = os.WriteFile(filepath.Join(artifactDir, "sample_invoice.pdf"), invoiceBytes, 0644)

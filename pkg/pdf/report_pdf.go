@@ -146,22 +146,38 @@ func GenerateSalesReportPDF(report dto.OrderReportResponse) ([]byte, error) {
 			Value: FormatRupiah(o.ShippingCost),
 		})
 
-		expectedTotal := o.ItemsSubtotal + o.ShippingCost
-		if o.TotalAmount < expectedTotal {
-			discount := expectedTotal - o.TotalAmount
+		if o.DiscountAmount > 0 {
 			sublines = append(sublines, detailSubline{
 				Label: "Diskon Voucher",
-				Value: "- " + FormatRupiah(discount),
+				Value: "- " + FormatRupiah(o.DiscountAmount),
 			})
-		} else if o.TotalAmount > expectedTotal {
-			adminFee := o.TotalAmount - expectedTotal
+		}
+		if o.AdminFee > 0 {
 			sublines = append(sublines, detailSubline{
-				Label: "Biaya Admin/Layanan",
-				Value: FormatRupiah(adminFee),
+				Label: "Biaya Admin / Layanan",
+				Value: FormatRupiah(o.AdminFee),
 			})
 		}
 
-		rowH := float64(len(sublines)) * sublineH
+		// Fallback for legacy records if neither discount nor admin fee were populated
+		if o.DiscountAmount == 0 && o.AdminFee == 0 {
+			expectedTotal := o.ItemsSubtotal + o.ShippingCost
+			if o.TotalAmount < expectedTotal {
+				discount := expectedTotal - o.TotalAmount
+				sublines = append(sublines, detailSubline{
+					Label: "Diskon Voucher",
+					Value: "- " + FormatRupiah(discount),
+				})
+			} else if o.TotalAmount > expectedTotal {
+				adminFee := o.TotalAmount - expectedTotal
+				sublines = append(sublines, detailSubline{
+					Label: "Biaya Admin / Layanan",
+					Value: FormatRupiah(adminFee),
+				})
+			}
+		}
+
+		rowH := float64(len(sublines))*sublineH + 1.2
 		if rowH < 8.0 {
 			rowH = 8.0
 		}
@@ -234,8 +250,10 @@ func GenerateSalesReportPDF(report dto.OrderReportResponse) ([]byte, error) {
 		pdf.CellFormat(wMetode, 4.0, strings.ToUpper(metode), "", 0, "C", false, 0, "")
 
 		// 5. DETAIL PRODUK (Multi-line breakdown)
+		sublinesH := float64(len(sublines)) * sublineH
+		topPadding := (rowH - sublinesH) / 2.0
 		for k, sub := range sublines {
-			subY := startY + float64(k)*sublineH
+			subY := startY + topPadding + float64(k)*sublineH
 			pdf.SetXY(col5X+1.5, subY)
 			pdf.SetFont("Arial", "", 7.0)
 			if strings.HasPrefix(sub.Label, "Diskon") {

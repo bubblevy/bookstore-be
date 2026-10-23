@@ -5996,6 +5996,12 @@ components:
         shipping_cost:
           type: integer
           example: 15000
+        discount_amount:
+          type: integer
+          example: 20000
+        admin_fee:
+          type: integer
+          example: 1000
         payment_method:
           type: string
           example: "bank_transfer"

@@ -36,18 +36,20 @@ type OrderReportSummary struct {
 }
 
 type OrderReportItem struct {
-	ID            uint       `json:"id"`
-	InvoiceNumber string     `json:"invoice_number"`
-	CustomerName  string     `json:"customer_name"`
-	CustomerEmail string     `json:"customer_email"`
-	Status        string     `json:"status"`
-	TotalAmount   int        `json:"total_amount"`
-	ItemsSubtotal int        `json:"items_subtotal"`
-	ShippingCost  int        `json:"shipping_cost"`
-	PaymentMethod string     `json:"payment_method"`
-	TotalQuantity int        `json:"total_quantity"`
-	CreatedAt     time.Time  `json:"created_at"`
-	PaidAt        *time.Time `json:"paid_at,omitempty"`
+	ID             uint       `json:"id"`
+	InvoiceNumber  string     `json:"invoice_number"`
+	CustomerName   string     `json:"customer_name"`
+	CustomerEmail  string     `json:"customer_email"`
+	Status         string     `json:"status"`
+	TotalAmount    int        `json:"total_amount"`
+	ItemsSubtotal  int        `json:"items_subtotal"`
+	ShippingCost   int        `json:"shipping_cost"`
+	DiscountAmount int        `json:"discount_amount"`
+	AdminFee       int        `json:"admin_fee"`
+	PaymentMethod  string     `json:"payment_method"`
+	TotalQuantity  int        `json:"total_quantity"`
+	CreatedAt      time.Time  `json:"created_at"`
+	PaidAt         *time.Time `json:"paid_at,omitempty"`
 }
 
 type OrderReportResponse struct {

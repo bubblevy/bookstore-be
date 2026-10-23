@@ -77,7 +77,7 @@ func GenerateInvoicePDF(order *entity.Order) ([]byte, error) {
 	pdf.Ln(4.5)
 
 	boxW := 91.0
-	boxH := 32.0
+	boxH := 23.5
 	leftX := 12.0
 	rightX := leftX + boxW + 4.0 // 12 + 91 + 4 = 107
 	startY := pdf.GetY()
@@ -90,33 +90,33 @@ func GenerateInvoicePDF(order *entity.Order) ([]byte, error) {
 
 	// Header strip
 	pdf.SetFillColor(243, 244, 246)
-	pdf.Rect(leftX, startY, boxW, 5.5, "FD")
-	pdf.SetXY(leftX+3, startY+1.0)
+	pdf.Rect(leftX, startY, boxW, 5.2, "FD")
+	pdf.SetXY(leftX+3, startY+0.9)
 	pdf.SetFont("Arial", "B", 7.5)
 	pdf.SetTextColor(17, 24, 39)
-	pdf.CellFormat(boxW-6, 3.8, "TUJUAN PENGIRIMAN & PENERIMA", "", 2, "L", false, 0, "")
+	pdf.CellFormat(boxW-6, 3.6, "TUJUAN PENGIRIMAN & PENERIMA", "", 2, "L", false, 0, "")
 
-	pdf.SetXY(leftX+3, startY+7.2)
+	pdf.SetXY(leftX+3, startY+6.8)
 	pdf.SetFont("Arial", "B", 8.0)
-	pdf.CellFormat(boxW-6, 4.0, order.RecipientName, "", 2, "L", false, 0, "")
+	pdf.CellFormat(boxW-6, 3.8, order.RecipientName, "", 2, "L", false, 0, "")
 
 	pdf.SetFont("Arial", "", 7.5)
 	pdf.SetTextColor(75, 85, 99)
-	pdf.CellFormat(boxW-6, 3.8, "No. Telepon: "+order.RecipientPhone, "", 2, "L", false, 0, "")
+	pdf.CellFormat(boxW-6, 3.6, "No. Telepon: "+order.RecipientPhone, "", 2, "L", false, 0, "")
 
 	addr := order.RecipientAddress
 	if len(addr) > 50 {
 		addr = addr[:47] + "..."
 	}
 	pdf.SetTextColor(17, 24, 39)
-	pdf.CellFormat(boxW-6, 3.8, addr, "", 2, "L", false, 0, "")
+	pdf.CellFormat(boxW-6, 3.6, addr, "", 2, "L", false, 0, "")
 
 	pdf.SetTextColor(75, 85, 99)
 	loc := fmt.Sprintf("%s, %s %s", order.CityName, order.ProvinceName, order.PostalCode)
 	if len(loc) > 50 {
 		loc = loc[:47] + "..."
 	}
-	pdf.CellFormat(boxW-6, 3.8, loc, "", 0, "L", false, 0, "")
+	pdf.CellFormat(boxW-6, 3.6, loc, "", 0, "L", false, 0, "")
 
 	// Right Box: Kurir & Logistik
 	pdf.SetFillColor(255, 255, 255)
@@ -124,27 +124,27 @@ func GenerateInvoicePDF(order *entity.Order) ([]byte, error) {
 
 	// Header strip
 	pdf.SetFillColor(243, 244, 246)
-	pdf.Rect(rightX, startY, boxW, 5.5, "FD")
-	pdf.SetXY(rightX+3, startY+1.0)
+	pdf.Rect(rightX, startY, boxW, 5.2, "FD")
+	pdf.SetXY(rightX+3, startY+0.9)
 	pdf.SetFont("Arial", "B", 7.5)
 	pdf.SetTextColor(17, 24, 39)
-	pdf.CellFormat(boxW-6, 3.8, "KURIR & STATUS TRANSAKSI", "", 2, "L", false, 0, "")
+	pdf.CellFormat(boxW-6, 3.6, "KURIR & STATUS TRANSAKSI", "", 2, "L", false, 0, "")
 
-	pdf.SetXY(rightX+3, startY+7.2)
+	pdf.SetXY(rightX+3, startY+6.8)
 	pdf.SetFont("Arial", "B", 8.0)
 	courierStr := fmt.Sprintf("%s - %s", strings.ToUpper(order.Courier), strings.ToUpper(order.CourierService))
-	pdf.CellFormat(boxW-6, 4.0, courierStr, "", 2, "L", false, 0, "")
+	pdf.CellFormat(boxW-6, 3.8, courierStr, "", 2, "L", false, 0, "")
 
 	pdf.SetFont("Arial", "", 7.5)
 	pdf.SetTextColor(75, 85, 99)
-	pdf.CellFormat(boxW-6, 3.8, fmt.Sprintf("Total Berat: %d gram", order.TotalWeightGrams), "", 2, "L", false, 0, "")
+	pdf.CellFormat(boxW-6, 3.6, fmt.Sprintf("Total Berat: %d gram", order.TotalWeightGrams), "", 2, "L", false, 0, "")
 
 	trackingNo := "-"
 	if order.ShippingTrackingNumber != nil && *order.ShippingTrackingNumber != "" {
 		trackingNo = *order.ShippingTrackingNumber
 	}
 	pdf.SetTextColor(17, 24, 39)
-	pdf.CellFormat(boxW-6, 3.8, "No. Resi Pengiriman: "+trackingNo, "", 2, "L", false, 0, "")
+	pdf.CellFormat(boxW-6, 3.6, "No. Resi Pengiriman: "+trackingNo, "", 2, "L", false, 0, "")
 
 	// Status line
 	statusText := strings.ToUpper(strings.ReplaceAll(string(order.Status), "_", " "))
@@ -159,9 +159,9 @@ func GenerateInvoicePDF(order *entity.Order) ([]byte, error) {
 		pdf.SetTextColor(153, 27, 27) // Red
 		statusText = "STATUS: " + statusText
 	}
-	pdf.CellFormat(boxW-6, 3.8, statusText, "", 0, "L", false, 0, "")
+	pdf.CellFormat(boxW-6, 3.6, statusText, "", 0, "L", false, 0, "")
 
-	pdf.SetY(startY + boxH + 6.0)
+	pdf.SetY(startY + boxH + 5.0)
 
 	// -------------------------------------------------------------
 	// 3. SECTION 2: RINCIAN PEMBELIAN PRODUK (Purchased Items Table)

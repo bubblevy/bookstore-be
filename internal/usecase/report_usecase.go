@@ -152,18 +152,20 @@ func (u *reportUsecase) GetOrderReport(ctx context.Context, filter dto.OrderRepo
 		}
 
 		orderItemsList[i] = dto.OrderReportItem{
-			ID:            o.ID,
-			InvoiceNumber: o.InvoiceNumber,
-			CustomerName:  custName,
-			CustomerEmail: custEmail,
-			Status:        string(o.Status),
-			TotalAmount:   o.TotalAmount,
-			ItemsSubtotal: o.ItemsSubtotal,
-			ShippingCost:  o.ShippingCost,
-			PaymentMethod: payMethod,
-			TotalQuantity: orderQty,
-			CreatedAt:     o.CreatedAt,
-			PaidAt:        paidAt,
+			ID:             o.ID,
+			InvoiceNumber:  o.InvoiceNumber,
+			CustomerName:   custName,
+			CustomerEmail:  custEmail,
+			Status:         string(o.Status),
+			TotalAmount:    o.TotalAmount,
+			ItemsSubtotal:  o.ItemsSubtotal,
+			ShippingCost:   o.ShippingCost,
+			DiscountAmount: o.DiscountAmount,
+			AdminFee:       o.AdminFee,
+			PaymentMethod:  payMethod,
+			TotalQuantity:  orderQty,
+			CreatedAt:      o.CreatedAt,
+			PaidAt:         paidAt,
 		}
 	}
 
