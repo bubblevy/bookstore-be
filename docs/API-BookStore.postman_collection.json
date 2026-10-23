@@ -1,0 +1,3227 @@
+{
+  "info": {
+    "_postman_id": "81caf140-288b-46bc-a9d1-568a6d88fba6",
+    "name": "API-BookStore",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "31321827"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/health",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Health Database",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/health/ready",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "health",
+                "ready"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"name\": \"Laurent\",\r\n    \"email\": \"laurent1@gmail.com\",\r\n    \"password\": \"@Laurent123\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/v1/auth/register",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"email\": \"laurent@gmail.com\",\r\n    \"password\": \"@Laurent123\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/v1/auth/login",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/v1/auth/refresh-token",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "refresh-token"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/v1/auth/logout",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "logout"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Activate Account",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"token\": \"7927920615d339f197ca308260d00cc5b9ad084c1d193e8ecc29b601ffa7151c\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/v1/auth/activate-account",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "activate-account"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Resend Activate Account",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"email\": \"sukasuka@gmail.com\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/v1/auth/resend-activation",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "resend-activation"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"email\": \"laurent@gmail.com\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/v1/auth/forgot-password",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "forgot-password"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"token\": \"5fcb8e100880bd6a8e9faaa9f5e5fbb72636ab5068fd2f9ae52979ec3b92a213\",\r\n    \"new_password\": \"@Laurent123\",\r\n    \"confirm_password\": \"@Laurent123\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/v1/auth/reset-password",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "reset-password"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"current_password\": \"haha\",\r\n    \"new_password\": \"@Rahasia123\",\r\n    \"confirm_password\": \"@Rahasia123\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/v1/auth/change-password",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "change-password"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login With Google",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/api/v1/auth/google/login",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "google",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Customer",
+      "item": [
+        {
+          "name": "Address",
+          "item": [
+            {
+              "name": "Find All",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/addresses",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "addresses"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Find by ID",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/addresses/:id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "addresses",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Primary Address",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/addresses/primary",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "addresses",
+                    "primary"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Add Address",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n  \"receiver_name\": \"Laurent\",\r\n  \"phone\": \"081234567890\",\r\n  \"address_line\": \"Jl. Kudus No. 12, RT 03 / RW 02\",\r\n  \"province_name\": \"Jawa Tengah\",\r\n  \"city_name\": \"Kudus\",\r\n  \"district_name\": \"Kudus\",\r\n  \"postal_code\": \"59311\",\r\n  \"biteship_area_id\": \"IDNP10IDNC205IDND1752IDZ59311\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/addresses",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "addresses"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Address",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n  \"receiver_name\": \"Laurent\",\r\n  \"phone\": \"081234567890\",\r\n  \"address_line\": \"Jl. Kudus No. 12, RT 03 / RW 02\",\r\n  \"province_name\": \"Jawa Tengah\",\r\n  \"city_name\": \"Kudus\",\r\n  \"district_name\": \"Kudus\",\r\n  \"postal_code\": \"59311\",\r\n  \"biteship_area_id\": \"IDNP10IDNC205IDND1752IDZ59311\",\r\n  \"is_primary\": true\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/addresses/:id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "addresses",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Set Active Address",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/addresses/:id/primary",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "addresses",
+                    ":id",
+                    "primary"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Address",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/addresses/:id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "addresses",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Shipping",
+          "item": [
+            {
+              "name": "Areas",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/shipping/areas?search=welahan",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "shipping",
+                    "areas"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "welahan"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Couriers",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/shipping/couriers",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "shipping",
+                    "couriers"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Rates",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n  \"cart_item_ids\": [2]\r\n   // \"address_id\": 10 // optional\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/shipping/rates",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "shipping",
+                    "rates"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Tracking",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/orders/:invoice_number/tracking",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "orders",
+                    ":invoice_number",
+                    "tracking"
+                  ],
+                  "variable": [
+                    {
+                      "key": "invoice_number",
+                      "value": "INV-20261017-906500"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Webhook",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Biteship-Signature",
+                    "value": "rahasia",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/shipping/webhook",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "shipping",
+                    "webhook"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Category",
+          "item": [
+            {
+              "name": "All Category",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/categories",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "categories"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Find By Slug",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/categories/:slug",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "categories",
+                    ":slug"
+                  ],
+                  "variable": [
+                    {
+                      "key": "slug",
+                      "value": "novel-romantis-and-populer"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Publisher",
+          "item": [
+            {
+              "name": "All Publisher",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/publishers",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "publishers"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Find By Slug",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/publishers/:slug",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "publishers",
+                    ":slug"
+                  ],
+                  "variable": [
+                    {
+                      "key": "slug",
+                      "value": "bentang-pustaka"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Author",
+          "item": [
+            {
+              "name": "All Author",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/authors?page=1&per_page=10",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "authors"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "type": "text"
+                    },
+                    {
+                      "key": "per_page",
+                      "value": "10",
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Find By Slug",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/authors/:slug",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "authors",
+                    ":slug"
+                  ],
+                  "variable": [
+                    {
+                      "key": "slug",
+                      "value": "ika-natassa"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Book",
+          "item": [
+            {
+              "name": "All Book",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/books?page=1&per_page=10&search&sort_by&min_price=&max_price&category&author=&publisher",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "books"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "per_page",
+                      "value": "10"
+                    },
+                    {
+                      "key": "search",
+                      "value": null
+                    },
+                    {
+                      "key": "sort_by",
+                      "value": null
+                    },
+                    {
+                      "key": "min_price",
+                      "value": ""
+                    },
+                    {
+                      "key": "max_price",
+                      "value": null
+                    },
+                    {
+                      "key": "category",
+                      "value": null
+                    },
+                    {
+                      "key": "author",
+                      "value": ""
+                    },
+                    {
+                      "key": "publisher",
+                      "value": null
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Find By Slug",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/books/:slug",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "books",
+                    ":slug"
+                  ],
+                  "variable": [
+                    {
+                      "key": "slug",
+                      "value": "the-pragmatic-programmer"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Discount",
+          "item": [
+            {
+              "name": "Check",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"code\": \"DISKONHEMAT\",\r\n    \"items\": [\r\n    {\r\n      \"book_id\": 2,\r\n      \"quantity\": 1\r\n    },\r\n    {\r\n      \"book_id\": 1,\r\n      \"quantity\": 1\r\n    }\r\n  ]\r\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/discounts/check",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "discounts",
+                    "check"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Cart",
+          "item": [
+            {
+              "name": "Get Cart",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/cart",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "cart"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Add Cart",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n   \"book_id\": 1,\r\n   \"quantity\": 1\r\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/cart/items",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "cart",
+                    "items"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Selected Item",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n   \"item_ids\": [1]\r\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/cart/selected",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "cart",
+                    "selected"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Change Qty",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n  \"quantity\": 2\r\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/cart/items/:id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "cart",
+                    "items",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Item",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/cart/items/:id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "cart",
+                    "items",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "3"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Clear Cart",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/cart",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "cart"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Checkout",
+          "item": [
+            {
+              "name": "Preview",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n  \"cart_item_ids\": [1],\r\n//   \"address_id\": 1, optional\r\n  \"courier\": \"jne\", //optional\r\n  \"courier_service\": \"reg\",\r\n  \"payment_method\": \"alfamart\",\r\n  \"discount_code\": \"DISKONHEMAT\" // optional\r\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/checkout/preview",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "checkout",
+                    "preview"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Order",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n  \"cart_item_ids\": [1],\r\n//   \"address_id\": 1, optional\r\n  \"courier\": \"jne\", //optional\r\n  \"courier_service\": \"reg\",\r\n  \"payment_method\": \"alfamart\",\r\n  \"discount_code\": \"DISKONHEMAT\" // optional\r\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/checkout/order",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "checkout",
+                    "order"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Midtrans Webhook",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n \r\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/payments/midtrans/webhook",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payments",
+                    "midtrans",
+                    "webhook"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Order Detail",
+          "item": [
+            {
+              "name": "Order List",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/orders",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "orders"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Order Details",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/orders/:invoice_number",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "orders",
+                    ":invoice_number"
+                  ],
+                  "variable": [
+                    {
+                      "key": "invoice_number",
+                      "value": "INV-20261023-640684"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Download Invoice",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/orders/:invoice_number/pdf",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "orders",
+                    ":invoice_number",
+                    "pdf"
+                  ],
+                  "variable": [
+                    {
+                      "key": "invoice_number",
+                      "value": "INV-20261023-640684"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Wishlist Book",
+          "item": [
+            {
+              "name": "My Wishlist",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/wishlist",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "wishlist"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Check Wishlist",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/wishlist/check/:book_id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "wishlist",
+                    "check",
+                    ":book_id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "book_id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Add Wishlist",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"book_id\": 1\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/wishlist/items",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "wishlist",
+                    "items"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Move to Cart",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/wishlist/items/:book_id/move-to-cart",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "wishlist",
+                    "items",
+                    ":book_id",
+                    "move-to-cart"
+                  ],
+                  "variable": [
+                    {
+                      "key": "book_id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Wishlist",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/wishlist/items/:book_id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "wishlist",
+                    "items",
+                    ":book_id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "book_id",
+                      "value": "2"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Clear Wishlist",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/wishlist",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "wishlist"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Me",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/v1/users/me",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Category",
+          "item": [
+            {
+              "name": "All Category",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/categories",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "categories"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Find By Slug",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/categories/:slug",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "categories",
+                    ":slug"
+                  ],
+                  "variable": [
+                    {
+                      "key": "slug",
+                      "value": "novel-romantis"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n   \"name\": \"Novel Romantis & Populer\",\r\n   \"image_url\": \"http://localhost:8000/uploads/1792412247-1b582f91.jpg\"\r\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/categories",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "categories"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n   \"name\": \"Novel Romantis & Populer\",\r\n   \"image_url\": \"http://localhost:8000/uploads/1792412113-2657b6e9.jpg\"\r\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/categories/:id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "categories",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/categories/:id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "categories",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "2"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Publisher",
+          "item": [
+            {
+              "name": "All Publisher",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/publishers",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "publishers"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Find By Slug",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/publishers/:slug",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "publishers",
+                    ":slug"
+                  ],
+                  "variable": [
+                    {
+                      "key": "slug",
+                      "value": "bentang-pustaka"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n   \"name\": \"Penerbit Utama\"\r\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/publishers",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "publishers"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n   \"name\": \"Gramedia\"\r\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/publishers/:id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "publishers",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/publishers/:id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "publishers",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Author",
+          "item": [
+            {
+              "name": "All Author",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/authors?page=1&per_page=10",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "authors"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "type": "text"
+                    },
+                    {
+                      "key": "per_page",
+                      "value": "10",
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Find By Slug",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/authors/:slug",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "authors",
+                    ":slug"
+                  ],
+                  "variable": [
+                    {
+                      "key": "slug",
+                      "value": "ika-natassa"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n   \"name\": \"Ika Natassa\",\r\n   \"bio\": \"Hanya Siang dan Malam\"\r\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/authors",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "authors"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n   \"name\": \"Andrea Hirata\",\r\n   \"bio\": \"Hanya Siang & Malam\"\r\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/authors/:id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "authors",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/authors/:id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "authors",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "2"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Book",
+          "item": [
+            {
+              "name": "All Book",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/books?page=1&per_page=10&search&sort_by=&min_price=0&max_price=&category&author=&publisher",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "books"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "per_page",
+                      "value": "10"
+                    },
+                    {
+                      "key": "search",
+                      "value": null
+                    },
+                    {
+                      "key": "sort_by",
+                      "value": ""
+                    },
+                    {
+                      "key": "min_price",
+                      "value": "0"
+                    },
+                    {
+                      "key": "max_price",
+                      "value": ""
+                    },
+                    {
+                      "key": "category",
+                      "value": null
+                    },
+                    {
+                      "key": "author",
+                      "value": ""
+                    },
+                    {
+                      "key": "publisher",
+                      "value": null
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Find By Slug",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/books/:slug",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "books",
+                    ":slug"
+                  ],
+                  "variable": [
+                    {
+                      "key": "slug",
+                      "value": "the-pragmatic-programmer"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n  \"category_id\": 1,\r\n  \"author_id\": 1,\r\n  \"publisher_id\": 1,\r\n  \"title\": \"Resep Masakan\",\r\n  \"isbn\": \"9780135157059\",\r\n  \"synopsis\": \"Your journey to mastery in software development.\",\r\n  \"price\": 150000,\r\n  \"discount_percentage\": 10,\r\n  \"weight_grams\": 450,\r\n  \"pages\": 352,\r\n  \"publication_year\": 2019,\r\n  \"language\": \"Indonesia\",\r\n  \"length\": 20,\r\n  \"width\": 13.5,\r\n  \"height\": 2,\r\n  \"condition\": \"100% Baru & Segel Penerbit\",\r\n  \"stock\": 40,\r\n  \"cover_image\": \"http://localhost:8000/uploads/1792412310-22b3a284.jpg\",\r\n  \"is_active\": true\r\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/books",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "books"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n  \"category_id\": 1,\r\n  \"author_id\": 1,\r\n  \"publisher_id\": 1,\r\n  \"title\": \"The Pragmatic Programmer\",\r\n  \"isbn\": \"9780135957059\",\r\n  \"synopsis\": \"Your journey to mastery in software development.\",\r\n  \"price\": 100000,\r\n  \"discount_percentage\": 0,\r\n  \"weight_grams\": 450,\r\n  \"pages\": 352,\r\n  \"publication_year\": 2019,\r\n  \"language\": \"Indonesia\",\r\n  \"length\": 20,\r\n  \"width\": 13.5,\r\n  \"height\": 2,\r\n  \"condition\": \"100% Baru & Segel Penerbit\",\r\n  \"stock\": 40,\r\n  \"cover_image\": \"https://example.com/static/covers/pragmatic-programmer.jpg\",\r\n  \"is_active\": true\r\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/books/:id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "books",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/books/:id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "books",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "2"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Discount",
+          "item": [
+            {
+              "name": "Check",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"code\": \"DISKONHEMAT\",\r\n    \"items\": [\r\n    {\r\n      \"book_id\": 1,\r\n      \"quantity\": 1\r\n    }\r\n    // {\r\n    //   \"book_id\": 2,\r\n    //   \"quantity\": 1\r\n    // }\r\n  ]\r\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/discounts/check",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "discounts",
+                    "check"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "All Discount",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/discounts",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "discounts"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Find By ID",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/discounts/:id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "discounts",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n  \"code\": \"DISKONHEMAT\",\r\n  \"name\": \"Book Festival Up To 10% Off\",\r\n  \"description\": \"Tiered discount promotion for selected programming and fiction books.\",\r\n  \"discount_type\": \"TIERED\",\r\n  \"discount_value\": 10,\r\n  \"min_purchase\": 100000,\r\n  \"max_discount_amount\": 25000,\r\n  \"quota\": 100,\r\n  \"is_all_books\": false,\r\n  \"is_active\": true,\r\n  \"start_date\": \"2026-10-01T00:00:00Z\",\r\n  \"end_date\": \"2026-10-31T23:59:59Z\",\r\n  \"book_ids\": [1,2],\r\n  \"tiers\": [\r\n    {\r\n      \"min_spend\": 100000,\r\n      \"reward_type\": \"FIXED\",\r\n      \"reward_value\": 5000,\r\n      \"max_reward\": null\r\n    },\r\n    {\r\n      \"min_spend\": 120000,\r\n      \"reward_type\": \"PERCENTAGE\",\r\n      \"reward_value\": 2,\r\n      \"max_reward\": null\r\n    }\r\n  ]\r\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/discounts",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "discounts"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n  \"code\": \"DISKONHEMAT\",\r\n  \"name\": \"Book Festival Up To 10% Off\",\r\n  \"description\": \"Tiered discount promotion for selected programming and fiction books.\",\r\n  \"discount_type\": \"TIERED\",\r\n  \"discount_value\": 10,\r\n  \"min_purchase\": 100000,\r\n  \"max_discount_amount\": 25000,\r\n  \"quota\": 100,\r\n  \"is_all_books\": false,\r\n  \"is_active\": true,\r\n  \"start_date\": \"2026-10-01T00:00:00Z\",\r\n  \"end_date\": \"2026-10-31T23:59:59Z\",\r\n  \"book_ids\": [1,2],\r\n  \"tiers\": [\r\n    {\r\n      \"min_spend\": 100000,\r\n      \"reward_type\": \"FIXED\",\r\n      \"reward_value\": 5000,\r\n      \"max_reward\": null\r\n    },\r\n    {\r\n      \"min_spend\": 120000,\r\n      \"reward_type\": \"PERCENTAGE\",\r\n      \"reward_value\": 2,\r\n      \"max_reward\": null\r\n    }\r\n  ]\r\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/discounts/:id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "discounts",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/discounts/:id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "discounts",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Shipping",
+          "item": [
+            {
+              "name": "Order",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/orders/:invoice_number/fulfill",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "orders",
+                    ":invoice_number",
+                    "fulfill"
+                  ],
+                  "variable": [
+                    {
+                      "key": "invoice_number",
+                      "value": "INV-20261020-588732"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Return",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/orders/:invoice_number/return",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "orders",
+                    ":invoice_number",
+                    "return"
+                  ],
+                  "variable": [
+                    {
+                      "key": "invoice_number",
+                      "value": "INV-20261020-966314"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Order",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/orders/:invoice_number/tracking",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "orders",
+                    ":invoice_number",
+                    "tracking"
+                  ],
+                  "variable": [
+                    {
+                      "key": "invoice_number",
+                      "value": "INV-20261020-588732"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Upload",
+          "item": [
+            {
+              "name": "Upload File",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "uuid": "9806f10c-b691-47d4-8e1c-f87c6806cb49",
+                      "src": "/C:/Users/hp5cd/Downloads/logo-bookstore.png"
+                    },
+                    {
+                      "key": "folder",
+                      "value": "temp",
+                      "type": "text",
+                      "uuid": "0a0e1956-a420-44ff-89f8-4696bd5f96fe"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/uploads",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "uploads"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete File",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/uploads?file_key=uploads/1792338927-eef50ef9.jpg",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "uploads"
+                  ],
+                  "query": [
+                    {
+                      "key": "file_key",
+                      "value": "uploads/1792338927-eef50ef9.jpg",
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "User",
+          "item": [
+            {
+              "name": "Me",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/users/me",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "users",
+                    "me"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "All User",
+              "request": {
+                "auth": {
+                  "type": "noauth"
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/users?page=1&per_page=10&role=customer&is_active=true",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "users"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "per_page",
+                      "value": "10"
+                    },
+                    {
+                      "key": "role",
+                      "value": "customer"
+                    },
+                    {
+                      "key": "is_active",
+                      "value": "true"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Order",
+          "item": [
+            {
+              "name": "Order List",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/orders/all",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "orders",
+                    "all"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Customer Order Detail",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/orders/detail/:invoice_number",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "orders",
+                    "detail",
+                    ":invoice_number"
+                  ],
+                  "variable": [
+                    {
+                      "key": "invoice_number",
+                      "value": "INV-20261023-803437"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Report",
+          "item": [
+            {
+              "name": "Report",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/reports?start_date=2026-09-01&end_date=2026-11-01&status=all",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "reports"
+                  ],
+                  "query": [
+                    {
+                      "key": "start_date",
+                      "value": "2026-09-01"
+                    },
+                    {
+                      "key": "end_date",
+                      "value": "2026-11-01"
+                    },
+                    {
+                      "key": "status",
+                      "value": "all",
+                      "description": "all, waiting_payment, paid, processing, shipped, completed, cancelled, returned"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Report Pdf",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/reports/pdf?start_date=2026-09-01&end_date=2026-11-01&status=all",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "reports",
+                    "pdf"
+                  ],
+                  "query": [
+                    {
+                      "key": "start_date",
+                      "value": "2026-09-01"
+                    },
+                    {
+                      "key": "end_date",
+                      "value": "2026-11-01"
+                    },
+                    {
+                      "key": "status",
+                      "value": "all",
+                      "description": "all, waiting_payment, paid, processing, shipped, completed, cancelled, returned"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": ""
+    }
+  ]
+}

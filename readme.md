@@ -16,6 +16,7 @@ bookstore/
 │   └── main.go                  # Application entry point & graceful shutdown
 ├── config/                      # Environment configuration loader
 ├── docs/
+│   ├── API-BookStore.postman_collection.json # Complete Postman Collection v2.1
 │   └── swagger.yml              # Complete OpenAPI 3.0.3 API specification
 ├── internal/
 │   ├── delivery/
@@ -165,8 +166,9 @@ Features:
 
 ## API Documentation
 
-The complete API specification is available in OpenAPI 3.0.3 format:
-- **Specification File**: [`docs/swagger.yml`](docs/swagger.yml)
+The complete API specifications and testing collections are available:
+- **OpenAPI 3.0.3 (Swagger)**: [`docs/swagger.yml`](docs/swagger.yml)
+- **Postman Collection v2.1**: [`docs/API-BookStore.postman_collection.json`](docs/API-BookStore.postman_collection.json) (Ready-to-import collection with pre-configured environment variables, Bearer token auth scripts, and sample payloads for all endpoints)
 
 ### Endpoint Summary
 
