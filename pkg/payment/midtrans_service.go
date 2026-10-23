@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -20,7 +21,10 @@ type ChargeResponse struct {
 	VANumber      string
 	BillKey       string
 	BillerCode    string
+	PaymentCode   string
+	Store         string
 	QRURL         string
+	DeeplinkURL   string
 	Status        string
 	ExpiryTime    *time.Time
 	RawResponse   string
@@ -32,11 +36,12 @@ type MidtransService interface {
 }
 
 type midtransService struct {
-	client    coreapi.Client
-	serverKey string
+	client      coreapi.Client
+	serverKey   string
+	frontendURL string
 }
 
-func NewMidtransService(serverKey string, isProduction bool) MidtransService {
+func NewMidtransService(serverKey string, isProduction bool, frontendURL string) MidtransService {
 	env := midtrans.Sandbox
 	if isProduction {
 		env = midtrans.Production
@@ -45,9 +50,18 @@ func NewMidtransService(serverKey string, isProduction bool) MidtransService {
 	var client coreapi.Client
 	client.New(serverKey, env)
 
+	cleanFrontendURL := strings.TrimRight(strings.TrimSpace(frontendURL), "/")
+	if cleanFrontendURL == "" {
+		cleanFrontendURL = strings.TrimRight(strings.TrimSpace(os.Getenv("FRONTEND_URL")), "/")
+	}
+	if cleanFrontendURL == "" {
+		cleanFrontendURL = "http://localhost:5173"
+	}
+
 	return &midtransService{
-		client:    client,
-		serverKey: serverKey,
+		client:      client,
+		serverKey:   serverKey,
+		frontendURL: cleanFrontendURL,
 	}
 }
 
@@ -62,6 +76,8 @@ var SupportedPaymentMethods = map[string]bool{
 	"qris":         true,
 	"gopay":        true,
 	"shopeepay":    true,
+	"indomaret":    true,
+	"alfamart":     true,
 }
 
 func IsSupportedPaymentMethod(paymentMethod string) bool {
@@ -81,6 +97,15 @@ func (s *midtransService) Charge(ctx context.Context, invoiceNumber string, gros
 	}
 
 	methodLower := strings.ToLower(strings.TrimSpace(paymentMethod))
+
+	callbackURL := fmt.Sprintf("%s/orders/%s", s.frontendURL, invoiceNumber)
+	if customCallback := os.Getenv("MIDTRANS_CALLBACK_URL"); customCallback != "" {
+		if strings.Contains(customCallback, "%s") {
+			callbackURL = fmt.Sprintf(customCallback, invoiceNumber)
+		} else {
+			callbackURL = strings.TrimRight(customCallback, "/") + "/" + invoiceNumber
+		}
+	}
 
 	switch methodLower {
 	case "bca_va":
@@ -114,14 +139,34 @@ func (s *midtransService) Charge(ctx context.Context, invoiceNumber string, gros
 			BillInfo1: "Pembayaran Toko Buku",
 			BillInfo2: invoiceNumber,
 		}
-	case "qris", "gopay":
+	case "qris":
 		req.PaymentType = coreapi.PaymentTypeQris
 		req.Qris = &coreapi.QrisDetails{
 			Acquirer: "gopay",
 		}
+	case "gopay":
+		req.PaymentType = coreapi.PaymentTypeGopay
+		req.Gopay = &coreapi.GopayDetails{
+			EnableCallback: true,
+			CallbackUrl:    callbackURL,
+		}
 	case "shopeepay":
 		req.PaymentType = coreapi.PaymentTypeShopeepay
-		req.ShopeePay = &coreapi.ShopeePayDetails{}
+		req.ShopeePay = &coreapi.ShopeePayDetails{
+			CallbackUrl: callbackURL,
+		}
+	case "indomaret":
+		req.PaymentType = coreapi.PaymentTypeConvenienceStore
+		req.ConvStore = &coreapi.ConvStoreDetails{
+			Store:   "indomaret",
+			Message: "Pembayaran Toko Buku",
+		}
+	case "alfamart":
+		req.PaymentType = coreapi.PaymentTypeConvenienceStore
+		req.ConvStore = &coreapi.ConvStoreDetails{
+			Store:   "alfamart",
+			Message: "Pembayaran Toko Buku",
+		}
 	default:
 		return nil, fmt.Errorf("unsupported payment method: %s", paymentMethod)
 	}
@@ -154,7 +199,7 @@ func (s *midtransService) Charge(ctx context.Context, invoiceNumber string, gros
 		result.VANumber = resp.VaNumbers[0].VANumber
 	}
 
-	//  Permata VA
+	// Permata VA
 	if resp.PermataVaNumber != "" {
 		result.Bank = "permata"
 		result.VANumber = resp.PermataVaNumber
@@ -167,19 +212,50 @@ func (s *midtransService) Charge(ctx context.Context, invoiceNumber string, gros
 		result.BillerCode = resp.BillerCode
 	}
 
-	// QRIS & E-Wallet (ShopeePay, GoPay QR / Deeplink)
-	for _, action := range resp.Actions {
-		if action.Name == "generate-qr-code" {
-			result.QRURL = action.URL
-			break
+	// Convenience Store (Indomaret, Alfamart)
+	if resp.PaymentCode != "" {
+		result.PaymentCode = resp.PaymentCode
+	}
+	if resp.Store != "" {
+		result.Store = resp.Store
+	} else if result.PaymentCode != "" {
+		if strings.Contains(methodLower, "alfamart") {
+			result.Store = "alfamart"
+		} else {
+			result.Store = "indomaret"
 		}
 	}
-	if result.QRURL == "" {
-		for _, action := range resp.Actions {
-			if action.Name == "deeplink-redirect" {
-				result.QRURL = action.URL
-				break
-			}
+
+	// QRIS & E-Wallet (ShopeePay, GoPay QR / Deeplink)
+	var actionDeeplink string
+	var actionQRCode string
+	for _, action := range resp.Actions {
+		if action.Name == "deeplink-redirect" {
+			actionDeeplink = action.URL
+		} else if action.Name == "generate-qr-code" {
+			actionQRCode = action.URL
+		}
+	}
+
+	if methodLower == "qris" {
+		// QRIS: hanya simpan satu di QRURL
+		if actionQRCode != "" {
+			result.QRURL = actionQRCode
+		} else if actionDeeplink != "" {
+			result.QRURL = actionDeeplink
+		}
+	} else if methodLower == "gopay" || methodLower == "shopeepay" {
+		// GoPay & ShopeePay: prioritaskan DeeplinkURL, jangan masukkan dua-duanya ke DB
+		if actionDeeplink != "" {
+			result.DeeplinkURL = actionDeeplink
+		} else if actionQRCode != "" {
+			result.QRURL = actionQRCode
+		}
+	} else {
+		if actionDeeplink != "" {
+			result.DeeplinkURL = actionDeeplink
+		} else if actionQRCode != "" {
+			result.QRURL = actionQRCode
 		}
 	}
 

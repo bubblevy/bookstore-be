@@ -141,8 +141,10 @@ func (u *reportUsecase) GetOrderReport(ctx context.Context, filter dto.OrderRepo
 		payMethod := "Midtrans"
 		if o.Payment != nil {
 			payMethod = strings.ToUpper(strings.ReplaceAll(o.Payment.PaymentType, "_", " "))
-			if o.Payment.Bank != nil {
+			if o.Payment.Bank != nil && *o.Payment.Bank != "" {
 				payMethod += " (" + strings.ToUpper(*o.Payment.Bank) + ")"
+			} else if o.Payment.Store != nil && *o.Payment.Store != "" {
+				payMethod += " (" + strings.ToUpper(*o.Payment.Store) + ")"
 			}
 		}
 

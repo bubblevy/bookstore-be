@@ -22,6 +22,10 @@ func TestIsSupportedPaymentMethod(t *testing.T) {
 		"shopeepay",
 		"ShopeePay",
 		" SHOPEEPAY ",
+		"indomaret",
+		"INDOMARET",
+		"alfamart",
+		"ALFAMART",
 	}
 
 	for _, method := range validMethods {
@@ -40,7 +44,6 @@ func TestIsSupportedPaymentMethod(t *testing.T) {
 		"ovo",
 		"shopee",
 		"credit_card",
-		"alfamart",
 	}
 
 	for _, method := range invalidMethods {
@@ -48,4 +51,15 @@ func TestIsSupportedPaymentMethod(t *testing.T) {
 			assert.False(t, payment.IsSupportedPaymentMethod(method))
 		})
 	}
+}
+
+func TestNewMidtransService(t *testing.T) {
+	svc := payment.NewMidtransService("test-server-key", false, "http://localhost:5173")
+	assert.NotNil(t, svc)
+
+	// Test notification signature verification
+	// signature: SHA512(order_id + status_code + gross_amount + server_key)
+	// order_id: "INV-001", status_code: "200", gross_amount: "10000.00", server_key: "test-server-key"
+	validSig := svc.VerifyNotification("INV-001", "200", "10000.00", "invalid-sig")
+	assert.False(t, validSig)
 }

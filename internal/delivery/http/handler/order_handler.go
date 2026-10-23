@@ -181,13 +181,32 @@ func (h *OrderHandler) GetOrderDetail(c fiber.Ctx) error {
 	}
 
 	if order.Payment != nil {
+		bank := order.Payment.Bank
+		billKey := order.Payment.BillKey
+		paymentCode := order.Payment.PaymentCode
+		store := order.Payment.Store
+
+		if order.Payment.PaymentType == "cstore" {
+			if paymentCode == nil {
+				paymentCode = order.Payment.BillKey
+			}
+			if store == nil {
+				store = order.Payment.Bank
+			}
+			bank = nil
+			billKey = nil
+		}
+
 		detail.Payment = &dto.OrderPaymentResponse{
 			PaymentType: order.Payment.PaymentType,
-			Bank:        order.Payment.Bank,
+			Bank:        bank,
 			VANumber:    order.Payment.VANumber,
-			BillKey:     order.Payment.BillKey,
+			BillKey:     billKey,
 			BillerCode:  order.Payment.BillerCode,
+			PaymentCode: paymentCode,
+			Store:       store,
 			QRURL:       order.Payment.QRURL,
+			DeeplinkURL: order.Payment.DeeplinkURL,
 			Status:      string(order.Payment.Status),
 			PaidAt:      order.Payment.PaidAt,
 		}

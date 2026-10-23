@@ -31,7 +31,10 @@ type Payment struct {
 	VANumber              *string       `gorm:"type:varchar(100)" json:"va_number,omitempty"`
 	BillKey               *string       `gorm:"type:varchar(100)" json:"bill_key,omitempty"`
 	BillerCode            *string       `gorm:"type:varchar(100)" json:"biller_code,omitempty"`
+	PaymentCode           *string       `gorm:"type:varchar(100)" json:"payment_code,omitempty"`
+	Store                 *string       `gorm:"type:varchar(50)" json:"store,omitempty"`
 	QRURL                 *string       `gorm:"type:text" json:"qr_url,omitempty"`
+	DeeplinkURL           *string       `gorm:"type:text" json:"deeplink_url,omitempty"`
 	Status                PaymentStatus `gorm:"type:payment_status;not null;default:'pending'" json:"status"`
 	RawResponse           *string       `gorm:"type:jsonb" json:"raw_response,omitempty"`
 	PaidAt                *time.Time    `json:"paid_at,omitempty"`

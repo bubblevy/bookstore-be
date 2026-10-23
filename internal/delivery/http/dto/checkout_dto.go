@@ -63,7 +63,10 @@ type PaymentInfoResponse struct {
 	VANumber    *string `json:"va_number,omitempty"`
 	BillKey     *string `json:"bill_key,omitempty"`
 	BillerCode  *string `json:"biller_code,omitempty"`
+	PaymentCode *string `json:"payment_code,omitempty"`
+	Store       *string `json:"store,omitempty"`
 	QRURL       *string `json:"qr_url,omitempty"`
+	DeeplinkURL *string `json:"deeplink_url,omitempty"`
 }
 
 type CreateOrderResponse struct {

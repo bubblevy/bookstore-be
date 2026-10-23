@@ -62,7 +62,10 @@ type CreateOrderResult struct {
 		VANumber    *string
 		BillKey     *string
 		BillerCode  *string
+		PaymentCode *string
+		Store       *string
 		QRURL       *string
+		DeeplinkURL *string
 	}
 }
 
@@ -223,7 +226,7 @@ func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, inpu
 			}
 		}
 		if !foundService {
-			shippingCost = int(rates[0].Price)
+			return nil, entity.ErrInvalidCourierService
 		}
 	}
 
@@ -251,13 +254,20 @@ func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, inpu
 			return nil, entity.ErrInvalidPaymentMethod
 		}
 
+		baseAmount := itemsSubtotal + shippingCost - discountAmount
+		if baseAmount < 0 {
+			baseAmount = 0
+		}
+
 		switch strings.ToLower(input.PaymentMethod) {
 		case "bca_va", "bni_va", "bri_va", "permata_va", "cimb_va":
 			adminFee = 5000 // Flat rate Virtual Account
 		case "mandiri_bill", "echannel":
 			adminFee = 4000 // Mandiri Bill
 		case "gopay", "qris", "shopeepay":
-			adminFee = int(math.Round(float64(itemsSubtotal) * 0.007))
+			adminFee = int(math.Round(float64(baseAmount) * 0.007))
+		case "indomaret", "alfamart":
+			adminFee = 5000 // Flat rate Convenience Store (Indomaret / Alfamart)
 		default:
 			adminFee = 0
 		}
@@ -399,7 +409,10 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 	vaNumber := nilIfEmpty(chargeRes.VANumber)
 	billKey := nilIfEmpty(chargeRes.BillKey)
 	billerCode := nilIfEmpty(chargeRes.BillerCode)
+	paymentCode := nilIfEmpty(chargeRes.PaymentCode)
+	store := nilIfEmpty(chargeRes.Store)
 	qrURL := nilIfEmpty(chargeRes.QRURL)
+	deeplinkURL := nilIfEmpty(chargeRes.DeeplinkURL)
 
 	var rawResp *string
 	if chargeRes.RawResponse != "" && json.Valid([]byte(chargeRes.RawResponse)) {
@@ -414,7 +427,10 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 		VANumber:              vaNumber,
 		BillKey:               billKey,
 		BillerCode:            billerCode,
+		PaymentCode:           paymentCode,
+		Store:                 store,
 		QRURL:                 qrURL,
+		DeeplinkURL:           deeplinkURL,
 		Status:                entity.PaymentStatusPending,
 		RawResponse:           rawResp,
 	}
@@ -441,12 +457,16 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 		TotalAmount:     order.TotalAmount,
 		PaymentDeadline: deadline,
 	}
+
 	result.PaymentInfo.PaymentType = chargeRes.PaymentType
 	result.PaymentInfo.Bank = bank
 	result.PaymentInfo.VANumber = vaNumber
 	result.PaymentInfo.BillKey = billKey
 	result.PaymentInfo.BillerCode = billerCode
+	result.PaymentInfo.PaymentCode = paymentCode
+	result.PaymentInfo.Store = store
 	result.PaymentInfo.QRURL = qrURL
+	result.PaymentInfo.DeeplinkURL = deeplinkURL
 
 	return result, nil
 }

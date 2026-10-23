@@ -49,6 +49,7 @@ type MidtransConfig struct {
 	ServerKey    string
 	ClientKey    string
 	IsProduction bool
+	FrontendURL  string
 }
 
 type AppConfig struct {
@@ -120,6 +121,7 @@ func LoadConfig() AppConfig {
 			ServerKey:    os.Getenv("MIDTRANS_SERVER_KEY"),
 			ClientKey:    os.Getenv("MIDTRANS_CLIENT_KEY"),
 			IsProduction: getEnvBool("MIDTRANS_IS_PRODUCTION", false),
+			FrontendURL:  os.Getenv("FRONTEND_URL"),
 		},
 		Storage: storage.Config{
 			Driver:         getEnv("STORAGE_DRIVER", "local"),

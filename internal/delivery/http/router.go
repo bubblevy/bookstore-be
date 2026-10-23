@@ -89,7 +89,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	adminMiddleware := middleware.AdminMiddleware()
 	emailSender := email.NewSMTPEmailSender(cfg.SMTP)
 	txManager := pgsql.NewTransactionManager(db)
-	midtransSvc := payment.NewMidtransService(cfg.Midtrans.ServerKey, cfg.Midtrans.IsProduction)
+	midtransSvc := payment.NewMidtransService(cfg.Midtrans.ServerKey, cfg.Midtrans.IsProduction, cfg.Midtrans.FrontendURL)
 
 	// init storage service
 	storageSvc, err := storage.NewStorageService(cfg.Storage)

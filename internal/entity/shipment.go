@@ -34,6 +34,7 @@ var (
 	ErrInvalidOrderIdentifier = errors.New("no valid order identifier found in webhook payload")
 	ErrDispatchCourierFailed  = errors.New("failed to dispatch pickup request to courier provider")
 	ErrShippingRateFailed     = errors.New("failed to retrieve shipping rates from courier")
+	ErrInvalidCourierService  = errors.New("invalid or unsupported courier service")
 )
 
 type Shipment struct {

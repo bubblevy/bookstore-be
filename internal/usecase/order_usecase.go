@@ -64,8 +64,10 @@ func (u *orderUsecase) AdminFindAllOrders(ctx context.Context, filter repository
 		var paymentMethod *string
 		if o.Payment != nil {
 			method := o.Payment.PaymentType
-			if o.Payment.Bank != nil {
+			if o.Payment.Bank != nil && *o.Payment.Bank != "" {
 				method = fmt.Sprintf("%s (%s)", o.Payment.PaymentType, *o.Payment.Bank)
+			} else if o.Payment.Store != nil && *o.Payment.Store != "" {
+				method = fmt.Sprintf("%s (%s)", o.Payment.PaymentType, *o.Payment.Store)
 			}
 			paymentMethod = &method
 		}
@@ -126,13 +128,32 @@ func (u *orderUsecase) AdminGetOrderDetail(ctx context.Context, invoiceNumber st
 
 	var paymentResp *dto.OrderPaymentResponse
 	if order.Payment != nil {
+		bank := order.Payment.Bank
+		billKey := order.Payment.BillKey
+		paymentCode := order.Payment.PaymentCode
+		store := order.Payment.Store
+
+		if order.Payment.PaymentType == "cstore" {
+			if paymentCode == nil {
+				paymentCode = order.Payment.BillKey
+			}
+			if store == nil {
+				store = order.Payment.Bank
+			}
+			bank = nil
+			billKey = nil
+		}
+
 		paymentResp = &dto.OrderPaymentResponse{
 			PaymentType: order.Payment.PaymentType,
-			Bank:        order.Payment.Bank,
+			Bank:        bank,
 			VANumber:    order.Payment.VANumber,
-			BillKey:     order.Payment.BillKey,
+			BillKey:     billKey,
 			BillerCode:  order.Payment.BillerCode,
+			PaymentCode: paymentCode,
+			Store:       store,
 			QRURL:       order.Payment.QRURL,
+			DeeplinkURL: order.Payment.DeeplinkURL,
 			Status:      string(order.Payment.Status),
 			PaidAt:      order.Payment.PaidAt,
 		}

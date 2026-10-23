@@ -83,7 +83,8 @@ func (h *CheckoutHandler) PreviewCheckout(c fiber.Ctx) error {
 			errors.Is(err, entity.ErrDiscountMinPurchase),
 			errors.Is(err, entity.ErrDiscountNotApplicable),
 			errors.Is(err, entity.ErrDiscountBookNotFound),
-			errors.Is(err, entity.ErrInvalidPaymentMethod):
+			errors.Is(err, entity.ErrInvalidPaymentMethod),
+			errors.Is(err, entity.ErrInvalidCourierService):
 			return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
 		case errors.Is(err, entity.ErrAddressNotFound):
 			return response.Error(c, fiber.StatusNotFound, err.Error(), nil)
@@ -169,7 +170,8 @@ func (h *CheckoutHandler) CreateOrder(c fiber.Ctx) error {
 			errors.Is(err, entity.ErrDiscountQuotaExhaust),
 			errors.Is(err, entity.ErrDiscountMinPurchase),
 			errors.Is(err, entity.ErrDiscountNotApplicable),
-			errors.Is(err, entity.ErrInvalidPaymentMethod):
+			errors.Is(err, entity.ErrInvalidPaymentMethod),
+			errors.Is(err, entity.ErrInvalidCourierService):
 			return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
 		case errors.Is(err, entity.ErrAddressNotFound), errors.Is(err, entity.ErrCartItemNotFound):
 			return response.Error(c, fiber.StatusNotFound, err.Error(), nil)
@@ -191,7 +193,10 @@ func (h *CheckoutHandler) CreateOrder(c fiber.Ctx) error {
 			VANumber:    res.PaymentInfo.VANumber,
 			BillKey:     res.PaymentInfo.BillKey,
 			BillerCode:  res.PaymentInfo.BillerCode,
+			PaymentCode: res.PaymentInfo.PaymentCode,
+			Store:       res.PaymentInfo.Store,
 			QRURL:       res.PaymentInfo.QRURL,
+			DeeplinkURL: res.PaymentInfo.DeeplinkURL,
 		},
 	}
 

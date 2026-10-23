@@ -29,21 +29,25 @@ bookstore/
 │   │   └── pgsql/               # Database repositories & GORM transaction manager
 │   ├── repository/              # Repository interfaces & query filter abstractions
 │   └── usecase/                 # Business logic implementation & interfaces
+├── logs/                        # Application log directory with automated retention
 ├── migrations/                  # Database migration files (Golang Migrate)
-├── pkg/                         # Reusable utilities
+├── pkg/                         # Reusable utilities & service packages
 │   ├── biteship/                # Biteship API HTTP client (Rates, Orders, Tracking)
 │   ├── cache/                   # Redis caching service with fail-open fallback
 │   ├── cookie/                  # HTTP-only cookie helpers for JWT tokens
 │   ├── email/                   # SMTP email sender for account activation & password reset
+│   ├── hash/                    # Password hashing & verification using bcrypt
 │   ├── jwt/                     # JWT token generator & validator
 │   ├── logger/                  # Structured zap-based application logger
 │   ├── pagination/              # Query pagination helpers & metadata structures
 │   ├── payment/                 # Midtrans Core API payment client & signature verifier
+│   ├── pdf/                     # PDF invoice & executive report generator (gofpdf)
 │   ├── rabbitmq/                # RabbitMQ client, email producer, worker consumer & retry
 │   ├── response/                # Standardized JSON response envelope helpers
 │   ├── storage/                 # Storage abstraction (Local file system & AWS S3 SDK v2)
 │   └── validator/               # Custom request validator & error messages
-└── public/                      # Static file assets (e.g. uploaded book covers)
+├── public/                      # Static file assets (e.g. uploaded book covers)
+└── test/                        # Comprehensive unit & integration test suite (SQLMock)
 ```
 
 ---
@@ -59,7 +63,7 @@ bookstore/
 - **Cloud & Local Storage**: AWS S3 SDK v2 (`aws-sdk-go-v2`) and Local File Storage driver
 - **Authentication**: JWT (`golang-jwt/jwt/v5`) with dual support for Bearer tokens (mobile/SPA JSON response) & HTTP-only cookies, plus Google OAuth 2.0
 - **Validation**: `go-playground/validator/v10` with custom strong password rules
-- **Payment Gateway**: [Midtrans Core API](https://midtrans.com/) (Virtual Account, Mandiri Bill, GoPay, QRIS)
+- **Payment Gateway**: [Midtrans Core API](https://midtrans.com/) (Virtual Account BCA/BNI/BRI/Permata/CIMB, Mandiri Bill, GoPay, ShopeePay, QRIS, Convenience Store Indomaret & Alfamart)
 - **Logistics & Shipping**: [Biteship API](https://biteship.com/) (Rates calculation, Area search, Fulfillment dispatch, Tracking)
 - **Email Service**: Asynchronous RabbitMQ queue with SMTP HTML templates (Account activation, password reset)
 - **Database Migrations**: `golang-migrate`
@@ -119,6 +123,11 @@ bookstore/
 ### 8. Checkout & Payments (Midtrans Integration)
 - **Checkout Preview**: Simulates pricing, discounts, shipping fees, admin fees, and payable totals.
 - **Order Placement**: Atomically reserves book stock, applies discounts, records shipping details, and generates payment credentials.
+- **Supported Payment Channels**:
+  - **Virtual Account**: BCA (`bca_va`), BNI (`bni_va`), BRI (`bri_va`), Permata (`permata_va`), CIMB Niaga (`cimb_va`).
+  - **Bill Payment**: Mandiri Bill (`mandiri_bill` / `echannel`).
+  - **E-Wallet & QRIS**: GoPay (`gopay`), ShopeePay (`shopeepay`), QRIS (`qris`) with deep-link redirect and QR code generation.
+  - **Convenience Store (Gerai Ritel)**: Indomaret (`indomaret`), Alfamart (`alfamart`) with dedicated cashier payment codes.
 - **Midtrans Webhook**: Listens for asynchronous payment status notifications (Settlement, Expire, Cancel, Deny) with SHA512 signature validation.
 
 ### 9. Order Lifecycle & Invoices
@@ -200,6 +209,8 @@ The complete API specification is available in OpenAPI 3.0.3 format:
 | **Book** | `POST` | `/api/v1/books` | Admin | Create book |
 | **Book** | `PUT` | `/api/v1/books/{id}` | Admin | Update book |
 | **Book** | `DELETE` | `/api/v1/books/{id}` | Admin | Delete book |
+| **Upload** | `POST` | `/api/v1/uploads` | Admin | Upload image file to storage (local or S3) |
+| **Upload** | `DELETE` | `/api/v1/uploads` | Admin | Delete uploaded file by file_url or file_key |
 | **Discount** | `POST` | `/api/v1/discounts/check` | User | Validate voucher against cart items |
 | **Discount** | `GET` | `/api/v1/discounts` | Admin | List all discounts (paginated) |
 | **Discount** | `GET` | `/api/v1/discounts/{id}` | Admin | Get discount details with tiers |

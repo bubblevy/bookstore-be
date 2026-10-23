@@ -2705,7 +2705,7 @@ paths:
                   data:
                     $ref: '#/components/schemas/CreateOrderResponse'
         '400':
-          description: Cart empty, insufficient stock, discount invalid/expired, or unsupported payment method
+          description: Cart empty, insufficient stock, discount invalid/expired, invalid courier service, or unsupported payment method
         '401':
           description: Unauthorized request
         '404':
@@ -5271,7 +5271,7 @@ components:
           example: "BOOKFEST10"
         payment_method:
           type: string
-          description: "Selected payment channel (e.g. bank_transfer, bca_va, bri_va, bni_va, mandiri_bill, gopay, qris)"
+          description: "Selected payment channel (e.g. bca_va, bri_va, bni_va, permata_va, cimb_va, mandiri_bill, gopay, shopeepay, qris, indomaret, alfamart)"
           example: "bca_va"
 
     CheckoutItemPreview:
@@ -5418,7 +5418,7 @@ components:
           example: "BOOKFEST10"
         payment_method:
           type: string
-          description: "Payment channel code (e.g. bank_transfer, bca_va, bri_va, bni_va, mandiri_bill, gopay, qris)"
+          description: "Payment channel code (e.g. bca_va, bri_va, bni_va, permata_va, cimb_va, mandiri_bill, gopay, shopeepay, qris, indomaret, alfamart)"
           example: "bca_va"
 
     PaymentInfoResponse:
@@ -5448,10 +5448,25 @@ components:
           nullable: true
           description: "Mandiri Biller company code (optional)."
           example: null
+        payment_code:
+          type: string
+          nullable: true
+          description: "Payment code for convenience store cashier (Indomaret / Alfamart) (optional)."
+          example: null
+        store:
+          type: string
+          nullable: true
+          description: "Convenience store chain name (indomaret / alfamart) (optional)."
+          example: null
         qr_url:
           type: string
           nullable: true
-          description: "QRIS / GoPay QR code image URL (optional)."
+          description: "QRIS / GoPay QR code image URL or fallback deeplink URL (optional)."
+          example: null
+        deeplink_url:
+          type: string
+          nullable: true
+          description: "GoPay / ShopeePay native app deeplink redirect URL (optional)."
           example: null
 
     CreateOrderResponse:
@@ -5639,10 +5654,25 @@ components:
           nullable: true
           description: "Mandiri Biller code (optional)."
           example: null
+        payment_code:
+          type: string
+          nullable: true
+          description: "Convenience store payment code (optional)."
+          example: null
+        store:
+          type: string
+          nullable: true
+          description: "Convenience store name (optional)."
+          example: null
         qr_url:
           type: string
           nullable: true
           description: "QR code URL (optional)."
+          example: null
+        deeplink_url:
+          type: string
+          nullable: true
+          description: "E-Wallet deep-link redirect URL (optional)."
           example: null
         status:
           type: string

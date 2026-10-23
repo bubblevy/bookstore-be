@@ -1,0 +1,2 @@
+ALTER TABLE payments DROP COLUMN IF EXISTS store;
+ALTER TABLE payments DROP COLUMN IF EXISTS payment_code;

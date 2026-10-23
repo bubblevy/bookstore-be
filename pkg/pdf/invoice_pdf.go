@@ -298,9 +298,19 @@ func GenerateInvoicePDF(order *entity.Order) ([]byte, error) {
 	pdf.SetTextColor(17, 24, 39)
 	methodStr := "METODE PEMBAYARAN: MIDTRANS ONLINE"
 	if order.Payment != nil {
-		methodStr = "METODE: " + strings.ToUpper(strings.ReplaceAll(order.Payment.PaymentType, "_", " "))
-		if order.Payment.Bank != nil {
-			methodStr += " (" + strings.ToUpper(*order.Payment.Bank) + ")"
+		if order.Payment.PaymentType == "cstore" {
+			if order.Payment.Store != nil && *order.Payment.Store != "" {
+				methodStr = "METODE: " + strings.ToUpper(*order.Payment.Store)
+			} else if order.Payment.Bank != nil && *order.Payment.Bank != "" {
+				methodStr = "METODE: " + strings.ToUpper(*order.Payment.Bank)
+			} else {
+				methodStr = "METODE: CONVENIENCE STORE"
+			}
+		} else {
+			methodStr = "METODE: " + strings.ToUpper(strings.ReplaceAll(order.Payment.PaymentType, "_", " "))
+			if order.Payment.Bank != nil && *order.Payment.Bank != "" {
+				methodStr += " (" + strings.ToUpper(*order.Payment.Bank) + ")"
+			}
 		}
 	}
 	pdf.CellFormat(90, 4.0, methodStr, "", 0, "L", false, 0, "")
@@ -319,15 +329,48 @@ func GenerateInvoicePDF(order *entity.Order) ([]byte, error) {
 	pdf.SetFont("Arial", "", 7.5)
 	pdf.SetTextColor(75, 85, 99)
 	if order.Payment != nil && order.Payment.VANumber != nil {
-		pdf.CellFormat(180, 4.0, "Nomor Virtual Account (VA): "+*order.Payment.VANumber, "", 2, "L", false, 0, "")
-	} else if order.Payment != nil && order.Payment.BillKey != nil {
-		pdf.CellFormat(180, 4.0, "Kode Pembayaran / Bill Key: "+*order.Payment.BillKey, "", 2, "L", false, 0, "")
+		pdf.CellFormat(180, 4.0, "Nomor Virtual Account (VA): "+*order.Payment.VANumber, "", 0, "L", false, 0, "")
+	} else if order.Payment != nil && (order.Payment.PaymentCode != nil || order.Payment.BillKey != nil) {
+		label := "Kode Pembayaran / Bill Key: "
+		code := ""
+		if order.Payment.PaymentCode != nil && *order.Payment.PaymentCode != "" {
+			code = *order.Payment.PaymentCode
+		} else if order.Payment.BillKey != nil {
+			code = *order.Payment.BillKey
+		}
+
+		if order.Payment.PaymentType == "cstore" {
+			label = "Kode Pembayaran: "
+		}
+		pdf.CellFormat(180, 4.0, label+code, "", 0, "L", false, 0, "")
+	} else if (order.Payment != nil && order.Payment.DeeplinkURL != nil && *order.Payment.DeeplinkURL != "") || (order.Payment != nil && order.Payment.QRURL != nil && *order.Payment.QRURL != "") {
+		payURL := ""
+		if order.Payment.DeeplinkURL != nil && *order.Payment.DeeplinkURL != "" {
+			payURL = *order.Payment.DeeplinkURL
+		} else if order.Payment.QRURL != nil && *order.Payment.QRURL != "" {
+			payURL = *order.Payment.QRURL
+		}
+
+		prefix := "Tautan Pembayaran: "
+		prefixW := pdf.GetStringWidth(prefix) + 1.0
+		pdf.SetTextColor(75, 85, 99)
+		pdf.SetFont("Arial", "", 7.5)
+		pdf.CellFormat(prefixW, 4.0, prefix, "", 0, "L", false, 0, "")
+
+		pdf.SetTextColor(29, 78, 216)   // #1d4ed8 Blue link
+		pdf.SetFont("Arial", "BU", 7.5) // Bold + Underlined
+		pdf.CellFormat(180-prefixW, 4.0, "Bayar Sekarang", "", 0, "L", false, 0, payURL)
+
+		pdf.SetTextColor(75, 85, 99)
+		pdf.SetFont("Arial", "", 7.5)
 	} else {
-		pdf.CellFormat(180, 4.0, "Pembayaran diproses otomatis melalui payment gateway.", "", 2, "L", false, 0, "")
+		pdf.CellFormat(180, 4.0, "Pembayaran diproses otomatis melalui payment gateway.", "", 0, "L", false, 0, "")
 	}
 
+	pdf.SetXY(15, payY+11.8)
 	pdf.SetFont("Arial", "I", 7.0)
-	pdf.CellFormat(180, 4.0, "* Faktur ini adalah bukti pembayaran yang sah diterbitkan oleh sistem.", "", 0, "L", false, 0, "")
+	pdf.SetTextColor(107, 114, 128)
+	pdf.CellFormat(180, 3.8, "* Faktur ini adalah bukti pembayaran yang sah diterbitkan oleh sistem.", "", 0, "L", false, 0, "")
 
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {

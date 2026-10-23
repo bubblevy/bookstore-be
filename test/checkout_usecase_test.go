@@ -469,6 +469,60 @@ func TestCheckoutUsecase_PreviewCheckout(t *testing.T) {
 		assert.Equal(t, 225000, res.TotalPayment)
 	})
 
+	t.Run("error preview with invalid or unsupported courier service", func(t *testing.T) {
+		gormDB, _ := setupGormSqlmock(t)
+		mockCheckoutRepo := new(MockCheckoutRepository)
+		mockOrderRepo := new(MockOrderRepository)
+		mockAddressRepo := new(MockAddressRepositoryForCheckout)
+		mockDiscountUC := new(MockDiscountUsecaseForCheckout)
+		mockDiscountRepo := new(MockDiscountRepositoryForCheckout)
+		mockBiteship := new(MockBiteshipClientForCheckout)
+		mockMidtrans := new(MockMidtransServiceForCheckout)
+
+		uc := usecase.NewCheckoutUsecase(gormDB, mockCheckoutRepo, mockOrderRepo, mockAddressRepo, mockDiscountUC, mockDiscountRepo, mockBiteship, mockMidtrans)
+
+		dummyAddr := &entity.Address{
+			UserID:         userID,
+			BiteshipAreaID: "IDNP10IDNC157IDND1021IDZ59464",
+		}
+		mockAddressRepo.On("FindByID", mock.Anything, addrID).Return(dummyAddr, nil).Once()
+
+		dummyCartItems := []entity.CartItem{
+			{
+				BookID:   bookID,
+				Quantity: 2,
+				Book: entity.Book{
+					ID:          bookID,
+					Title:       "Buku Go",
+					Price:       100000.0,
+					Stock:       10,
+					WeightGrams: 500,
+					IsActive:    true,
+				},
+			},
+		}
+		mockCheckoutRepo.On("GetCartItemsWithBooks", mock.Anything, userID, []uint{cartItemID}).Return(dummyCartItems, nil).Once()
+
+		mockRates := []biteship.ShippingRatePricing{
+			{CourierCode: "jne", CourierServiceCode: "reg", Price: 20000},
+			{CourierCode: "jne", CourierServiceCode: "yes", Price: 35000},
+		}
+		mockBiteship.On("CalculateRatesByAreaID", mock.Anything, dummyAddr.BiteshipAreaID, "jne", mock.Anything).
+			Return(mockRates, nil).Once()
+
+		input := usecase.PreviewCheckoutInput{
+			CartItemIDs:    []uint{cartItemID},
+			AddressID:      &addrID,
+			Courier:        "jne",
+			CourierService: "acak", // not in mockRates
+			PaymentMethod:  "bca_va",
+		}
+
+		res, err := uc.PreviewCheckout(context.Background(), userID, input)
+		assert.ErrorIs(t, err, entity.ErrInvalidCourierService)
+		assert.Nil(t, res)
+	})
+
 	t.Run("success preview with voucher discount calculation", func(t *testing.T) {
 		gormDB, _ := setupGormSqlmock(t)
 		mockCheckoutRepo := new(MockCheckoutRepository)
@@ -736,8 +790,58 @@ func TestCheckoutUsecase_PreviewCheckout(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, res)
 		assert.Equal(t, 100000, res.ItemsSubtotal)
-		assert.Equal(t, 700, res.AdminFee) // 0.7% of 100000
-		assert.Equal(t, 120700, res.TotalPayment)
+		assert.Equal(t, 840, res.AdminFee) // 0.7% of (100000 + 20000)
+		assert.Equal(t, 120840, res.TotalPayment)
+	})
+
+	t.Run("success preview with convenience store payment method (flat admin fee 5000)", func(t *testing.T) {
+		gormDB, _ := setupGormSqlmock(t)
+		mockCheckoutRepo := new(MockCheckoutRepository)
+		mockAddressRepo := new(MockAddressRepositoryForCheckout)
+		mockBiteship := new(MockBiteshipClientForCheckout)
+
+		uc := usecase.NewCheckoutUsecase(gormDB, mockCheckoutRepo, nil, mockAddressRepo, nil, nil, mockBiteship, nil)
+
+		dummyAddr := &entity.Address{UserID: userID, BiteshipAreaID: "IDNP6"}
+		dummyAddr.ID = addrID
+		mockAddressRepo.On("FindByID", mock.Anything, addrID).Return(dummyAddr, nil).Once()
+
+		dummyCartItems := []entity.CartItem{
+			{
+				ID:       cartItemID,
+				BookID:   bookID,
+				Quantity: 1,
+				Book: entity.Book{
+					ID:          bookID,
+					Price:       100000,
+					Stock:       10,
+					IsActive:    true,
+					WeightGrams: 500,
+				},
+			},
+		}
+		mockCheckoutRepo.On("GetCartItemsWithBooks", mock.Anything, userID, []uint{cartItemID}).Return(dummyCartItems, nil).Once()
+
+		mockRates := []biteship.ShippingRatePricing{
+			{CourierCode: "jne", CourierServiceCode: "reg", Price: 20000},
+		}
+		mockBiteship.On("CalculateRatesByAreaID", mock.Anything, dummyAddr.BiteshipAreaID, "jne", mock.Anything).
+			Return(mockRates, nil).Once()
+
+		input := usecase.PreviewCheckoutInput{
+			CartItemIDs:    []uint{cartItemID},
+			AddressID:      &addrID,
+			Courier:        "jne",
+			CourierService: "reg",
+			PaymentMethod:  "indomaret",
+		}
+
+		res, err := uc.PreviewCheckout(context.Background(), userID, input)
+		assert.NoError(t, err)
+		assert.NotNil(t, res)
+		assert.Equal(t, 100000, res.ItemsSubtotal)
+		assert.Equal(t, 5000, res.AdminFee)
+		assert.Equal(t, 125000, res.TotalPayment)
 	})
 }
 
@@ -973,21 +1077,25 @@ func TestCheckoutUsecase_CreateOrder(t *testing.T) {
 		mockOrderRepo.On("CreateOrder", mock.Anything, mock.MatchedBy(func(o *entity.Order) bool {
 			return o.UserID == userID &&
 				o.Status == entity.OrderStatusWaitingPayment &&
-				o.TotalAmount == 120700
+				o.TotalAmount == 120840
 		}), mock.Anything).Return(nil).Once()
 
 		sqlMock.ExpectCommit()
 
 		qrURL := "https://api.sandbox.midtrans.com/v2/shopeepay/backend/qr-code"
+		deeplinkURL := "https://simulator.sandbox.midtrans.com/shopeepay/partner/app/payment-pin-test"
 		mockCharge := &payment.ChargeResponse{
 			TransactionID: "trx-shopee-12345",
 			PaymentType:   "shopeepay",
 			QRURL:         qrURL,
+			DeeplinkURL:   deeplinkURL,
 		}
-		mockMidtrans.On("Charge", mock.Anything, mock.Anything, int64(120700), "shopeepay").Return(mockCharge, nil).Once()
+		mockMidtrans.On("Charge", mock.Anything, mock.Anything, int64(120840), "shopeepay").Return(mockCharge, nil).Once()
 		mockCheckoutRepo.On("DeleteCartItems", mock.Anything, []uint{cartItemID}).Return(nil).Once()
 		mockOrderRepo.On("CreatePayment", mock.Anything, mock.MatchedBy(func(p *entity.Payment) bool {
-			return p.PaymentType == "shopeepay" && p.Status == entity.PaymentStatusPending
+			return p.PaymentType == "shopeepay" &&
+				p.Status == entity.PaymentStatusPending &&
+				p.DeeplinkURL != nil && *p.DeeplinkURL == deeplinkURL
 		})).Return(nil).Once()
 
 		input := usecase.CreateOrderInput{
@@ -1002,8 +1110,9 @@ func TestCheckoutUsecase_CreateOrder(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, res)
 		assert.Equal(t, string(entity.OrderStatusWaitingPayment), res.Status)
-		assert.Equal(t, 120700, res.TotalAmount)
+		assert.Equal(t, 120840, res.TotalAmount)
 		assert.Equal(t, qrURL, *res.PaymentInfo.QRURL)
+		assert.Equal(t, deeplinkURL, *res.PaymentInfo.DeeplinkURL)
 		assert.NoError(t, sqlMock.ExpectationsWereMet())
 	})
 

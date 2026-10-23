@@ -28,6 +28,10 @@ var (
 	writers []io.Writer
 )
 
+func init() {
+	log = slog.Default()
+}
+
 func Init(env, outputPath string) {
 	cfg = config{
 		env:        strings.ToLower(env),
