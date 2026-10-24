@@ -236,7 +236,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\r\n    \"token\": \"7927920615d339f197ca308260d00cc5b9ad084c1d193e8ecc29b601ffa7151c\"\r\n}",
+              "raw": "{\r\n    \"token\": \"94509f827a4c03f3c45dd4c22be075d32b4e14d53841017a1c954e730923ec98\"\r\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1395,38 +1395,6 @@
           "name": "Checkout",
           "item": [
             {
-              "name": "Payment Methods",
-              "request": {
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{BASE_URL}}/api/v1/checkout/payment-methods?amount=100000",
-                  "host": [
-                    "{{BASE_URL}}"
-                  ],
-                  "path": [
-                    "api",
-                    "v1",
-                    "checkout",
-                    "payment-methods"
-                  ],
-                  "query": [
-                    {
-                      "key": "amount",
-                      "value": "100000"
-                    }
-                  ]
-                }
-              },
-              "response": []
-            },
-            {
               "name": "Preview",
               "request": {
                 "method": "POST",
@@ -1444,7 +1412,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\r\n  \"cart_item_ids\": [1],\r\n//   \"address_id\": 1, optional\r\n  \"courier\": \"jne\", //optional\r\n  \"courier_service\": \"reg\",\r\n  \"payment_method\": \"alfamart\",\r\n  \"discount_code\": \"DISKONHEMAT\" // optional\r\n}"
+                  "raw": "{\r\n  \"cart_item_ids\": [1,2],\r\n//   \"address_id\": 1, optional\r\n  \"courier\": \"jne\", //optional\r\n  \"courier_service\": \"reg\",\r\n  \"payment_method\": \"alfamart\",\r\n  \"discount_code\": \"DISKONHEMAT\" // optional\r\n}"
                 },
                 "url": {
                   "raw": "{{BASE_URL}}/api/v1/checkout/preview",
@@ -1479,7 +1447,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\r\n  \"cart_item_ids\": [1],\r\n//   \"address_id\": 1, optional\r\n  \"courier\": \"jne\", //optional\r\n  \"courier_service\": \"reg\",\r\n  \"payment_method\": \"alfamart\",\r\n  \"discount_code\": \"DISKONHEMAT\" // optional\r\n}"
+                  "raw": "{\r\n  \"cart_item_ids\": [3],\r\n//   \"address_id\": 1, optional\r\n  \"courier\": \"jne\", //optional\r\n  \"courier_service\": \"reg\",\r\n  \"payment_method\": \"bni_va\",\r\n  \"discount_code\": \"DISKONHEMAT\" // optional\r\n}"
                 },
                 "url": {
                   "raw": "{{BASE_URL}}/api/v1/checkout/order",
@@ -1587,7 +1555,7 @@
                   "variable": [
                     {
                       "key": "invoice_number",
-                      "value": "INV-20261023-640684"
+                      "value": "INV-20261024-466459"
                     }
                   ]
                 }
@@ -1620,7 +1588,7 @@
                   "variable": [
                     {
                       "key": "invoice_number",
-                      "value": "INV-20261023-640684"
+                      "value": "INV-20261024-158432"
                     }
                   ]
                 }
@@ -1830,39 +1798,10 @@
           ]
         },
         {
-          "name": "Me",
-          "request": {
-            "auth": {
-              "type": "noauth"
-            },
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/api/v1/users/me",
-              "host": [
-                "{{BASE_URL}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "me"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
           "name": "Payment Method",
           "item": [
             {
-              "name": "All Payment Methods",
+              "name": "List Payment Method",
               "request": {
                 "method": "GET",
                 "header": [
@@ -1873,7 +1812,7 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{BASE_URL}}/api/v1/payment-methods?amount=100000&only_active=true",
+                  "raw": "{{BASE_URL}}/api/v1/payment-methods",
                   "host": [
                     "{{BASE_URL}}"
                   ],
@@ -1881,23 +1820,13 @@
                     "api",
                     "v1",
                     "payment-methods"
-                  ],
-                  "query": [
-                    {
-                      "key": "amount",
-                      "value": "100000"
-                    },
-                    {
-                      "key": "only_active",
-                      "value": "true"
-                    }
                   ]
                 }
               },
               "response": []
             },
             {
-              "name": "Payment Method Detail",
+              "name": "FInd By ID",
               "request": {
                 "method": "GET",
                 "header": [
@@ -1929,6 +1858,35 @@
               "response": []
             }
           ]
+        },
+        {
+          "name": "Me",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/v1/users/me",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -3200,7 +3158,7 @@
                   "variable": [
                     {
                       "key": "invoice_number",
-                      "value": "INV-20261023-803437"
+                      "value": "INV-20261021-607996"
                     }
                   ]
                 }
@@ -3224,7 +3182,7 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{BASE_URL}}/api/v1/reports?start_date=2026-09-01&end_date=2026-11-01&status=all",
+                  "raw": "{{BASE_URL}}/api/v1/reports?start_date=2026-09-01&end_date=2026-10-24&status=all&page=1&per_page=10",
                   "host": [
                     "{{BASE_URL}}"
                   ],
@@ -3240,12 +3198,20 @@
                     },
                     {
                       "key": "end_date",
-                      "value": "2026-11-01"
+                      "value": "2026-10-24"
                     },
                     {
                       "key": "status",
                       "value": "all",
                       "description": "all, waiting_payment, paid, processing, shipped, completed, cancelled, returned"
+                    },
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "per_page",
+                      "value": "10"
                     }
                   ]
                 }
@@ -3299,7 +3265,7 @@
           "name": "Payment Method",
           "item": [
             {
-              "name": "All Payment Methods",
+              "name": "List Payment Method",
               "request": {
                 "method": "GET",
                 "header": [
@@ -3324,7 +3290,39 @@
               "response": []
             },
             {
-              "name": "Update Payment Method",
+              "name": "FInd By ID",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/payment-methods/:id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payment-methods",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update",
               "request": {
                 "method": "PUT",
                 "header": [
@@ -3335,39 +3333,13 @@
                   }
                 ],
                 "body": {
-                  "mode": "formdata",
-                  "formdata": [
-                    {
-                      "key": "name",
-                      "value": "BCA Virtual Account",
-                      "type": "text"
-                    },
-                    {
-                      "key": "fee_type",
-                      "value": "fixed",
-                      "type": "text"
-                    },
-                    {
-                      "key": "fee_amount",
-                      "value": "5000",
-                      "type": "text"
-                    },
-                    {
-                      "key": "fee_percent",
-                      "value": "0",
-                      "type": "text"
-                    },
-                    {
-                      "key": "is_active",
-                      "value": "true",
-                      "type": "text"
-                    },
-                    {
-                      "key": "description",
-                      "value": "Bayar via ATM BCA, BCA mobile, myBCA, atau KlikBCA",
-                      "type": "text"
+                  "mode": "raw",
+                  "raw": "{\r\n  \"name\": \"BCA\",\r\n  \"category\": \"virtual_account\",\r\n  \"fee_type\": \"fixed\",\r\n  \"fee_amount\": 5000,\r\n  \"fee_percent\": 0,\r\n  \"image\": \"payments/bca_logo.svg\",  \r\n  \"is_active\": true  \r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
                     }
-                  ]
+                  }
                 },
                 "url": {
                   "raw": "{{BASE_URL}}/api/v1/payment-methods/:id",
