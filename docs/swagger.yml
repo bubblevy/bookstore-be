@@ -39,6 +39,8 @@ tags:
     description: Executive sales and order performance analytics, KPI summaries, and PDF export
   - name: Upload
     description: Image and asset upload management for book covers and categories
+  - name: Payment Method
+    description: Payment method catalog, instructions, fee configurations, and maintenance toggling
 
 
 paths:
@@ -2631,12 +2633,51 @@ paths:
   # =========================================================================
   # CHECKOUT
   # =========================================================================
+  /api/v1/checkout/payment-methods:
+    get:
+      tags:
+        - Checkout
+      summary: Get available payment methods
+      description: Returns all supported payment methods grouped by category (Virtual Account, E-Wallet & QRIS, Convenience Store) with administrative fee details. Optional query parameter amount calculates estimated fee.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: amount
+          schema:
+            type: integer
+          description: Estimated gross transaction amount to calculate dynamic percentage admin fees
+          example: 150000
+      responses:
+        '200':
+          description: Payment methods retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "payment methods retrieved successfully"
+                  data:
+                    $ref: '#/components/schemas/PaymentMethodsResponse'
+        '401':
+          description: Unauthorized request
+        '500':
+          description: Internal server error
+
   /api/v1/checkout/preview:
     post:
       tags:
         - Checkout
-      summary: Preview checkout calculation
-      description: Authenticated endpoint to simulate order checkout with real-time book prices, shipping rates, voucher discounts, and payment admin fees prior to placing an order.
+      summary: Preview checkout calculation (Simulate order)
+      description: Authenticated endpoint to simulate order checkout. Returns calculated total amounts, applied discounts, all available courier options (available_couriers), and all active payment methods (available_payment_methods) with calculated fees.
       security:
         - BearerAuth: []
       requestBody:
@@ -2664,12 +2705,70 @@ paths:
                     example: "checkout preview calculated successfully"
                   data:
                     $ref: '#/components/schemas/CheckoutPreviewResponse'
+              example:
+                code: 200
+                status: true
+                message: "checkout preview calculated successfully"
+                data:
+                  address:
+                    id: 1
+                    receiver_name: "Budi Santoso"
+                    phone: "081234567890"
+                    address_line: "Jl. Sudirman No. 45"
+                    province_name: "DKI Jakarta"
+                    city_name: "Jakarta Selatan"
+                    district_name: "Kebayoran Baru"
+                    subdistrict_name: "Senayan"
+                    postal_code: "12190"
+                  items:
+                    - book_id: 1
+                      title: "Laskar Pelangi"
+                      cover_image: "http://localhost:8000/api/v1/static/covers/laskar-pelangi.jpg"
+                      price: 85000
+                      quantity: 2
+                      weight_grams: 300
+                      subtotal: 170000
+                  items_subtotal: 170000
+                  total_weight_grams: 600
+                  courier: "jne"
+                  courier_service: "reg"
+                  shipping_cost: 15000
+                  discount_code: "DISKONHEMAT"
+                  discount_amount: 17000
+                  payment_method: "bca_va"
+                  admin_fee: 5000
+                  total_payment: 173000
+                  available_couriers:
+                    - courier_code: "jne"
+                      courier_name: "JNE"
+                      courier_service_name: "Reguler"
+                      courier_service_code: "reg"
+                      description: "Layanan Reguler JNE"
+                      price: 15000
+                      etd: "1-2"
+                      type: "standard"
+                    - courier_code: "sicepat"
+                      courier_name: "SiCepat"
+                      courier_service_name: "SIUNT"
+                      courier_service_code: "siunt"
+                      description: "SiCepat Regular"
+                      price: 14000
+                      etd: "1-2"
+                      type: "standard"
+                  available_payment_methods:
+                    - code: "bca_va"
+                      name: "BCA Virtual Account"
+                      category: "virtual_account"
+                      image: "http://localhost:8000/api/v1/static/payments/bca_logo.svg"
+                      estimated_fee: 5000
+                      fee_percent: 0.0
+                      fee_amount: 5000
         '400':
           description: Cart is empty, insufficient stock, or discount invalid
         '401':
           description: Unauthorized request
         '404':
-          description: Destination address not found
+          description: Destination address or cart items not found
 
   /api/v1/checkout/order:
     post:
@@ -3040,6 +3139,20 @@ paths:
             enum: [all, waiting_payment, paid, processing, shipped, completed, cancelled, returned]
             default: all
           description: Filter orders included in the report by status
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+          description: Optional page number for order transaction details pagination
+          example: 1
+        - in: query
+          name: per_page
+          schema:
+            type: integer
+            default: 10
+          description: Optional number of orders per page
+          example: 10
       responses:
         '200':
           description: Order report generated successfully
@@ -3242,6 +3355,124 @@ paths:
           description: Static file content stream (image/jpeg, image/png, etc.)
         '404':
           description: File not found
+
+  # =========================================================================
+  # PAYMENT METHODS
+  # =========================================================================
+  /api/v1/payment-methods:
+    get:
+      tags:
+        - Payment Method
+      summary: Get all payment methods
+      description: |
+        Retrieves all payment methods grouped by category (Virtual Account, E-Wallet, Convenience Store).
+        Includes full payment instructions, fee breakdown, and maintenance status (`is_active`).
+        Owner can query all methods while checkout clients can estimate fees with `?amount=`.
+      parameters:
+        - in: query
+          name: amount
+          schema:
+            type: integer
+          description: "Order amount to calculate dynamic percentage fees (e.g. 100000)"
+          example: 100000
+        - in: query
+          name: only_active
+          schema:
+            type: boolean
+          description: "Filter only active payment methods not under maintenance"
+          example: false
+      responses:
+        '200':
+          description: Payment methods retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PaymentMethodsResponse'
+
+  /api/v1/payment-methods/{id}:
+    get:
+      tags:
+        - Payment Method
+      summary: Get payment method detail
+      description: Retrieves single payment method by ID with its payment instructions and configuration.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: "Payment method ID"
+          example: 1
+      responses:
+        '200':
+          description: Payment method retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PaymentMethodDetailResponse'
+        '404':
+          description: Payment method not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags:
+        - Payment Method
+      summary: Update payment method configuration
+      description: |
+        Owner/Admin endpoint to update payment method details, instructions, fees, or toggle `is_active` when Midtrans payment channel is under maintenance.
+        **NOTE: The payment method `code` is immutable and cannot be edited.**
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: "Payment method ID"
+          example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePaymentMethodRequest'
+      responses:
+        '200':
+          description: Payment method updated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PaymentMethodDetailResponse'
+        '400':
+          description: Validation error or invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden (Admin only)
+        '404':
+          description: Payment method not found
 
 components:
   securitySchemes:
@@ -3854,6 +4085,9 @@ components:
         stock:
           type: integer
           example: 40
+        sold:
+          type: integer
+          example: 15
         weight_grams:
           type: integer
           example: 450
@@ -3934,6 +4168,9 @@ components:
         stock:
           type: integer
           example: 40
+        sold:
+          type: integer
+          example: 15
         cover_image:
           type: string
           nullable: true
@@ -4546,6 +4783,9 @@ components:
         stock:
           type: integer
           example: 15
+        sold:
+          type: integer
+          example: 10
         cover_image:
           type: string
           nullable: true
@@ -5238,11 +5478,6 @@ components:
     # =========================================================================
     CheckoutPreviewRequest:
       type: object
-      required:
-        - cart_item_ids
-        - courier
-        - courier_service
-        - payment_method
       properties:
         cart_item_ids:
           type: array
@@ -5382,6 +5617,42 @@ components:
           type: integer
           description: "Grand total amount to pay"
           example: 258000
+        available_couriers:
+          type: array
+          description: "All available shipping courier rates with real-time costs and ETD from Biteship"
+          items:
+            $ref: '#/components/schemas/CourierOptionResponse'
+        available_payment_methods:
+          type: array
+          description: "All active payment methods with dynamic fee calculation"
+          items:
+            $ref: '#/components/schemas/AvailablePaymentMethodItem'
+
+    AvailablePaymentMethodItem:
+      type: object
+      properties:
+        code:
+          type: string
+          example: "bca_va"
+        name:
+          type: string
+          example: "BCA Virtual Account"
+        category:
+          type: string
+          example: "virtual_account"
+        image:
+          type: string
+          example: "http://localhost:8080/api/v1/static/payments/bca_logo.svg"
+        estimated_fee:
+          type: integer
+          example: 5000
+        fee_percent:
+          type: number
+          format: double
+          example: 0.0
+        fee_amount:
+          type: integer
+          example: 5000
 
     CreateOrderRequest:
       type: object
@@ -5424,6 +5695,11 @@ components:
     PaymentInfoResponse:
       type: object
       properties:
+        payment_method:
+          type: string
+          nullable: true
+          description: "Payment method code selected by customer"
+          example: "bca_va"
         payment_type:
           type: string
           description: "Type of payment channel"
@@ -5468,6 +5744,11 @@ components:
           nullable: true
           description: "GoPay / ShopeePay native app deeplink redirect URL (optional)."
           example: null
+        instructions:
+          type: array
+          description: "Step-by-step payment instructions for customer"
+          items:
+            $ref: '#/components/schemas/PaymentInstructionItem'
 
     CreateOrderResponse:
       type: object
@@ -5631,6 +5912,16 @@ components:
     OrderPaymentResponse:
       type: object
       properties:
+        payment_method:
+          type: string
+          nullable: true
+          description: "Payment method code (e.g. bca_va)"
+          example: "bca_va"
+        payment_method_name:
+          type: string
+          nullable: true
+          description: "Payment method display name (e.g. BCA Virtual Account)"
+          example: "BCA Virtual Account"
         payment_type:
           type: string
           example: "bank_transfer"
@@ -5683,6 +5974,11 @@ components:
           nullable: true
           description: "Payment timestamp (optional)."
           example: "2026-10-17T17:15:00Z"
+        instructions:
+          type: array
+          description: "Step-by-step payment instructions for customer"
+          items:
+            $ref: '#/components/schemas/PaymentInstructionItem'
 
     OrderItemResponse:
       type: object
@@ -5970,6 +6266,9 @@ components:
         total_orders:
           type: integer
           example: 50
+        waiting_payment_orders:
+          type: integer
+          example: 5
         paid_orders:
           type: integer
           example: 35
@@ -6075,3 +6374,171 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OrderReportItem'
+        pagination:
+          type: object
+          nullable: true
+          properties:
+            current_page:
+              type: integer
+              example: 1
+            per_page:
+              type: integer
+              example: 10
+            total_items:
+              type: integer
+              example: 45
+            total_pages:
+              type: integer
+              example: 5
+
+    PaymentMethodItemResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        code:
+          type: string
+          example: "bca_va"
+        name:
+          type: string
+          example: "BCA Virtual Account"
+        category:
+          type: string
+          example: "virtual_account"
+        fee_type:
+          type: string
+          enum: [fixed, percentage]
+          example: "fixed"
+        fee_amount:
+          type: integer
+          example: 5000
+        fee_percent:
+          type: number
+          format: double
+          example: 0.0
+        estimated_fee:
+          type: integer
+          example: 5000
+        description:
+          type: string
+          example: "Bayar via ATM BCA, BCA mobile, myBCA, atau KlikBCA"
+        image:
+          type: string
+          example: "http://localhost:8080/api/v1/static/payments/bca_logo.svg"
+        is_active:
+          type: boolean
+          example: true
+
+    PaymentInstructionItem:
+      type: object
+      properties:
+        title:
+          type: string
+          example: "Melalui Semua E-Wallet"
+        content:
+          type: string
+          example: "<ol start=\"1\"><li><p>Masuk ke aplikasi E-wallet Yang Anda Gunakan...</p></li></ol>"
+
+    PaymentMethodDetailResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        code:
+          type: string
+          example: "bca_va"
+        name:
+          type: string
+          example: "BCA Virtual Account"
+        category:
+          type: string
+          example: "virtual_account"
+        fee_type:
+          type: string
+          enum: [fixed, percentage]
+          example: "fixed"
+        fee_amount:
+          type: integer
+          example: 5000
+        fee_percent:
+          type: number
+          format: double
+          example: 0.0
+        image:
+          type: string
+          example: "http://localhost:8080/api/v1/static/payments/bca_logo.svg"
+        description:
+          type: string
+          example: "Bayar via ATM BCA, BCA mobile, myBCA, atau KlikBCA"
+        instructions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentInstructionItem'
+        is_active:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    UpdatePaymentMethodRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "BCA Virtual Account"
+        category:
+          type: string
+          example: "virtual_account"
+        fee_type:
+          type: string
+          enum: [fixed, percentage]
+          example: "fixed"
+        fee_amount:
+          type: integer
+          example: 5000
+        fee_percent:
+          type: number
+          format: double
+          example: 0.0
+        image:
+          type: string
+          example: "payments/bca_logo.svg"
+        description:
+          type: string
+          example: "Bayar via ATM BCA, BCA mobile, myBCA, atau KlikBCA"
+        instructions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentInstructionItem'
+        is_active:
+          type: boolean
+          description: "Owner toggles this to false when Midtrans payment channel is undergoing maintenance"
+          example: true
+
+    PaymentMethodGroupResponse:
+      type: object
+      properties:
+        category:
+          type: string
+          example: "virtual_account"
+        name:
+          type: string
+          example: "Virtual Account (Transfer Bank)"
+        methods:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentMethodItemResponse'
+
+    PaymentMethodsResponse:
+      type: object
+      properties:
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentMethodGroupResponse'

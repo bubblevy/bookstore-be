@@ -9,11 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bubblevy/bookstore/internal/delivery/http/dto"
 	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/repository"
 	"github.com/bubblevy/bookstore/pkg/biteship"
 	"github.com/bubblevy/bookstore/pkg/logger"
 	"github.com/bubblevy/bookstore/pkg/payment"
+	"github.com/bubblevy/bookstore/pkg/storage"
 	"gorm.io/gorm"
 )
 
@@ -27,19 +29,21 @@ type PreviewCheckoutInput struct {
 }
 
 type PreviewCheckoutResult struct {
-	Address          *entity.Address
-	Items            []entity.OrderItem
-	ItemsSubtotal    int
-	TotalWeightGrams int
-	Courier          string
-	CourierService   string
-	ShippingCost     int
-	DiscountCode     *string
-	DiscountAmount   int
-	PaymentMethod    string
-	AdminFee         int
-	TotalPayment     int
-	DiscountID       *uint
+	Address                 *entity.Address
+	Items                   []entity.OrderItem
+	ItemsSubtotal           int
+	TotalWeightGrams        int
+	Courier                 string
+	CourierService          string
+	ShippingCost            int
+	DiscountCode            *string
+	DiscountAmount          int
+	PaymentMethod           string
+	AdminFee                int
+	TotalPayment            int
+	DiscountID              *uint
+	AvailableCouriers       []dto.CourierOptionResponse
+	AvailablePaymentMethods []dto.AvailablePaymentMethodItem
 }
 
 type CreateOrderInput struct {
@@ -57,15 +61,17 @@ type CreateOrderResult struct {
 	TotalAmount     int
 	PaymentDeadline time.Time
 	PaymentInfo     struct {
-		PaymentType string
-		Bank        *string
-		VANumber    *string
-		BillKey     *string
-		BillerCode  *string
-		PaymentCode *string
-		Store       *string
-		QRURL       *string
-		DeeplinkURL *string
+		PaymentMethod *string
+		PaymentType   string
+		Bank          *string
+		VANumber      *string
+		BillKey       *string
+		BillerCode    *string
+		PaymentCode   *string
+		Store         *string
+		QRURL         *string
+		DeeplinkURL   *string
+		Instructions  []dto.PaymentInstructionDTO
 	}
 }
 
@@ -88,17 +94,20 @@ type CheckoutUsecase interface {
 	PreviewCheckout(ctx context.Context, userID uint, input PreviewCheckoutInput) (*PreviewCheckoutResult, error)
 	CreateOrder(ctx context.Context, userID uint, input CreateOrderInput) (*CreateOrderResult, error)
 	HandleMidtransWebhook(ctx context.Context, input MidtransWebhookInput) error
+	GetPaymentMethods(ctx context.Context, amount int) (*dto.PaymentMethodsResponse, error)
 }
 
 type checkoutUsecase struct {
-	db              *gorm.DB
-	checkoutRepo    repository.CheckoutRepository
-	orderRepo       repository.OrderRepository
-	addressRepo     repository.AddressRepository
-	discountUsecase DiscountUsecase
-	discountRepo    repository.DiscountRepository
-	biteshipSvc     biteship.Client
-	midtransSvc     payment.MidtransService
+	db                *gorm.DB
+	checkoutRepo      repository.CheckoutRepository
+	orderRepo         repository.OrderRepository
+	addressRepo       repository.AddressRepository
+	discountUsecase   DiscountUsecase
+	discountRepo      repository.DiscountRepository
+	biteshipSvc       biteship.Client
+	midtransSvc       payment.MidtransService
+	paymentMethodRepo repository.PaymentMethodRepository
+	storageSvc        storage.StorageService
 }
 
 func NewCheckoutUsecase(
@@ -110,46 +119,80 @@ func NewCheckoutUsecase(
 	discountRepo repository.DiscountRepository,
 	biteshipSvc biteship.Client,
 	midtransSvc payment.MidtransService,
+	extraDeps ...interface{},
 ) CheckoutUsecase {
+	var pmRepo repository.PaymentMethodRepository
+	var storageSvc storage.StorageService
+
+	for _, dep := range extraDeps {
+		switch v := dep.(type) {
+		case repository.PaymentMethodRepository:
+			pmRepo = v
+		case storage.StorageService:
+			storageSvc = v
+		}
+	}
+
 	return &checkoutUsecase{
-		db:              db,
-		checkoutRepo:    checkoutRepo,
-		orderRepo:       orderRepo,
-		addressRepo:     addressRepo,
-		discountUsecase: discountUsecase,
-		discountRepo:    discountRepo,
-		biteshipSvc:     biteshipSvc,
-		midtransSvc:     midtransSvc,
+		db:                db,
+		checkoutRepo:      checkoutRepo,
+		orderRepo:         orderRepo,
+		addressRepo:       addressRepo,
+		discountUsecase:   discountUsecase,
+		discountRepo:      discountRepo,
+		biteshipSvc:       biteshipSvc,
+		midtransSvc:       midtransSvc,
+		paymentMethodRepo: pmRepo,
+		storageSvc:        storageSvc,
 	}
 }
 
-func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, input PreviewCheckoutInput) (*PreviewCheckoutResult, error) {
-	if len(input.CartItemIDs) == 0 {
-		return nil, entity.ErrCartEmpty
+func (u *checkoutUsecase) formatFullImageURL(img string) string {
+	clean := strings.TrimSpace(img)
+	if clean == "" {
+		return ""
 	}
+	if strings.HasPrefix(clean, "http://") || strings.HasPrefix(clean, "https://") {
+		return clean
+	}
+	if u.storageSvc != nil {
+		return u.storageSvc.GetURL(clean)
+	}
+	return "/api/v1/static/" + strings.TrimLeft(clean, "/")
+}
 
+func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, input PreviewCheckoutInput) (*PreviewCheckoutResult, error) {
 	// 1. Fetch destination address snapshot (optional for preview, required for create order)
 	var address *entity.Address
 	var err error
-	if input.AddressID != nil && *input.AddressID > 0 {
-		address, err = u.addressRepo.FindByID(ctx, *input.AddressID)
-		if err != nil || address == nil || address.UserID != userID {
-			return nil, entity.ErrAddressNotFound
-		}
-	} else {
-		address, _ = u.addressRepo.FindPrimaryByUserID(ctx, userID)
-		if address != nil && address.UserID != userID {
-			address = nil
+	if u.addressRepo != nil {
+		if input.AddressID != nil && *input.AddressID > 0 {
+			address, err = u.addressRepo.FindByID(ctx, *input.AddressID)
+			if err != nil || address == nil || address.UserID != userID {
+				return nil, entity.ErrAddressNotFound
+			}
+		} else {
+			address, _ = u.addressRepo.FindPrimaryByUserID(ctx, userID)
+			if address != nil && address.UserID != userID {
+				address = nil
+			}
 		}
 	}
 
 	// 2. Fetch cart items with book details
-	cartItems, err := u.checkoutRepo.GetCartItemsWithBooks(ctx, userID, input.CartItemIDs)
-	if err != nil {
-		return nil, err
+	var cartItems []entity.CartItem
+	if u.checkoutRepo != nil {
+		cartItems, err = u.checkoutRepo.GetCartItemsWithBooks(ctx, userID, input.CartItemIDs)
+		if err != nil {
+			return nil, err
+		}
 	}
-	if len(cartItems) == 0 {
-		return nil, entity.ErrCartItemNotFound
+	if len(input.CartItemIDs) > 0 {
+		if len(cartItems) == 0 || len(cartItems) != len(input.CartItemIDs) {
+			return nil, entity.ErrCartItemNotFound
+		}
+	} else if len(cartItems) == 0 {
+		return nil, entity.ErrCartEmpty
 	}
 
 	var itemsSubtotal int
@@ -209,24 +252,54 @@ func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, inpu
 		}
 	}
 
-	// 3. Calculate shipping cost via Biteship Area ID if address & courier are provided
+	// 3. Calculate shipping cost and/or fetch available couriers via Biteship
 	var shippingCost int
-	if address != nil && address.BiteshipAreaID != "" && input.Courier != "" && input.CourierService != "" {
-		rates, err := u.biteshipSvc.CalculateRatesByAreaID(ctx, address.BiteshipAreaID, input.Courier, rateItems)
-		if err != nil || len(rates) == 0 {
-			return nil, entity.ErrShippingRateFailed
-		}
+	availableCouriers := make([]dto.CourierOptionResponse, 0)
 
-		foundService := false
-		for _, r := range rates {
-			if strings.EqualFold(r.CourierServiceCode, input.CourierService) {
-				shippingCost = int(r.Price)
-				foundService = true
-				break
+	if address != nil && address.BiteshipAreaID != "" && u.biteshipSvc != nil {
+		couriersToQuery := "jne,sicepat,jnt,anteraja,tiki,pos"
+		rates, err := u.biteshipSvc.CalculateRatesByAreaID(ctx, address.BiteshipAreaID, couriersToQuery, rateItems)
+		if err != nil {
+			logger.Error("failed to calculate biteship rates for checkout preview", "dest_area_id", address.BiteshipAreaID, "error", err)
+		} else if len(rates) > 0 {
+			availableCouriers = make([]dto.CourierOptionResponse, 0, len(rates))
+			for _, r := range rates {
+				etd := strings.TrimSpace(r.Duration)
+				if etd == "" {
+					etd = strings.TrimSpace(r.ShipmentDurationRange)
+				}
+				if etd == "" {
+					etd = "-"
+				}
+				availableCouriers = append(availableCouriers, dto.CourierOptionResponse{
+					CourierCode:        r.CourierCode,
+					CourierName:        r.CourierName,
+					CourierServiceName: r.CourierServiceName,
+					CourierServiceCode: r.CourierServiceCode,
+					Description:        r.Description,
+					Price:              int(r.Price),
+					ETD:                etd,
+					Type:               r.Type,
+				})
 			}
 		}
-		if !foundService {
-			return nil, entity.ErrInvalidCourierService
+
+		if input.Courier != "" && input.CourierService != "" {
+			if err != nil || len(availableCouriers) == 0 {
+				return nil, entity.ErrShippingRateFailed
+			}
+
+			foundService := false
+			for _, opt := range availableCouriers {
+				if strings.EqualFold(opt.CourierCode, input.Courier) && strings.EqualFold(opt.CourierServiceCode, input.CourierService) {
+					shippingCost = opt.Price
+					foundService = true
+					break
+				}
+			}
+			if !foundService {
+				return nil, entity.ErrInvalidCourierService
+			}
 		}
 	}
 
@@ -247,51 +320,111 @@ func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, inpu
 		}
 	}
 
-	// 5. Validate payment method & calculate administrative fees if specified
+	// 5. Calculate base amount for payment & fee calculation
+	baseAmount := itemsSubtotal + shippingCost - discountAmount
+	if baseAmount < 0 {
+		baseAmount = 0
+	}
+
+	calcFee := func(feeType string, flatAmount int, percent float64) int {
+		if feeType == "percentage" {
+			if baseAmount > 0 {
+				return int(math.Round(float64(baseAmount) * percent))
+			}
+			return 0
+		}
+		return flatAmount
+	}
+
+	// 6. Build available active payment methods with calculated fee
+	var availablePaymentMethods []dto.AvailablePaymentMethodItem
+	var activeMethods []entity.PaymentMethod
+	if u.paymentMethodRepo != nil {
+		var err error
+		activeMethods, err = u.paymentMethodRepo.FindAll(ctx, true)
+		if err == nil {
+			availablePaymentMethods = make([]dto.AvailablePaymentMethodItem, 0, len(activeMethods))
+			for _, m := range activeMethods {
+				availablePaymentMethods = append(availablePaymentMethods, dto.AvailablePaymentMethodItem{
+					Code:         m.Code,
+					Name:         m.Name,
+					Category:     m.Category,
+					Image:        u.formatFullImageURL(m.Image),
+					EstimatedFee: calcFee(m.FeeType, m.FeeAmount, m.FeePercent),
+					FeePercent:   m.FeePercent,
+					FeeAmount:    m.FeeAmount,
+				})
+			}
+		}
+	}
+
+	// 7. Validate specific payment method if selected
 	adminFee := 0
 	if input.PaymentMethod != "" {
 		if !payment.IsSupportedPaymentMethod(input.PaymentMethod) {
 			return nil, entity.ErrInvalidPaymentMethod
 		}
 
-		baseAmount := itemsSubtotal + shippingCost - discountAmount
-		if baseAmount < 0 {
-			baseAmount = 0
+		var pm *entity.PaymentMethod
+		// Check from already loaded active methods first to avoid redundant DB query
+		for i := range activeMethods {
+			if strings.EqualFold(activeMethods[i].Code, input.PaymentMethod) {
+				pm = &activeMethods[i]
+				break
+			}
 		}
 
-		switch strings.ToLower(input.PaymentMethod) {
-		case "bca_va", "bni_va", "bri_va", "permata_va", "cimb_va":
-			adminFee = 5000 // Flat rate Virtual Account
-		case "mandiri_bill", "echannel":
-			adminFee = 4000 // Mandiri Bill
-		case "gopay", "qris", "shopeepay":
-			adminFee = int(math.Round(float64(baseAmount) * 0.007))
-		case "indomaret", "alfamart":
-			adminFee = 5000 // Flat rate Convenience Store (Indomaret / Alfamart)
-		default:
-			adminFee = 0
+		if pm == nil && u.paymentMethodRepo != nil {
+			var err error
+			pm, err = u.paymentMethodRepo.FindByCode(ctx, input.PaymentMethod)
+			if err != nil {
+				return nil, err
+			}
+			if pm != nil && !pm.IsActive {
+				return nil, entity.ErrPaymentMethodInactive
+			}
+		}
+
+		if pm != nil {
+			if pm.FeeType == "percentage" {
+				adminFee = int(math.Round(float64(baseAmount) * pm.FeePercent))
+			} else {
+				adminFee = pm.FeeAmount
+			}
+		} else {
+			switch strings.ToLower(input.PaymentMethod) {
+			case "bca_va", "bni_va", "bri_va", "permata_va", "cimb_va":
+				adminFee = 5000 // Flat rate Virtual Account
+			case "mandiri_bill", "echannel":
+				adminFee = 4000 // Mandiri Bill
+			case "gopay", "qris", "shopeepay":
+				adminFee = int(math.Round(float64(baseAmount) * 0.007))
+			case "indomaret", "alfamart":
+				adminFee = 5000 // Flat rate Convenience Store (Indomaret / Alfamart)
+			default:
+				adminFee = 0
+			}
 		}
 	}
 
-	totalPayment := itemsSubtotal + shippingCost + adminFee - discountAmount
-	if totalPayment < 0 {
-		totalPayment = 0
-	}
+	totalPayment := baseAmount + adminFee
 
 	return &PreviewCheckoutResult{
-		Address:          address,
-		Items:            orderItems,
-		ItemsSubtotal:    itemsSubtotal,
-		TotalWeightGrams: totalWeightGrams,
-		Courier:          input.Courier,
-		CourierService:   input.CourierService,
-		ShippingCost:     shippingCost,
-		DiscountCode:     input.DiscountCode,
-		DiscountAmount:   discountAmount,
-		DiscountID:       discountID,
-		PaymentMethod:    input.PaymentMethod,
-		AdminFee:         adminFee,
-		TotalPayment:     totalPayment,
+		Address:                 address,
+		Items:                   orderItems,
+		ItemsSubtotal:           itemsSubtotal,
+		TotalWeightGrams:        totalWeightGrams,
+		Courier:                 input.Courier,
+		CourierService:          input.CourierService,
+		ShippingCost:            shippingCost,
+		DiscountCode:            input.DiscountCode,
+		DiscountAmount:          discountAmount,
+		DiscountID:              discountID,
+		PaymentMethod:           input.PaymentMethod,
+		AdminFee:                adminFee,
+		TotalPayment:            totalPayment,
+		AvailableCouriers:       availableCouriers,
+		AvailablePaymentMethods: availablePaymentMethods,
 	}, nil
 }
 
@@ -419,8 +552,10 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 		rawResp = &chargeRes.RawResponse
 	}
 
+	pmCode := strings.ToLower(input.PaymentMethod)
 	paymentRecord := &entity.Payment{
 		OrderID:               order.ID,
+		PaymentMethodCode:     &pmCode,
 		MidtransTransactionID: &chargeRes.TransactionID,
 		PaymentType:           chargeRes.PaymentType,
 		Bank:                  bank,
@@ -458,6 +593,7 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 		PaymentDeadline: deadline,
 	}
 
+	result.PaymentInfo.PaymentMethod = &input.PaymentMethod
 	result.PaymentInfo.PaymentType = chargeRes.PaymentType
 	result.PaymentInfo.Bank = bank
 	result.PaymentInfo.VANumber = vaNumber
@@ -467,6 +603,22 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 	result.PaymentInfo.Store = store
 	result.PaymentInfo.QRURL = qrURL
 	result.PaymentInfo.DeeplinkURL = deeplinkURL
+
+	var instructions []dto.PaymentInstructionDTO
+	if u.paymentMethodRepo != nil {
+		if pm, err := u.paymentMethodRepo.FindByCode(ctx, input.PaymentMethod); err == nil && pm != nil {
+			if len(pm.Instructions) > 0 {
+				instructions = make([]dto.PaymentInstructionDTO, len(pm.Instructions))
+				for i, inst := range pm.Instructions {
+					instructions[i] = dto.PaymentInstructionDTO{
+						Title:   inst.Title,
+						Content: inst.Content,
+					}
+				}
+			}
+		}
+	}
+	result.PaymentInfo.Instructions = instructions
 
 	return result, nil
 }
@@ -575,3 +727,88 @@ func nilIfEmpty(s string) *string {
 	}
 	return &trimmed
 }
+
+func (u *checkoutUsecase) GetPaymentMethods(ctx context.Context, amount int) (*dto.PaymentMethodsResponse, error) {
+	if amount < 0 {
+		amount = 0
+	}
+
+	calcFee := func(feeType string, flatAmount int, percent float64) int {
+		if feeType == "percentage" {
+			if amount > 0 {
+				return int(math.Round(float64(amount) * percent))
+			}
+			return 0
+		}
+		return flatAmount
+	}
+
+	if u.paymentMethodRepo != nil {
+		methods, err := u.paymentMethodRepo.FindAll(ctx, false)
+		if err == nil && len(methods) > 0 {
+			categoryOrder := []string{"virtual_account", "ewallet", "convenience_store"}
+			categoryLabels := map[string]string{
+				"virtual_account":   "Virtual Account (Transfer Bank)",
+				"ewallet":           "E-Wallet & QRIS",
+				"convenience_store": "Gerai Retail (Convenience Store)",
+			}
+
+			groupsMap := make(map[string][]dto.PaymentMethodItemResponse)
+			for _, m := range methods {
+				item := dto.PaymentMethodItemResponse{
+					ID:           m.ID,
+					Code:         m.Code,
+					Name:         m.Name,
+					Category:     m.Category,
+					FeeType:      m.FeeType,
+					FeeAmount:    m.FeeAmount,
+					FeePercent:   m.FeePercent,
+					EstimatedFee: calcFee(m.FeeType, m.FeeAmount, m.FeePercent),
+					Description:  m.Description,
+					Image:        u.formatFullImageURL(m.Image),
+					IsActive:     m.IsActive,
+				}
+
+				groupsMap[m.Category] = append(groupsMap[m.Category], item)
+			}
+
+			var groups []dto.PaymentMethodGroupResponse
+			seenCategories := make(map[string]bool)
+
+			for _, cat := range categoryOrder {
+				items, exists := groupsMap[cat]
+				if exists && len(items) > 0 {
+					groups = append(groups, dto.PaymentMethodGroupResponse{
+						Category: cat,
+						Name:     categoryLabels[cat],
+						Methods:  items,
+					})
+					seenCategories[cat] = true
+				}
+			}
+
+			for cat, items := range groupsMap {
+				if !seenCategories[cat] && len(items) > 0 {
+					label, exists := categoryLabels[cat]
+					if !exists {
+						label = strings.Title(strings.ReplaceAll(cat, "_", " "))
+					}
+					groups = append(groups, dto.PaymentMethodGroupResponse{
+						Category: cat,
+						Name:     label,
+						Methods:  items,
+					})
+				}
+			}
+
+			return &dto.PaymentMethodsResponse{
+				Groups: groups,
+			}, nil
+		}
+	}
+
+	return &dto.PaymentMethodsResponse{
+		Groups: []dto.PaymentMethodGroupResponse{},
+	}, nil
+}
+

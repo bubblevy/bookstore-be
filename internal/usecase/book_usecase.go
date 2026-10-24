@@ -76,6 +76,7 @@ type BookListItem struct {
 	OriginalPrice      *int             `json:"original_price,omitempty"`
 	DiscountPercentage *int             `json:"discount_percentage,omitempty"`
 	Stock              int              `json:"stock"`
+	Sold               int              `json:"sold"`
 	WeightGrams        int              `json:"weight_grams"`
 	CoverImage         *string          `json:"cover_image,omitempty"`
 	IsActive           bool             `json:"is_active"`
@@ -102,6 +103,7 @@ type BookDetailResult struct {
 	Height             float64          `json:"height"`
 	Condition          string           `json:"condition"`
 	Stock              int              `json:"stock"`
+	Sold               int              `json:"sold"`
 	CoverImage         *string          `json:"cover_image,omitempty"`
 	IsActive           bool             `json:"is_active"`
 	Category           BookRelationItem `json:"category"`
@@ -216,6 +218,7 @@ func (u *bookUsecase) toDetailResult(b *entity.Book) *BookDetailResult {
 		Height:             b.Height,
 		Condition:          b.Condition,
 		Stock:              b.Stock,
+		Sold:               b.Sold,
 		CoverImage:         b.CoverImage,
 		IsActive:           b.IsActive,
 		Category: BookRelationItem{
@@ -415,6 +418,7 @@ func (u *bookUsecase) FindAll(ctx context.Context, filter repository.BookFilter,
 			OriginalPrice:      b.OriginalPrice,
 			DiscountPercentage: discountPct,
 			Stock:              b.Stock,
+			Sold:               b.Sold,
 			WeightGrams:        b.WeightGrams,
 			CoverImage:         b.CoverImage,
 			IsActive:           b.IsActive,

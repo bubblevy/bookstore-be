@@ -298,7 +298,9 @@ func GenerateInvoicePDF(order *entity.Order) ([]byte, error) {
 	pdf.SetTextColor(17, 24, 39)
 	methodStr := "METODE PEMBAYARAN: MIDTRANS ONLINE"
 	if order.Payment != nil {
-		if order.Payment.PaymentType == "cstore" {
+		if order.Payment.PaymentMethod != nil && order.Payment.PaymentMethod.Name != "" {
+			methodStr = "METODE: " + strings.ToUpper(order.Payment.PaymentMethod.Name)
+		} else if order.Payment.PaymentType == "cstore" {
 			if order.Payment.Store != nil && *order.Payment.Store != "" {
 				methodStr = "METODE: " + strings.ToUpper(*order.Payment.Store)
 			} else if order.Payment.Bank != nil && *order.Payment.Bank != "" {

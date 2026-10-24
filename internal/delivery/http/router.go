@@ -130,6 +130,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	// Serve static asset folders directly from root domain for STORAGE_LOCAL_URL_PREFIX=/ or full URL configurations
 	app.Get("/covers/*", static.New(filepath.Join(cfg.Storage.LocalBaseDir, "covers")))
 	app.Get("/categories/*", static.New(filepath.Join(cfg.Storage.LocalBaseDir, "categories")))
+	app.Get("/payments/*", static.New(filepath.Join(cfg.Storage.LocalBaseDir, "payments")))
 	app.Get("/uploads/*", static.New(filepath.Join(cfg.Storage.LocalBaseDir, "uploads")))
 	app.Get("/temp/*", static.New(filepath.Join(cfg.Storage.LocalBaseDir, "temp")))
 
@@ -197,11 +198,16 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	wishlistUsecase := usecase.NewWishlistUsecase(wishlistRepo, bookRepo, cartUsecase)
 	handler.NewWishlistHandler(api, wishlistUsecase, validate, authMiddleware)
 
+	// payment methods routes
+	paymentMethodRepo := pgsql.NewPaymentMethodRepository(db)
+	paymentMethodUsecase := usecase.NewPaymentMethodUsecase(paymentMethodRepo, storageSvc)
+	handler.NewPaymentMethodHandler(api, paymentMethodUsecase, validate, authMiddleware, adminMiddleware, uploadUsecase)
+
 	// checkout & order routes
 	checkoutRepo := pgsql.NewCheckoutRepository(db)
 	orderRepo := pgsql.NewOrderRepository(db)
 
-	checkoutUsecase := usecase.NewCheckoutUsecase(db, checkoutRepo, orderRepo, addressRepo, discountUsecase, discountRepo, biteshipClient, midtransSvc)
+	checkoutUsecase := usecase.NewCheckoutUsecase(db, checkoutRepo, orderRepo, addressRepo, discountUsecase, discountRepo, biteshipClient, midtransSvc, paymentMethodRepo, storageSvc)
 	handler.NewCheckoutHandler(api, checkoutUsecase, validate, authMiddleware)
 
 	orderUsecase := usecase.NewOrderUsecase(orderRepo)

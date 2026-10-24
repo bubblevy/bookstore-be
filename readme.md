@@ -89,6 +89,7 @@ bookstore/
   - Multi-criteria sorting (newest, price ascending/descending, title).
   - Role-based visibility: customers view active items only; admins can toggle `is_active` filter (`true`, `false`, `all`).
   - Automatic URL slug generation and conflict resolution.
+  - Real-time sales count tracking (`sold`) representing total completed units sold.
 
 ### 3. Promotional Discount & Voucher Engine
 - Supports standard **Fixed Amount**, **Percentage**, and multi-level **Tiered ("Up To")** reward models.
@@ -105,7 +106,7 @@ bookstore/
 - Persistent customer book wishlist management.
 - Real-time wishlist status check (`/api/v1/wishlist/check/{book_id}`) for instant frontend UI heart icons & badges.
 - Single-action "Move to Cart" endpoint with real-time stock verification, moving items straight into the active cart and removing them from the wishlist.
-- Full pagination support with detailed book relations (Category, Author, Publisher, Cover Image, and active pricing).
+- Full pagination support with detailed book relations (Category, Author, Publisher, Cover Image, sold count, and active pricing).
 
 ### 6. Multi-Address Management
 - Customers can store multiple shipping destinations (up to 5 addresses per account).
@@ -121,9 +122,11 @@ bookstore/
 - **Live Tracking**: Real-time milestone tracking for customers and admins.
 - **Webhook Processing**: Secure tracking status updates authenticated with `X-Biteship-Signature`.
 
-### 8. Checkout & Payments (Midtrans Integration)
-- **Checkout Preview**: Simulates pricing, discounts, shipping fees, admin fees, and payable totals.
-- **Order Placement**: Atomically reserves book stock, applies discounts, records shipping details, and generates payment credentials.
+### 8. Checkout & Payments (Midtrans Integration & Payment Methods Catalog)
+- **Dynamic Payment Methods**: Dedicated database-backed master catalog (`payment_methods`) allowing store owners and admins to configure channel status (`is_active` toggle during Midtrans maintenance), custom admin fees (fixed amount or percentage), rich HTML payment instructions, and branding logos/images.
+- **Relational Integrity**: Payment records and transactions maintain explicit foreign key relations (`payment_method_code`) directly linked to the payment methods catalog.
+- **Checkout Preview (`POST /api/v1/checkout/preview`)**: Simulates complete checkout pricing, discounts, shipping fees, admin fees, available couriers, and active payment channels with estimated fees.
+- **Order Placement**: Atomically reserves book stock, applies discounts, records shipping details, and generates payment credentials via Midtrans Core API.
 - **Supported Payment Channels**:
   - **Virtual Account**: BCA (`bca_va`), BNI (`bni_va`), BRI (`bri_va`), Permata (`permata_va`), CIMB Niaga (`cimb_va`).
   - **Bill Payment**: Mandiri Bill (`mandiri_bill` / `echannel`).
@@ -131,7 +134,7 @@ bookstore/
   - **Convenience Store (Gerai Ritel)**: Indomaret (`indomaret`), Alfamart (`alfamart`) with dedicated cashier payment codes.
 - **Midtrans Webhook**: Listens for asynchronous payment status notifications (Settlement, Expire, Cancel, Deny) with SHA512 signature validation.
 
-### 9. Order Lifecycle & Invoices
+### 9. Order Lifecycle, Invoices & Payment Instructions
 Supported order statuses:
 - `waiting_payment` -> Order placed, waiting for customer payment before deadline.
 - `paid` -> Payment verified via Midtrans webhook.
@@ -143,10 +146,11 @@ Supported order statuses:
 
 Features:
 - **Order Tracking & Admin Oversight**: List customer orders or view all orders system-wide with pagination, search keywords (invoice, customer, recipient), status, and date range filters (`/api/v1/orders/all`).
+- **Payment Instructions in Order Details**: Both customer and admin order details provide step-by-step payment instructions (`data.payment.instructions`) corresponding to the chosen payment channel, consistent with `data.payment_info.instructions` returned upon checkout order creation.
 - **PDF Invoice Download**: Generate and stream official, beautifully styled PDF order invoice receipts with itemized pricing, recipient information, and waybill numbers (`/api/v1/orders/{invoice_number}/pdf`).
 
 ### 10. Executive Reporting & Analytics (PDF & JSON)
-- **Analytics Dashboard Data**: Aggregate performance metrics including gross revenue, net revenue, shipping, discounts, average order value, top-selling books leaderboard, daily sales trends, and order status summaries (`/api/v1/reports`).
+- **Analytics Dashboard Data**: Aggregate performance metrics including gross revenue, net revenue, shipping, discounts, average order value, pending order counts (`waiting_payment_orders`), top-selling books leaderboard, 7-day continuous daily sales trends (WIB), and paginated order transaction history (`/api/v1/reports`).
 - **Executive PDF Export**: Download executive-grade performance reports in PDF format with KPI summary cards, leaderboard tables, and order logs (`/api/v1/reports/pdf`).
 
 ### 11. Performance Caching (Redis)
@@ -245,7 +249,11 @@ The complete API specifications and testing collections are available:
 | **Shipping** | `GET` | `/api/v1/orders/{invoice_number}/tracking` | User/Admin | Track order delivery status & history |
 | **Shipping** | `POST` | `/api/v1/orders/{invoice_number}/fulfill` | Admin | Dispatch courier pickup via Biteship |
 | **Shipping** | `POST` | `/api/v1/orders/{invoice_number}/return` | Admin | Process order return & restore stock |
-| **Checkout** | `POST` | `/api/v1/checkout/preview` | User | Preview checkout calculation |
+| **Payment** | `GET` | `/api/v1/payment-methods` | Public | List all payment methods grouped by category |
+| **Payment** | `GET` | `/api/v1/payment-methods/{id}` | Public | Get payment method details with instructions |
+| **Payment** | `PUT` | `/api/v1/payment-methods/{id}` | Admin | Update payment method status, fee, instructions & image |
+| **Checkout** | `GET` | `/api/v1/checkout/payment-methods` | User | Get available payment methods for checkout |
+| **Checkout** | `POST` | `/api/v1/checkout/preview` | User | Preview checkout calculation with dynamic courier & payment options |
 | **Checkout** | `POST` | `/api/v1/checkout/order` | User | Create order and charge via Midtrans |
 | **Checkout** | `POST` | `/api/v1/payments/midtrans/webhook` | Webhook | Handle Midtrans payment notification |
 | **Order** | `GET` | `/api/v1/orders` | User | List order history (status filter optional) |

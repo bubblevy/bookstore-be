@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/bubblevy/bookstore/internal/delivery/http/dto"
@@ -28,10 +29,15 @@ func NewReportHandler(
 }
 
 func (h *ReportHandler) GetOrderReport(c fiber.Ctx) error {
+	page, _ := strconv.Atoi(c.Query("page", "0"))
+	perPage, _ := strconv.Atoi(c.Query("per_page", "0"))
+
 	req := dto.OrderReportFilterRequest{
 		StartDate: strings.TrimSpace(c.Query("start_date")),
 		EndDate:   strings.TrimSpace(c.Query("end_date")),
 		Status:    strings.TrimSpace(c.Query("status")),
+		Page:      page,
+		PerPage:   perPage,
 	}
 
 	res, err := h.usecase.GetOrderReport(c.Context(), req)

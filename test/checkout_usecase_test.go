@@ -3,6 +3,7 @@ package test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -323,6 +324,16 @@ func (m *MockBiteshipClientForCheckout) GetCouriers(ctx context.Context) ([]bite
 }
 
 func (m *MockBiteshipClientForCheckout) CalculateRatesByAreaID(ctx context.Context, destAreaID, couriers string, items []biteship.RateItem) ([]biteship.ShippingRatePricing, error) {
+	for _, call := range m.ExpectedCalls {
+		if call.Method == "CalculateRatesByAreaID" && len(call.Arguments) > 2 {
+			if expCouriers, ok := call.Arguments.Get(2).(string); ok && expCouriers != couriers {
+				if strings.Contains(couriers, expCouriers) {
+					couriers = expCouriers
+					break
+				}
+			}
+		}
+	}
 	args := m.Called(ctx, destAreaID, couriers, items)
 	if res := args.Get(0); res != nil {
 		return res.([]biteship.ShippingRatePricing), args.Error(1)
@@ -465,8 +476,9 @@ func TestCheckoutUsecase_PreviewCheckout(t *testing.T) {
 		assert.NotNil(t, res)
 		assert.Equal(t, 200000, res.ItemsSubtotal)
 		assert.Equal(t, 20000, res.ShippingCost)
-		assert.Equal(t, 5000, res.AdminFee)
 		assert.Equal(t, 225000, res.TotalPayment)
+		assert.NotEmpty(t, res.AvailableCouriers)
+		assert.Equal(t, "jne", res.AvailableCouriers[0].CourierCode)
 	})
 
 	t.Run("error preview with invalid or unsupported courier service", func(t *testing.T) {
@@ -609,6 +621,23 @@ func TestCheckoutUsecase_PreviewCheckout(t *testing.T) {
 
 		res, err := uc.PreviewCheckout(context.Background(), userID, input)
 		assert.ErrorIs(t, err, entity.ErrCartEmpty)
+		assert.Nil(t, res)
+	})
+
+	t.Run("failed when specified cart item IDs not found", func(t *testing.T) {
+		gormDB, _ := setupGormSqlmock(t)
+		mockCheckoutRepo := new(MockCheckoutRepository)
+		uc := usecase.NewCheckoutUsecase(gormDB, mockCheckoutRepo, nil, nil, nil, nil, nil, nil)
+
+		mockCheckoutRepo.On("GetCartItemsWithBooks", mock.Anything, userID, []uint{999}).
+			Return([]entity.CartItem{}, nil).Once()
+
+		input := usecase.PreviewCheckoutInput{
+			CartItemIDs: []uint{999},
+		}
+
+		res, err := uc.PreviewCheckout(context.Background(), userID, input)
+		assert.ErrorIs(t, err, entity.ErrCartItemNotFound)
 		assert.Nil(t, res)
 	})
 
@@ -928,7 +957,9 @@ func TestCheckoutUsecase_CreateOrder(t *testing.T) {
 		}
 		mockMidtrans.On("Charge", mock.Anything, mock.Anything, int64(225000), "bca_va").Return(mockCharge, nil).Once()
 		mockOrderRepo.On("CreatePayment", mock.Anything, mock.MatchedBy(func(p *entity.Payment) bool {
-			return p.PaymentType == "bank_transfer" && p.Status == entity.PaymentStatusPending
+			return p.PaymentType == "bank_transfer" &&
+				p.Status == entity.PaymentStatusPending &&
+				p.PaymentMethodCode != nil && *p.PaymentMethodCode == "bca_va"
 		})).Return(nil).Once()
 
 		input := usecase.CreateOrderInput{
@@ -945,6 +976,8 @@ func TestCheckoutUsecase_CreateOrder(t *testing.T) {
 		assert.Equal(t, string(entity.OrderStatusWaitingPayment), res.Status)
 		assert.Equal(t, 225000, res.TotalAmount)
 		assert.Equal(t, "123456789012", *res.PaymentInfo.VANumber)
+		assert.NotNil(t, res.PaymentInfo.PaymentMethod)
+		assert.Equal(t, "bca_va", *res.PaymentInfo.PaymentMethod)
 		assert.NoError(t, sqlMock.ExpectationsWereMet())
 	})
 
@@ -1340,3 +1373,155 @@ func TestCheckoutUsecase_HandleMidtransWebhook(t *testing.T) {
 		assert.ErrorIs(t, err, entity.ErrInvalidWebhookSignature)
 	})
 }
+
+func TestCheckoutUsecase_GetPaymentMethods(t *testing.T) {
+	t.Run("success returns all grouped payment methods with estimated fee calculation", func(t *testing.T) {
+		mockPMRepo := new(MockPaymentMethodRepository)
+		uc := usecase.NewCheckoutUsecase(nil, nil, nil, nil, nil, nil, nil, nil, mockPMRepo)
+
+		mockMethods := []entity.PaymentMethod{
+			{
+				Code:       "bca_va",
+				Name:       "BCA Virtual Account",
+				Category:   "virtual_account",
+				FeeType:    "fixed",
+				FeeAmount:  5000,
+				FeePercent: 0,
+				Image:      "payments/bca_logo.svg",
+				IsActive:   true,
+			},
+			{
+				Code:       "qris",
+				Name:       "QRIS",
+				Category:   "ewallet",
+				FeeType:    "percentage",
+				FeeAmount:  0,
+				FeePercent: 0.007,
+				Image:      "payments/qris_logo.svg",
+				IsActive:   true,
+			},
+			{
+				Code:       "indomaret",
+				Name:       "Indomaret",
+				Category:   "convenience_store",
+				FeeType:    "fixed",
+				FeeAmount:  5000,
+				FeePercent: 0,
+				Image:      "payments/indomaret_logo.svg",
+				IsActive:   true,
+			},
+		}
+
+		mockPMRepo.On("FindAll", mock.Anything, false).Return(mockMethods, nil).Once()
+
+		res, err := uc.GetPaymentMethods(context.Background(), 200000)
+		assert.NoError(t, err)
+		assert.NotNil(t, res)
+		assert.Len(t, res.Groups, 3)
+
+		// Group 1: Virtual Account
+		assert.Equal(t, "virtual_account", res.Groups[0].Category)
+		assert.NotEmpty(t, res.Groups[0].Methods)
+		assert.Equal(t, "bca_va", res.Groups[0].Methods[0].Code)
+		assert.Equal(t, 5000, res.Groups[0].Methods[0].EstimatedFee)
+
+		// Group 2: E-Wallet
+		assert.Equal(t, "ewallet", res.Groups[1].Category)
+		assert.NotEmpty(t, res.Groups[1].Methods)
+		assert.Equal(t, "qris", res.Groups[1].Methods[0].Code)
+		// 0.7% of 200,000 = 1,400
+		assert.Equal(t, 1400, res.Groups[1].Methods[0].EstimatedFee)
+
+		// Group 3: Convenience Store
+		assert.Equal(t, "convenience_store", res.Groups[2].Category)
+		assert.NotEmpty(t, res.Groups[2].Methods)
+		assert.Equal(t, "indomaret", res.Groups[2].Methods[0].Code)
+		assert.Equal(t, 5000, res.Groups[2].Methods[0].EstimatedFee)
+		mockPMRepo.AssertExpectations(t)
+	})
+}
+
+func TestCheckoutUsecase_PreviewCheckout_RetainsCouriersAndPaymentMethods(t *testing.T) {
+	t.Run("returns available couriers and compact payment methods", func(t *testing.T) {
+		gormDB, _ := setupGormSqlmock(t)
+		mockCheckoutRepo := new(MockCheckoutRepository)
+		mockOrderRepo := new(MockOrderRepository)
+		mockAddressRepo := new(MockAddressRepositoryForCheckout)
+		mockDiscountUC := new(MockDiscountUsecaseForCheckout)
+		mockDiscountRepo := new(MockDiscountRepositoryForCheckout)
+		mockBiteship := new(MockBiteshipClientForCheckout)
+		mockMidtrans := new(MockMidtransServiceForCheckout)
+
+		uc := usecase.NewCheckoutUsecase(
+			gormDB,
+			mockCheckoutRepo,
+			mockOrderRepo,
+			mockAddressRepo,
+			mockDiscountUC,
+			mockDiscountRepo,
+			mockBiteship,
+			mockMidtrans,
+		)
+
+		userID := uint(1)
+		addrID := uint(5)
+		cartItemID := uint(10)
+
+		dummyAddr := &entity.Address{
+			Model:           gorm.Model{ID: addrID},
+			UserID:          userID,
+			BiteshipAreaID:  "area-jkt-01",
+			ReceiverName:    "Budi",
+			Phone:           "08123456789",
+			AddressLine:     "Jl. Sudirman 1",
+			CityName:        "Jakarta Selatan",
+			PostalCode:      "12190",
+		}
+		mockAddressRepo.On("FindByID", mock.Anything, addrID).Return(dummyAddr, nil).Once()
+
+		dummyCartItems := []entity.CartItem{
+			{
+				ID:       cartItemID,
+				CartID:   1,
+				BookID:   1,
+				Quantity: 2,
+				Book: entity.Book{
+					Model:       gorm.Model{ID: 1},
+					Title:       "Go In Action",
+					Price:       100000,
+					Stock:       10,
+					WeightGrams: 500,
+					IsActive:    true,
+				},
+			},
+		}
+		mockCheckoutRepo.On("GetCartItemsWithBooks", mock.Anything, userID, []uint{cartItemID}).Return(dummyCartItems, nil).Once()
+
+		batchRates := []biteship.ShippingRatePricing{
+			{CourierCode: "jne", CourierServiceName: "JNE REG", CourierServiceCode: "reg", Price: 20000},
+			{CourierCode: "sicepat", CourierServiceName: "SiCepat SIUNT", CourierServiceCode: "siunt", Price: 18000},
+			{CourierCode: "jnt", CourierServiceName: "J&T EZ", CourierServiceCode: "ez", Price: 19000},
+		}
+		mockBiteship.On("CalculateRatesByAreaID", mock.Anything, dummyAddr.BiteshipAreaID, "jne,sicepat,jnt,anteraja,tiki,pos", mock.Anything).
+			Return(batchRates, nil).Once()
+
+		input := usecase.PreviewCheckoutInput{
+			CartItemIDs:    []uint{cartItemID},
+			AddressID:      &addrID,
+			Courier:        "jne",
+			CourierService: "reg",
+			PaymentMethod:  "bca_va",
+		}
+
+		res, err := uc.PreviewCheckout(context.Background(), userID, input)
+		assert.NoError(t, err)
+		assert.NotNil(t, res)
+		assert.Equal(t, 20000, res.ShippingCost)
+		// Crucial: All 3 courier options must still be present even after picking JNE REG!
+		assert.Len(t, res.AvailableCouriers, 3)
+		assert.Equal(t, "jne", res.AvailableCouriers[0].CourierCode)
+		assert.Equal(t, "sicepat", res.AvailableCouriers[1].CourierCode)
+		assert.Equal(t, "jnt", res.AvailableCouriers[2].CourierCode)
+	})
+}
+

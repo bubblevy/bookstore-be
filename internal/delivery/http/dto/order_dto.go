@@ -34,7 +34,9 @@ type OrderShippingResponse struct {
 }
 
 type OrderPaymentResponse struct {
-	PaymentType string     `json:"payment_type"`
+	PaymentMethod     *string    `json:"payment_method,omitempty"`
+	PaymentMethodName *string    `json:"payment_method_name,omitempty"`
+	PaymentType       string     `json:"payment_type"`
 	Bank        *string    `json:"bank,omitempty"`
 	VANumber    *string    `json:"va_number,omitempty"`
 	BillKey     *string    `json:"bill_key,omitempty"`
@@ -43,8 +45,9 @@ type OrderPaymentResponse struct {
 	Store       *string    `json:"store,omitempty"`
 	QRURL       *string    `json:"qr_url,omitempty"`
 	DeeplinkURL *string    `json:"deeplink_url,omitempty"`
-	Status      string     `json:"status"`
-	PaidAt      *time.Time `json:"paid_at,omitempty"`
+	Status            string                  `json:"status"`
+	PaidAt            *time.Time              `json:"paid_at,omitempty"`
+	Instructions      []PaymentInstructionDTO `json:"instructions,omitempty"`
 }
 
 type OrderItemResponse struct {
@@ -78,8 +81,8 @@ type OrderDetailResponse struct {
 	CreatedAt          time.Time              `json:"created_at"`
 	Recipient          OrderRecipientResponse `json:"recipient"`
 	Shipping           OrderShippingResponse  `json:"shipping"`
-	Payment            *OrderPaymentResponse  `json:"payment,omitempty"`
-	Items              []OrderItemResponse    `json:"items"`
+	Payment             *OrderPaymentResponse   `json:"payment,omitempty"`
+	Items               []OrderItemResponse     `json:"items"`
 	Pricing            OrderPricingResponse   `json:"pricing"`
 }
 
@@ -114,7 +117,7 @@ type AdminOrderDetailResponse struct {
 	CreatedAt          time.Time              `json:"created_at"`
 	Recipient          OrderRecipientResponse `json:"recipient"`
 	Shipping           OrderShippingResponse  `json:"shipping"`
-	Payment            *OrderPaymentResponse  `json:"payment,omitempty"`
-	Items              []OrderItemResponse    `json:"items"`
+	Payment             *OrderPaymentResponse   `json:"payment,omitempty"`
+	Items               []OrderItemResponse     `json:"items"`
 	Pricing            OrderPricingResponse   `json:"pricing"`
 }

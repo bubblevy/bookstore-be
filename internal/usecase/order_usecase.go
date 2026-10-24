@@ -63,13 +63,17 @@ func (u *orderUsecase) AdminFindAllOrders(ctx context.Context, filter repository
 
 		var paymentMethod *string
 		if o.Payment != nil {
-			method := o.Payment.PaymentType
-			if o.Payment.Bank != nil && *o.Payment.Bank != "" {
-				method = fmt.Sprintf("%s (%s)", o.Payment.PaymentType, *o.Payment.Bank)
-			} else if o.Payment.Store != nil && *o.Payment.Store != "" {
-				method = fmt.Sprintf("%s (%s)", o.Payment.PaymentType, *o.Payment.Store)
+			if o.Payment.PaymentMethod != nil {
+				paymentMethod = &o.Payment.PaymentMethod.Name
+			} else {
+				method := o.Payment.PaymentType
+				if o.Payment.Bank != nil && *o.Payment.Bank != "" {
+					method = fmt.Sprintf("%s (%s)", o.Payment.PaymentType, *o.Payment.Bank)
+				} else if o.Payment.Store != nil && *o.Payment.Store != "" {
+					method = fmt.Sprintf("%s (%s)", o.Payment.PaymentType, *o.Payment.Store)
+				}
+				paymentMethod = &method
 			}
-			paymentMethod = &method
 		}
 
 		items[i] = dto.AdminOrderListItemResponse{
@@ -144,18 +148,40 @@ func (u *orderUsecase) AdminGetOrderDetail(ctx context.Context, invoiceNumber st
 			billKey = nil
 		}
 
+		var pmCode *string
+		var pmName *string
+		var instructions []dto.PaymentInstructionDTO
+		if order.Payment.PaymentMethod != nil {
+			pmName = &order.Payment.PaymentMethod.Name
+			pmCode = &order.Payment.PaymentMethod.Code
+			if len(order.Payment.PaymentMethod.Instructions) > 0 {
+				instructions = make([]dto.PaymentInstructionDTO, len(order.Payment.PaymentMethod.Instructions))
+				for i, inst := range order.Payment.PaymentMethod.Instructions {
+					instructions[i] = dto.PaymentInstructionDTO{
+						Title:   inst.Title,
+						Content: inst.Content,
+					}
+				}
+			}
+		} else if order.Payment.PaymentMethodCode != nil {
+			pmCode = order.Payment.PaymentMethodCode
+		}
+
 		paymentResp = &dto.OrderPaymentResponse{
-			PaymentType: order.Payment.PaymentType,
-			Bank:        bank,
-			VANumber:    order.Payment.VANumber,
-			BillKey:     billKey,
-			BillerCode:  order.Payment.BillerCode,
-			PaymentCode: paymentCode,
-			Store:       store,
-			QRURL:       order.Payment.QRURL,
-			DeeplinkURL: order.Payment.DeeplinkURL,
-			Status:      string(order.Payment.Status),
-			PaidAt:      order.Payment.PaidAt,
+			PaymentMethod:     pmCode,
+			PaymentMethodName: pmName,
+			PaymentType:       order.Payment.PaymentType,
+			Bank:              bank,
+			VANumber:          order.Payment.VANumber,
+			BillKey:           billKey,
+			BillerCode:        order.Payment.BillerCode,
+			PaymentCode:       paymentCode,
+			Store:             store,
+			QRURL:             order.Payment.QRURL,
+			DeeplinkURL:       order.Payment.DeeplinkURL,
+			Status:            string(order.Payment.Status),
+			PaidAt:            order.Payment.PaidAt,
+			Instructions:      instructions,
 		}
 	}
 

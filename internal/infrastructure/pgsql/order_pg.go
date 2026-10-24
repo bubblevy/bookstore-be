@@ -149,7 +149,7 @@ func (r *orderRepository) FindOrderDetailByInvoice(ctx context.Context, userID u
 	query := r.db.WithContext(ctx).
 		Preload("Items").
 		Preload("User").
-		Preload("Payment").
+		Preload("Payment.PaymentMethod").
 		Preload("Shipment").
 		Where("invoice_number = ?", invoice)
 
@@ -204,7 +204,7 @@ func (r *orderRepository) FindAllOrders(ctx context.Context, filter repository.A
 
 	err := db.Preload("Items").
 		Preload("User").
-		Preload("Payment").
+		Preload("Payment.PaymentMethod").
 		Preload("Shipment").
 		Offset(pq.Offset()).
 		Limit(pq.PerPage).
@@ -235,7 +235,7 @@ func (r *orderRepository) GetOrdersForReport(ctx context.Context, startDate, end
 
 	err := db.Preload("Items").
 		Preload("User").
-		Preload("Payment").
+		Preload("Payment.PaymentMethod").
 		Preload("Shipment").
 		Order("created_at ASC").
 		Find(&orders).Error

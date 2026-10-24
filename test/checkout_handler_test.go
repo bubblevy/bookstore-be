@@ -44,6 +44,14 @@ func (m *MockCheckoutUsecase) HandleMidtransWebhook(ctx context.Context, input u
 	return m.Called(ctx, input).Error(0)
 }
 
+func (m *MockCheckoutUsecase) GetPaymentMethods(ctx context.Context, amount int) (*dto.PaymentMethodsResponse, error) {
+	args := m.Called(ctx, amount)
+	if res := args.Get(0); res != nil {
+		return res.(*dto.PaymentMethodsResponse), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
 func setupCheckoutApp(mockUC *MockCheckoutUsecase, authenticated bool) *fiber.App {
 	app := fiber.New()
 	validate := validator.New()
@@ -66,16 +74,6 @@ func setupCheckoutApp(mockUC *MockCheckoutUsecase, authenticated bool) *fiber.Ap
 }
 
 func TestCheckoutHandler_PreviewCheckout(t *testing.T) {
-	addrID := uint(5)
-	reqPayload := dto.CheckoutPreviewRequest{
-		CartItemIDs:    []uint{1, 2},
-		AddressID:      &addrID,
-		Courier:        "jne",
-		CourierService: "reg",
-		PaymentMethod:  "bca_va",
-	}
-	body, _ := json.Marshal(reqPayload)
-
 	t.Run("success preview returns 200", func(t *testing.T) {
 		mockUC := new(MockCheckoutUsecase)
 		app := setupCheckoutApp(mockUC, true)
@@ -104,7 +102,8 @@ func TestCheckoutHandler_PreviewCheckout(t *testing.T) {
 			return in.AddressID != nil && *in.AddressID == 5 && in.Courier == "jne"
 		})).Return(expectedRes, nil).Once()
 
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/checkout/preview", bytes.NewReader(body))
+		bodyPayload := []byte(`{"cart_item_ids":[1,2],"address_id":5,"courier":"jne","courier_service":"reg","payment_method":"bca_va"}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/checkout/preview", bytes.NewReader(bodyPayload))
 		req.Header.Set("Content-Type", "application/json")
 
 		resp, err := app.Test(req)
@@ -117,25 +116,62 @@ func TestCheckoutHandler_PreviewCheckout(t *testing.T) {
 		mockUC := new(MockCheckoutUsecase)
 		app := setupCheckoutApp(mockUC, false)
 
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/checkout/preview", bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/checkout/preview", nil)
 
 		resp, err := app.Test(req)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
 
-	t.Run("validation error on missing required fields returns 400", func(t *testing.T) {
+	t.Run("validation error on invalid payload returns 400", func(t *testing.T) {
 		mockUC := new(MockCheckoutUsecase)
 		app := setupCheckoutApp(mockUC, true)
 
-		invalidBody := []byte(`{"cart_item_ids": [], "courier": ""}`)
+		invalidBody := []byte(`{"cart_item_ids": "invalid"}`)
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/checkout/preview", bytes.NewReader(invalidBody))
 		req.Header.Set("Content-Type", "application/json")
 
 		resp, err := app.Test(req)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("success POST preview returns 200", func(t *testing.T) {
+		mockUC := new(MockCheckoutUsecase)
+		app := setupCheckoutApp(mockUC, true)
+
+		expectedRes := &usecase.PreviewCheckoutResult{
+			ItemsSubtotal: 200000,
+			TotalPayment:  200000,
+			AvailableCouriers: []dto.CourierOptionResponse{
+				{CourierCode: "jne", CourierServiceName: "REG", Price: 18000},
+			},
+			AvailablePaymentMethods: []dto.AvailablePaymentMethodItem{
+				{Code: "bca_va", Name: "BCA Virtual Account", EstimatedFee: 5000},
+			},
+		}
+
+		mockUC.On("PreviewCheckout", mock.Anything, uint(1), mock.MatchedBy(func(in usecase.PreviewCheckoutInput) bool {
+			return len(in.CartItemIDs) == 2 && in.CartItemIDs[0] == 1 && in.Courier == ""
+		})).Return(expectedRes, nil).Once()
+
+		bodyPayload := []byte(`{"cart_item_ids":[1,2]}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/checkout/preview", bytes.NewReader(bodyPayload))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var body struct {
+			Data dto.CheckoutPreviewResponse `json:"data"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&body)
+		assert.Len(t, body.Data.AvailableCouriers, 1)
+		assert.Equal(t, "jne", body.Data.AvailableCouriers[0].CourierCode)
+		assert.Len(t, body.Data.AvailablePaymentMethods, 1)
+		assert.Equal(t, "bca_va", body.Data.AvailablePaymentMethods[0].Code)
+		mockUC.AssertExpectations(t)
 	})
 
 	t.Run("address not found returns 404", func(t *testing.T) {
@@ -145,7 +181,25 @@ func TestCheckoutHandler_PreviewCheckout(t *testing.T) {
 		mockUC.On("PreviewCheckout", mock.Anything, uint(1), mock.Anything).
 			Return(nil, entity.ErrAddressNotFound).Once()
 
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/checkout/preview", bytes.NewReader(body))
+		bodyPayload := []byte(`{"address_id":99}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/checkout/preview", bytes.NewReader(bodyPayload))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
+
+	t.Run("cart item not found returns 404", func(t *testing.T) {
+		mockUC := new(MockCheckoutUsecase)
+		app := setupCheckoutApp(mockUC, true)
+
+		mockUC.On("PreviewCheckout", mock.Anything, uint(1), mock.Anything).
+			Return(nil, entity.ErrCartItemNotFound).Once()
+
+		bodyPayload := []byte(`{"cart_item_ids":[999]}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/checkout/preview", bytes.NewReader(bodyPayload))
 		req.Header.Set("Content-Type", "application/json")
 
 		resp, err := app.Test(req)
@@ -281,6 +335,42 @@ func TestCheckoutHandler_HandleMidtransWebhook(t *testing.T) {
 		resp, err := app.Test(req)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
+}
+
+func TestCheckoutHandler_GetPaymentMethods(t *testing.T) {
+	t.Run("success returns payment methods grouped", func(t *testing.T) {
+		mockUC := new(MockCheckoutUsecase)
+		app := setupCheckoutApp(mockUC, true)
+
+		expectedResp := &dto.PaymentMethodsResponse{
+			Groups: []dto.PaymentMethodGroupResponse{
+				{
+					Category: "virtual_account",
+					Name:     "Virtual Account (Transfer Bank)",
+					Methods: []dto.PaymentMethodItemResponse{
+						{
+							Code:         "bca_va",
+							Name:         "BCA Virtual Account",
+							Category:     "virtual_account",
+							FeeType:      "fixed",
+							FeeAmount:    5000,
+							EstimatedFee: 5000,
+							IsActive:     true,
+						},
+					},
+				},
+			},
+		}
+
+		mockUC.On("GetPaymentMethods", mock.Anything, 100000).Return(expectedResp, nil).Once()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/checkout/payment-methods?amount=100000", nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		mockUC.AssertExpectations(t)
 	})
 }

@@ -1395,6 +1395,38 @@
           "name": "Checkout",
           "item": [
             {
+              "name": "Payment Methods",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/checkout/payment-methods?amount=100000",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "checkout",
+                    "payment-methods"
+                  ],
+                  "query": [
+                    {
+                      "key": "amount",
+                      "value": "100000"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
               "name": "Preview",
               "request": {
                 "method": "POST",
@@ -1825,6 +1857,78 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "Payment Method",
+          "item": [
+            {
+              "name": "All Payment Methods",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/payment-methods?amount=100000&only_active=true",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payment-methods"
+                  ],
+                  "query": [
+                    {
+                      "key": "amount",
+                      "value": "100000"
+                    },
+                    {
+                      "key": "only_active",
+                      "value": "true"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Payment Method Detail",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/payment-methods/:id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payment-methods",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
         }
       ]
     },
@@ -3183,6 +3287,103 @@
                       "key": "status",
                       "value": "all",
                       "description": "all, waiting_payment, paid, processing, shipped, completed, cancelled, returned"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Payment Method",
+          "item": [
+            {
+              "name": "All Payment Methods",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/payment-methods",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payment-methods"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Payment Method",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "name",
+                      "value": "BCA Virtual Account",
+                      "type": "text"
+                    },
+                    {
+                      "key": "fee_type",
+                      "value": "fixed",
+                      "type": "text"
+                    },
+                    {
+                      "key": "fee_amount",
+                      "value": "5000",
+                      "type": "text"
+                    },
+                    {
+                      "key": "fee_percent",
+                      "value": "0",
+                      "type": "text"
+                    },
+                    {
+                      "key": "is_active",
+                      "value": "true",
+                      "type": "text"
+                    },
+                    {
+                      "key": "description",
+                      "value": "Bayar via ATM BCA, BCA mobile, myBCA, atau KlikBCA",
+                      "type": "text"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/payment-methods/:id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payment-methods",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "1"
                     }
                   ]
                 }

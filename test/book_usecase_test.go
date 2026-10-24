@@ -373,6 +373,7 @@ func TestBookUsecase_FindAll_Success(t *testing.T) {
 	assert.Equal(t, "Bumi", items[0].Title)
 	assert.Equal(t, &origPrice, items[0].OriginalPrice)
 	assert.Equal(t, 5, *items[0].DiscountPercentage)
+	assert.Equal(t, 0, items[0].Sold) // default sold count when book has never been sold
 	assert.Equal(t, int64(1), meta.TotalItems)
 }
 
@@ -390,6 +391,7 @@ func TestBookUsecase_FindBySlug_Success(t *testing.T) {
 		Title:     "Bumi",
 		Slug:      "bumi",
 		Price:     95000,
+		Sold:      25,
 		Language:  "Indonesia",
 		Length:    20.0,
 		Width:     13.5,
@@ -407,6 +409,7 @@ func TestBookUsecase_FindBySlug_Success(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 	assert.Equal(t, "bumi", res.Slug)
+	assert.Equal(t, 25, res.Sold)
 	assert.Equal(t, "Indonesia", res.Language)
 	assert.Equal(t, 20.0, res.Length)
 	assert.Equal(t, 13.5, res.Width)

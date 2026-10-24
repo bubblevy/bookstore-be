@@ -7,9 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -24,11 +27,18 @@ type Client interface {
 	TrackWaybill(ctx context.Context, waybillID, courierCode string) (*TrackingDetailResult, error)
 }
 
+type rateCacheEntry struct {
+	pricing   []ShippingRatePricing
+	expiresAt time.Time
+}
+
 type client struct {
 	apiKey       string
 	baseURL      string
 	originAreaID string
 	httpClient   *http.Client
+	rateMu       sync.RWMutex
+	rateCache    map[string]rateCacheEntry
 }
 
 func NewClient(apiKey, baseURL, originAreaID string) Client {
@@ -36,11 +46,28 @@ func NewClient(apiKey, baseURL, originAreaID string) Client {
 	if endpoint == "" {
 		endpoint = "https://api.biteship.com"
 	}
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   10 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   20,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
 	return &client{
 		apiKey:       apiKey,
 		baseURL:      endpoint,
 		originAreaID: originAreaID,
-		httpClient:   &http.Client{Timeout: 20 * time.Second},
+		httpClient: &http.Client{
+			Transport: transport,
+			Timeout:   20 * time.Second,
+		},
+		rateCache: make(map[string]rateCacheEntry),
 	}
 }
 
@@ -191,7 +218,46 @@ type rateResponse struct {
 	Pricing []ShippingRatePricing `json:"pricing"`
 }
 
+func (c *client) buildRateCacheKey(destAreaID, couriers string, items []RateItem) string {
+	var sb strings.Builder
+	sb.WriteString(c.originAreaID)
+	sb.WriteString(":")
+	sb.WriteString(destAreaID)
+	sb.WriteString(":")
+	sb.WriteString(couriers)
+	sb.WriteString(":")
+	for _, it := range items {
+		sb.WriteString(it.Name)
+		sb.WriteString("|")
+		sb.WriteString(strconv.FormatInt(it.Value, 10))
+		sb.WriteString("|")
+		sb.WriteString(strconv.Itoa(it.Weight))
+		sb.WriteString("|")
+		sb.WriteString(strconv.Itoa(it.Quantity))
+		sb.WriteString("|")
+		sb.WriteString(strconv.Itoa(it.Length))
+		sb.WriteString("|")
+		sb.WriteString(strconv.Itoa(it.Width))
+		sb.WriteString("|")
+		sb.WriteString(strconv.Itoa(it.Height))
+		sb.WriteString(";")
+	}
+	return sb.String()
+}
+
 func (c *client) CalculateRatesByAreaID(ctx context.Context, destAreaID, couriers string, items []RateItem) ([]ShippingRatePricing, error) {
+	cacheKey := c.buildRateCacheKey(destAreaID, couriers, items)
+
+	c.rateMu.RLock()
+	entry, found := c.rateCache[cacheKey]
+	if found && time.Now().Before(entry.expiresAt) {
+		c.rateMu.RUnlock()
+		cached := make([]ShippingRatePricing, len(entry.pricing))
+		copy(cached, entry.pricing)
+		return cached, nil
+	}
+	c.rateMu.RUnlock()
+
 	endpoint := fmt.Sprintf("%s/v1/rates/couriers", c.baseURL)
 	body := map[string]interface{}{
 		"origin_area_id":      c.originAreaID,
@@ -203,6 +269,24 @@ func (c *client) CalculateRatesByAreaID(ctx context.Context, destAreaID, courier
 	if err := c.doRequest(ctx, http.MethodPost, endpoint, body, &res); err != nil {
 		return nil, err
 	}
+
+	if len(res.Pricing) > 0 {
+		c.rateMu.Lock()
+		if len(c.rateCache) > 1000 {
+			now := time.Now()
+			for k, v := range c.rateCache {
+				if now.After(v.expiresAt) {
+					delete(c.rateCache, k)
+				}
+			}
+		}
+		c.rateCache[cacheKey] = rateCacheEntry{
+			pricing:   res.Pricing,
+			expiresAt: time.Now().Add(10 * time.Minute),
+		}
+		c.rateMu.Unlock()
+	}
+
 	return res.Pricing, nil
 }
 

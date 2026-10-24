@@ -27,11 +27,13 @@ func (r *checkoutRepository) GetCartItemsWithBooks(ctx context.Context, userID u
 		return nil, err
 	}
 
+	query := r.db.WithContext(ctx).Preload("Book").Where("cart_id = ?", cart.ID)
+	if len(cartItemIDs) > 0 {
+		query = query.Where("id IN ?", cartItemIDs)
+	}
+
 	var items []entity.CartItem
-	err := r.db.WithContext(ctx).
-		Preload("Book").
-		Where("cart_id = ? AND id IN ?", cart.ID, cartItemIDs).
-		Find(&items).Error
+	err := query.Find(&items).Error
 	if err != nil {
 		return nil, err
 	}
@@ -59,13 +61,19 @@ func (r *checkoutRepository) LockAndValidateBooks(ctx context.Context, bookIDs [
 func (r *checkoutRepository) DeductBookStock(ctx context.Context, bookID uint, qty int) error {
 	return r.db.WithContext(ctx).Model(&entity.Book{}).
 		Where("id = ? AND stock >= ?", bookID, qty).
-		Update("stock", gorm.Expr("stock - ?", qty)).Error
+		Updates(map[string]interface{}{
+			"stock": gorm.Expr("stock - ?", qty),
+			"sold":  gorm.Expr("sold + ?", qty),
+		}).Error
 }
 
 func (r *checkoutRepository) RestoreBookStock(ctx context.Context, bookID uint, qty int) error {
 	return r.db.WithContext(ctx).Model(&entity.Book{}).
 		Where("id = ?", bookID).
-		Update("stock", gorm.Expr("stock + ?", qty)).Error
+		Updates(map[string]interface{}{
+			"stock": gorm.Expr("stock + ?", qty),
+			"sold":  gorm.Expr("GREATEST(0, sold - ?)", qty),
+		}).Error
 }
 
 func (r *checkoutRepository) DeleteCartItems(ctx context.Context, cartItemIDs []uint) error {

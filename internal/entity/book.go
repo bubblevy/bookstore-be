@@ -38,6 +38,7 @@ type Book struct {
 	Height             float64  `gorm:"type:numeric(6,2);not null;default:0" json:"height"`
 	Condition          string   `gorm:"type:varchar(100);not null;default:'New'" json:"condition"`
 	Stock              int      `gorm:"not null;default:0" json:"stock"`
+	Sold               int      `gorm:"not null;default:0" json:"sold"`
 	CoverImage         *string  `gorm:"type:varchar(255)" json:"cover_image,omitempty"`
 	IsActive           bool     `gorm:"not null;default:true" json:"is_active"`
 

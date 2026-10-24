@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -171,6 +172,13 @@ func TestOrderHandler_GetOrderDetail(t *testing.T) {
 				Bank:        &bank,
 				VANumber:    &va,
 				Status:      entity.PaymentStatusPending,
+				PaymentMethod: &entity.PaymentMethod{
+					Code: "bca_va",
+					Name: "BCA Virtual Account",
+					Instructions: entity.PaymentInstructions{
+						{Title: "ATM BCA", Content: "Masukkan kartu ATM"},
+					},
+				},
 			},
 			Shipment: &entity.Shipment{
 				Status: entity.ShippingStatusAllocated,
@@ -184,6 +192,14 @@ func TestOrderHandler_GetOrderDetail(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var body struct {
+			Data dto.OrderDetailResponse `json:"data"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&body)
+		assert.NotNil(t, body.Data.Payment)
+		assert.Len(t, body.Data.Payment.Instructions, 1)
+		assert.Equal(t, "ATM BCA", body.Data.Payment.Instructions[0].Title)
 		mockUC.AssertExpectations(t)
 	})
 

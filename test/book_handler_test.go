@@ -122,6 +122,8 @@ func TestBookHandler_FindAll_PublicAlwaysActive(t *testing.T) {
 	_ = json.Unmarshal(body, &res)
 	assert.True(t, res.Status)
 	assert.Len(t, res.Data, 1)
+	assert.Equal(t, 0, res.Data[0].Sold)
+	assert.Contains(t, string(body), `"sold":0`)
 	mockUC.AssertExpectations(t)
 }
 

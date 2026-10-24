@@ -197,18 +197,40 @@ func (h *OrderHandler) GetOrderDetail(c fiber.Ctx) error {
 			billKey = nil
 		}
 
+		var pmCode *string
+		var pmName *string
+		var instructions []dto.PaymentInstructionDTO
+		if order.Payment.PaymentMethod != nil {
+			pmName = &order.Payment.PaymentMethod.Name
+			pmCode = &order.Payment.PaymentMethod.Code
+			if len(order.Payment.PaymentMethod.Instructions) > 0 {
+				instructions = make([]dto.PaymentInstructionDTO, len(order.Payment.PaymentMethod.Instructions))
+				for i, inst := range order.Payment.PaymentMethod.Instructions {
+					instructions[i] = dto.PaymentInstructionDTO{
+						Title:   inst.Title,
+						Content: inst.Content,
+					}
+				}
+			}
+		} else if order.Payment.PaymentMethodCode != nil {
+			pmCode = order.Payment.PaymentMethodCode
+		}
+
 		detail.Payment = &dto.OrderPaymentResponse{
-			PaymentType: order.Payment.PaymentType,
-			Bank:        bank,
-			VANumber:    order.Payment.VANumber,
-			BillKey:     billKey,
-			BillerCode:  order.Payment.BillerCode,
-			PaymentCode: paymentCode,
-			Store:       store,
-			QRURL:       order.Payment.QRURL,
-			DeeplinkURL: order.Payment.DeeplinkURL,
-			Status:      string(order.Payment.Status),
-			PaidAt:      order.Payment.PaidAt,
+			PaymentMethod:     pmCode,
+			PaymentMethodName: pmName,
+			PaymentType:       order.Payment.PaymentType,
+			Bank:              bank,
+			VANumber:          order.Payment.VANumber,
+			BillKey:           billKey,
+			BillerCode:        order.Payment.BillerCode,
+			PaymentCode:       paymentCode,
+			Store:             store,
+			QRURL:             order.Payment.QRURL,
+			DeeplinkURL:       order.Payment.DeeplinkURL,
+			Status:            string(order.Payment.Status),
+			PaidAt:            order.Payment.PaidAt,
+			Instructions:      instructions,
 		}
 	}
 

@@ -1,11 +1,17 @@
 package dto
 
-import "time"
+import (
+	"time"
+
+	"github.com/bubblevy/bookstore/pkg/pagination"
+)
 
 type OrderReportFilterRequest struct {
 	StartDate string `query:"start_date"` // format YYYY-MM-DD
 	EndDate   string `query:"end_date"`   // format YYYY-MM-DD
 	Status    string `query:"status"`     // "all", "paid", "completed", etc.
+	Page      int    `query:"page"`
+	PerPage   int    `query:"per_page"`
 }
 
 type TopSellingBookReport struct {
@@ -23,16 +29,17 @@ type DailySalesTrend struct {
 }
 
 type OrderReportSummary struct {
-	TotalOrders       int     `json:"total_orders"`
-	PaidOrders        int     `json:"paid_orders"`
-	CompletedOrders   int     `json:"completed_orders"`
-	CancelledOrders   int     `json:"cancelled_orders"`
-	ReturnedOrders    int     `json:"returned_orders"`
-	GrossRevenue      int     `json:"gross_revenue"`
-	NetRevenue        int     `json:"net_revenue"`
-	TotalDiscounts    int     `json:"total_discounts"`
-	TotalItemsSold    int     `json:"total_items_sold"`
-	AverageOrderValue float64 `json:"average_order_value"`
+	TotalOrders          int     `json:"total_orders"`
+	WaitingPaymentOrders int     `json:"waiting_payment_orders"`
+	PaidOrders           int     `json:"paid_orders"`
+	CompletedOrders      int     `json:"completed_orders"`
+	CancelledOrders      int     `json:"cancelled_orders"`
+	ReturnedOrders       int     `json:"returned_orders"`
+	GrossRevenue         int     `json:"gross_revenue"`
+	NetRevenue           int     `json:"net_revenue"`
+	TotalDiscounts       int     `json:"total_discounts"`
+	TotalItemsSold       int     `json:"total_items_sold"`
+	AverageOrderValue    float64 `json:"average_order_value"`
 }
 
 type OrderReportItem struct {
@@ -60,4 +67,5 @@ type OrderReportResponse struct {
 	TopBooks    []TopSellingBookReport `json:"top_books"`
 	DailyTrends []DailySalesTrend      `json:"daily_trends"`
 	Orders      []OrderReportItem      `json:"orders"`
+	Pagination  *pagination.Meta       `json:"pagination,omitempty"`
 }

@@ -113,6 +113,8 @@ func (r *bookRepository) FindAll(ctx context.Context, filter repository.BookFilt
 		query = query.Order("books.price DESC")
 	case "title_asc":
 		query = query.Order("books.title ASC")
+	case "popular", "sold_desc":
+		query = query.Order("books.sold DESC, books.created_at DESC")
 	default:
 		query = query.Order("books.created_at DESC")
 	}

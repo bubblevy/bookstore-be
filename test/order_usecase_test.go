@@ -293,6 +293,16 @@ func TestOrderUsecase_AdminGetOrderDetail(t *testing.T) {
 					Subtotal:    200000,
 				},
 			},
+			Payment: &entity.Payment{
+				PaymentType: "bank_transfer",
+				PaymentMethod: &entity.PaymentMethod{
+					Code: "bca_va",
+					Name: "BCA Virtual Account",
+					Instructions: entity.PaymentInstructions{
+						{Title: "ATM BCA", Content: "Masukkan kartu ATM"},
+					},
+				},
+			},
 			CreatedAt: time.Now(),
 		}
 
@@ -307,6 +317,9 @@ func TestOrderUsecase_AdminGetOrderDetail(t *testing.T) {
 		assert.Equal(t, "john@example.com", res.Customer.Email)
 		assert.Equal(t, 200000, res.Pricing.TotalAmount)
 		assert.Len(t, res.Items, 1)
+		assert.NotNil(t, res.Payment)
+		assert.Len(t, res.Payment.Instructions, 1)
+		assert.Equal(t, "ATM BCA", res.Payment.Instructions[0].Title)
 		mockRepo.AssertExpectations(t)
 	})
 }

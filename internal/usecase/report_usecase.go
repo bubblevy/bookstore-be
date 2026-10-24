@@ -10,6 +10,7 @@ import (
 	"github.com/bubblevy/bookstore/internal/delivery/http/dto"
 	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/repository"
+	"github.com/bubblevy/bookstore/pkg/pagination"
 	"github.com/bubblevy/bookstore/pkg/pdf"
 )
 
@@ -49,20 +50,107 @@ func (u *reportUsecase) GetOrderReport(ctx context.Context, filter dto.OrderRepo
 	}
 
 	var (
-		totalOrders     = len(orders)
-		paidOrders      = 0
-		completedOrders = 0
-		cancelledOrders = 0
-		returnedOrders  = 0
-		grossRevenue    = 0
-		netRevenue      = 0
-		totalDiscounts  = 0
-		totalItemsSold  = 0
+		totalOrders          = len(orders)
+		waitingPaymentOrders = 0
+		paidOrders           = 0
+		completedOrders      = 0
+		cancelledOrders      = 0
+		returnedOrders       = 0
+		grossRevenue         = 0
+		netRevenue           = 0
+		totalDiscounts       = 0
+		totalItemsSold       = 0
 	)
 
 	bookStats := make(map[uint]*dto.TopSellingBookReport)
 	trendStats := make(map[string]*dto.DailySalesTrend)
-	orderItemsList := make([]dto.OrderReportItem, len(orders))
+
+	// Pre-fill daily trends with zero values:
+	// - If date range <= 30 days: zero-fill every day continuously for smooth charts.
+	// - If date range > 30 days: zero-fill only the last 7 days of the period to keep payload compact,
+	//   while any earlier dates with transactions are added dynamically.
+	now := time.Now()
+	if startDate != nil && endDate != nil {
+		curr := time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, time.UTC)
+		endLimit := time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 0, 0, 0, 0, time.UTC)
+		daysDiff := int(endLimit.Sub(curr).Hours()/24) + 1
+		if daysDiff <= 30 {
+			for !curr.After(endLimit) {
+				key := curr.Format("2006-01-02")
+				trendStats[key] = &dto.DailySalesTrend{
+					Date:         key,
+					TotalOrders:  0,
+					TotalRevenue: 0,
+				}
+				curr = curr.AddDate(0, 0, 1)
+			}
+		} else {
+			recentStart := endLimit.AddDate(0, 0, -6)
+			currRecent := recentStart
+			for !currRecent.After(endLimit) {
+				key := currRecent.Format("2006-01-02")
+				trendStats[key] = &dto.DailySalesTrend{
+					Date:         key,
+					TotalOrders:  0,
+					TotalRevenue: 0,
+				}
+				currRecent = currRecent.AddDate(0, 0, 1)
+			}
+		}
+	} else if startDate != nil && endDate == nil {
+		curr := time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, time.UTC)
+		endLimit := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		daysDiff := int(endLimit.Sub(curr).Hours()/24) + 1
+		if daysDiff <= 30 {
+			for !curr.After(endLimit) {
+				key := curr.Format("2006-01-02")
+				trendStats[key] = &dto.DailySalesTrend{
+					Date:         key,
+					TotalOrders:  0,
+					TotalRevenue: 0,
+				}
+				curr = curr.AddDate(0, 0, 1)
+			}
+		} else {
+			recentStart := endLimit.AddDate(0, 0, -6)
+			currRecent := recentStart
+			for !currRecent.After(endLimit) {
+				key := currRecent.Format("2006-01-02")
+				trendStats[key] = &dto.DailySalesTrend{
+					Date:         key,
+					TotalOrders:  0,
+					TotalRevenue: 0,
+				}
+				currRecent = currRecent.AddDate(0, 0, 1)
+			}
+		}
+	} else if startDate == nil && endDate != nil {
+		curr := endDate.AddDate(0, 0, -6)
+		curr = time.Date(curr.Year(), curr.Month(), curr.Day(), 0, 0, 0, 0, time.UTC)
+		endLimit := time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 0, 0, 0, 0, time.UTC)
+		for !curr.After(endLimit) {
+			key := curr.Format("2006-01-02")
+			trendStats[key] = &dto.DailySalesTrend{
+				Date:         key,
+				TotalOrders:  0,
+				TotalRevenue: 0,
+			}
+			curr = curr.AddDate(0, 0, 1)
+		}
+	} else {
+		// Default: past 7 days up to today
+		for i := 6; i >= 0; i-- {
+			d := now.AddDate(0, 0, -i)
+			key := d.Format("2006-01-02")
+			trendStats[key] = &dto.DailySalesTrend{
+				Date:         key,
+				TotalOrders:  0,
+				TotalRevenue: 0,
+			}
+		}
+	}
+
+	allOrderItemsList := make([]dto.OrderReportItem, len(orders))
 
 	for i, o := range orders {
 		orderQty := 0
@@ -76,6 +164,8 @@ func (u *reportUsecase) GetOrderReport(ctx context.Context, filter dto.OrderRepo
 			o.Status == entity.OrderStatusCompleted
 
 		switch o.Status {
+		case entity.OrderStatusWaitingPayment:
+			waitingPaymentOrders++
 		case entity.OrderStatusPaid:
 			paidOrders++
 		case entity.OrderStatusCompleted:
@@ -140,11 +230,15 @@ func (u *reportUsecase) GetOrderReport(ctx context.Context, filter dto.OrderRepo
 
 		payMethod := "Midtrans"
 		if o.Payment != nil {
-			payMethod = strings.ToUpper(strings.ReplaceAll(o.Payment.PaymentType, "_", " "))
-			if o.Payment.Bank != nil && *o.Payment.Bank != "" {
-				payMethod += " (" + strings.ToUpper(*o.Payment.Bank) + ")"
-			} else if o.Payment.Store != nil && *o.Payment.Store != "" {
-				payMethod += " (" + strings.ToUpper(*o.Payment.Store) + ")"
+			if o.Payment.PaymentMethod != nil {
+				payMethod = o.Payment.PaymentMethod.Name
+			} else {
+				payMethod = strings.ToUpper(strings.ReplaceAll(o.Payment.PaymentType, "_", " "))
+				if o.Payment.Bank != nil && *o.Payment.Bank != "" {
+					payMethod += " (" + strings.ToUpper(*o.Payment.Bank) + ")"
+				} else if o.Payment.Store != nil && *o.Payment.Store != "" {
+					payMethod += " (" + strings.ToUpper(*o.Payment.Store) + ")"
+				}
 			}
 		}
 
@@ -153,7 +247,7 @@ func (u *reportUsecase) GetOrderReport(ctx context.Context, filter dto.OrderRepo
 			paidAt = o.Payment.PaidAt
 		}
 
-		orderItemsList[i] = dto.OrderReportItem{
+		allOrderItemsList[i] = dto.OrderReportItem{
 			ID:             o.ID,
 			InvoiceNumber:  o.InvoiceNumber,
 			CustomerName:   custName,
@@ -211,30 +305,60 @@ func (u *reportUsecase) GetOrderReport(ctx context.Context, filter dto.OrderRepo
 		periodEndStr = orders[len(orders)-1].CreatedAt.Format("02 Jan 2006")
 	}
 
+	// Orders pagination
+	var orderItemsList []dto.OrderReportItem
+	var paginationMeta *pagination.Meta
+
+	if filter.Page > 0 && filter.PerPage > 0 {
+		totalCount := int64(len(allOrderItemsList))
+		meta := pagination.BuildMeta(totalCount, filter.Page, filter.PerPage)
+		paginationMeta = &meta
+
+		offset := (filter.Page - 1) * filter.PerPage
+		if offset >= len(allOrderItemsList) {
+			orderItemsList = []dto.OrderReportItem{}
+		} else {
+			end := offset + filter.PerPage
+			if end > len(allOrderItemsList) {
+				end = len(allOrderItemsList)
+			}
+			orderItemsList = allOrderItemsList[offset:end]
+		}
+	} else {
+		orderItemsList = allOrderItemsList
+	}
+
 	return &dto.OrderReportResponse{
 		PeriodStart: periodStartStr,
 		PeriodEnd:   periodEndStr,
 		GeneratedAt: time.Now(),
 		Summary: dto.OrderReportSummary{
-			TotalOrders:       totalOrders,
-			PaidOrders:        paidOrders,
-			CompletedOrders:   completedOrders,
-			CancelledOrders:   cancelledOrders,
-			ReturnedOrders:    returnedOrders,
-			GrossRevenue:      grossRevenue,
-			NetRevenue:        netRevenue,
-			TotalDiscounts:    totalDiscounts,
-			TotalItemsSold:    totalItemsSold,
-			AverageOrderValue: aov,
+			TotalOrders:          totalOrders,
+			WaitingPaymentOrders: waitingPaymentOrders,
+			PaidOrders:           paidOrders,
+			CompletedOrders:      completedOrders,
+			CancelledOrders:      cancelledOrders,
+			ReturnedOrders:       returnedOrders,
+			GrossRevenue:         grossRevenue,
+			NetRevenue:           netRevenue,
+			TotalDiscounts:       totalDiscounts,
+			TotalItemsSold:       totalItemsSold,
+			AverageOrderValue:    aov,
 		},
 		TopBooks:    topBooks,
 		DailyTrends: dailyTrends,
 		Orders:      orderItemsList,
+		Pagination:  paginationMeta,
 	}, nil
 }
 
 func (u *reportUsecase) GetOrderReportPDF(ctx context.Context, filter dto.OrderReportFilterRequest) ([]byte, string, error) {
-	report, err := u.GetOrderReport(ctx, filter)
+	// PDF always exports all orders in the filtered period
+	pdfFilter := filter
+	pdfFilter.Page = 0
+	pdfFilter.PerPage = 0
+
+	report, err := u.GetOrderReport(ctx, pdfFilter)
 	if err != nil {
 		return nil, "", err
 	}

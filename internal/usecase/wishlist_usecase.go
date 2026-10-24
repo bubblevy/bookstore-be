@@ -19,6 +19,7 @@ type WishlistBookResult struct {
 	DiscountPercentage *int    `json:"discount_percentage,omitempty"`
 	WeightGrams        int     `json:"weight_grams"`
 	Stock              int     `json:"stock"`
+	Sold               int     `json:"sold"`
 	CoverImage         *string `json:"cover_image,omitempty"`
 	IsActive           bool    `json:"is_active"`
 	CategoryName       string  `json:"category_name,omitempty"`
@@ -90,6 +91,7 @@ func (u *wishlistUsecase) GetWishlist(ctx context.Context, userID uint, page, pe
 				DiscountPercentage: it.Book.DiscountPercentage,
 				WeightGrams:        it.Book.WeightGrams,
 				Stock:              it.Book.Stock,
+				Sold:               it.Book.Sold,
 				CoverImage:         it.Book.CoverImage,
 				IsActive:           it.Book.IsActive,
 				CategoryName:       it.Book.Category.Name,

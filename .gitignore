@@ -1,6 +1,10 @@
 .env
+.env.production
 logs/
 *.log
 public/*
 !public/.gitkeep
-.env.production
+!public/logo/
+!public/logo/**
+!public/payments/
+!public/payments/**

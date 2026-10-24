@@ -23,7 +23,7 @@ jobs:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USERNAME }}
           key: ${{ secrets.VM_SSH_KEY }}
-          source: ".,!vendor,!bin,!tmp,!public"
+          source: ".,!vendor,!bin,!tmp"
           target: "/home/azureuser/bookstore"
 
       - name: Build & Run Services on VM
