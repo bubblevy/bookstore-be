@@ -17,6 +17,17 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Prepare VM Permissions
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USERNAME }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            mkdir -p /home/${{ secrets.VM_USERNAME }}/bookstore/public /home/${{ secrets.VM_USERNAME }}/bookstore/logs
+            sudo chown -R ${{ secrets.VM_USERNAME }}:${{ secrets.VM_USERNAME }} /home/${{ secrets.VM_USERNAME }}/bookstore
+            sudo chmod -R 775 /home/${{ secrets.VM_USERNAME }}/bookstore
+
       - name: Copy Files to VM via SCP
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -24,7 +35,7 @@ jobs:
           username: ${{ secrets.VM_USERNAME }}
           key: ${{ secrets.VM_SSH_KEY }}
           source: ".,!vendor,!bin,!tmp"
-          target: "/home/azureuser/bookstore"
+          target: "/home/${{ secrets.VM_USERNAME }}/bookstore"
 
       - name: Build & Run Services on VM
         uses: appleboy/ssh-action@v1.0.3
@@ -33,7 +44,7 @@ jobs:
           username: ${{ secrets.VM_USERNAME }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
-            cd /home/azureuser/bookstore
+            cd /home/${{ secrets.VM_USERNAME }}/bookstore
             
             mkdir -p public logs
             sudo chown -R 1001:1001 public logs
