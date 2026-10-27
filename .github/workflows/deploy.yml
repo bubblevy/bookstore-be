@@ -68,11 +68,14 @@ jobs:
           username: ${{ secrets.AZURE_VM_USER }}
           key: ${{ secrets.AZURE_SSH_KEY }}
           script: |
+            export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
+
             cd /home/${{ secrets.AZURE_VM_USER }}/bookstore
-            
             mkdir -p public logs
-            sudo chown -R 1001:1001 public logs
-            sudo chmod -R 775 public logs
-            sudo chmod -R g+s public logs
+
+            sudo chown -R 1001:1001 logs
+            sudo chmod -R 775 logs
+            sudo chmod -R 777 public
 
             docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
+            docker compose -f docker-compose.prod.yml ps
