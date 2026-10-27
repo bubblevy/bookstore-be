@@ -1,4 +1,4 @@
-name: Deploy to Instabox
+name: Deploy to Instabox & Azure VM
 
 on:
   push:
@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy:
+  deploy-instabox-vm:
     runs-on: ubuntu-latest
     steps:
       - name: Install Instabox CLI & Deploy
@@ -35,3 +35,44 @@ jobs:
             docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
             docker compose -f docker-compose.prod.yml ps
           '
+  deploy-azure-vm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Prepare VM Permissions
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.AZURE_VM_HOST }}
+          username: ${{ secrets.AZURE_VM_USER }}
+          key: ${{ secrets.AZURE_SSH_KEY }}
+          script: |
+            mkdir -p /home/${{ secrets.AZURE_VM_USER }}/bookstore/public /home/${{ secrets.AZURE_VM_USER }}/bookstore/logs
+            sudo chown -R ${{ secrets.AZURE_VM_USER }}:${{ secrets.AZURE_VM_USER }} /home/${{ secrets.AZURE_VM_USER }}/bookstore
+            sudo chmod -R 775 /home/${{ secrets.AZURE_VM_USER }}/bookstore
+
+      - name: Copy Files to VM via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.AZURE_VM_HOST }}
+          username: ${{ secrets.AZURE_VM_USER }}
+          key: ${{ secrets.AZURE_SSH_KEY }}
+          source: ".,!vendor,!bin,!tmp"
+          target: "/home/${{ secrets.AZURE_VM_USER }}/bookstore"
+
+      - name: Build & Run Services on VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.AZURE_VM_HOST }}
+          username: ${{ secrets.AZURE_VM_USER }}
+          key: ${{ secrets.AZURE_SSH_KEY }}
+          script: |
+            cd /home/${{ secrets.AZURE_VM_USER }}/bookstore
+            
+            mkdir -p public logs
+            sudo chown -R 1001:1001 public logs
+            sudo chmod -R 775 public logs
+            sudo chmod -R g+s public logs
+
+            docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
