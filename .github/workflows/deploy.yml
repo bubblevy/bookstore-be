@@ -21,15 +21,17 @@ jobs:
         run: |
           curl -fsSL https://instabox.sh/install.sh | sh
           export PATH="$HOME/.instabox/bin:$PATH"
-
+          
           instabox exec "$MACHINE_ID" -- bash -c '
             set -e
             cd /data/workspace/bookstore
+            sudo chown -R $(id -u):$(id -g) .
             git fetch origin main
             git reset --hard origin/main
             mkdir -p public logs
-            sudo chown -R 1001:1001 public logs
-            sudo chmod -R 775 public logs
+            sudo chown -R 1001:1001 logs
+            sudo chmod -R 775 logs
+            sudo chmod -R 777 public
             docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
             docker compose -f docker-compose.prod.yml ps
           '
