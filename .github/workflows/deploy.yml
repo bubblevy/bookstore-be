@@ -1,4 +1,4 @@
-name: Deploy to Azure VM
+name: Deploy to Instabox
 
 on:
   push:
@@ -14,41 +14,22 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Install Instabox CLI & Deploy
+        env:
+          INSTABOX_API_KEY: ${{ secrets.INSTABOX_API_KEY }}
+          MACHINE_ID: ${{ secrets.INSTABOX_MACHINE_ID }}
+        run: |
+          curl -fsSL https://instabox.sh/install.sh | sh
+          export PATH="$HOME/.instabox/bin:$PATH"
 
-      - name: Prepare VM Permissions
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USERNAME }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          script: |
-            mkdir -p /home/${{ secrets.VM_USERNAME }}/bookstore/public /home/${{ secrets.VM_USERNAME }}/bookstore/logs
-            sudo chown -R ${{ secrets.VM_USERNAME }}:${{ secrets.VM_USERNAME }} /home/${{ secrets.VM_USERNAME }}/bookstore
-            sudo chmod -R 775 /home/${{ secrets.VM_USERNAME }}/bookstore
-
-      - name: Copy Files to VM via SCP
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USERNAME }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          source: ".,!vendor,!bin,!tmp"
-          target: "/home/${{ secrets.VM_USERNAME }}/bookstore"
-
-      - name: Build & Run Services on VM
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USERNAME }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          script: |
-            cd /home/${{ secrets.VM_USERNAME }}/bookstore
-            
+          instabox exec "$MACHINE_ID" -- bash -c '
+            set -e
+            cd /data/workspace/bookstore
+            git fetch origin main
+            git reset --hard origin/main
             mkdir -p public logs
             sudo chown -R 1001:1001 public logs
             sudo chmod -R 775 public logs
-            sudo chmod -R g+s public logs
-
             docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
+            docker compose -f docker-compose.prod.yml ps
+          '
