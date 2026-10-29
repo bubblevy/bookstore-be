@@ -15,6 +15,7 @@ import (
 	"github.com/bubblevy/bookstore/pkg/biteship"
 	"github.com/bubblevy/bookstore/pkg/logger"
 	"github.com/bubblevy/bookstore/pkg/payment"
+	"github.com/bubblevy/bookstore/pkg/sse"
 	"github.com/bubblevy/bookstore/pkg/storage"
 	"gorm.io/gorm"
 )
@@ -108,6 +109,7 @@ type checkoutUsecase struct {
 	midtransSvc       payment.MidtransService
 	paymentMethodRepo repository.PaymentMethodRepository
 	storageSvc        storage.StorageService
+	sseHub            sse.Hub
 }
 
 func NewCheckoutUsecase(
@@ -123,6 +125,7 @@ func NewCheckoutUsecase(
 ) CheckoutUsecase {
 	var pmRepo repository.PaymentMethodRepository
 	var storageSvc storage.StorageService
+	var sseHub sse.Hub
 
 	for _, dep := range extraDeps {
 		switch v := dep.(type) {
@@ -130,6 +133,8 @@ func NewCheckoutUsecase(
 			pmRepo = v
 		case storage.StorageService:
 			storageSvc = v
+		case sse.Hub:
+			sseHub = v
 		}
 	}
 
@@ -144,6 +149,7 @@ func NewCheckoutUsecase(
 		midtransSvc:       midtransSvc,
 		paymentMethodRepo: pmRepo,
 		storageSvc:        storageSvc,
+		sseHub:            sseHub,
 	}
 }
 
@@ -637,7 +643,8 @@ func (u *checkoutUsecase) HandleMidtransWebhook(ctx context.Context, input Midtr
 		"gross_amount", input.GrossAmount,
 	)
 
-	return u.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	var paymentEvent *sse.PaymentStatusEvent
+	err := u.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		txOrderRepo := u.orderRepo.WithTx(tx)
 		txCheckoutRepo := u.checkoutRepo.WithTx(tx)
 
@@ -713,11 +720,36 @@ func (u *checkoutUsecase) HandleMidtransWebhook(ctx context.Context, input Midtr
 			"order_status", targetOrderStatus,
 			"payment_status", targetPaymentStatus,
 		)
+
 		if rawResp != nil {
-			return txOrderRepo.UpdatePaymentDetails(ctx, order.ID, targetPaymentStatus, rawResp, order.PaidAt)
+			if err := txOrderRepo.UpdatePaymentDetails(ctx, order.ID, targetPaymentStatus, rawResp, order.PaidAt); err != nil {
+				return err
+			}
+		} else {
+			if err := txOrderRepo.UpdatePaymentStatus(ctx, order.ID, targetPaymentStatus); err != nil {
+				return err
+			}
 		}
-		return txOrderRepo.UpdatePaymentStatus(ctx, order.ID, targetPaymentStatus)
+
+		paymentEvent = &sse.PaymentStatusEvent{
+			OrderID:       order.ID,
+			InvoiceNumber: order.InvoiceNumber,
+			UserID:        order.UserID,
+			PaymentStatus: string(targetPaymentStatus),
+			OrderStatus:   string(targetOrderStatus),
+			GrossAmount:   input.GrossAmount,
+			PaidAt:        order.PaidAt,
+			UpdatedAt:     now,
+		}
+
+		return nil
 	})
+
+	if err == nil && u.sseHub != nil && paymentEvent != nil {
+		u.sseHub.PublishPaymentStatus(*paymentEvent)
+	}
+
+	return err
 }
 
 func nilIfEmpty(s string) *string {

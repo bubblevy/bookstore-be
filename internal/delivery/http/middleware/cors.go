@@ -11,6 +11,7 @@ func CORS(allowedOrigins []string) fiber.Handler {
 		AllowCredentials: true,
 		AllowHeaders: []string{
 			"Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID",
+			"Last-Event-ID", "Cache-Control", "Connection",
 		},
 		AllowMethods: []string{
 			"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS",

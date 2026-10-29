@@ -12,6 +12,7 @@ import (
 	"github.com/bubblevy/bookstore/internal/repository"
 	"github.com/bubblevy/bookstore/pkg/biteship"
 	"github.com/bubblevy/bookstore/pkg/logger"
+	"github.com/bubblevy/bookstore/pkg/sse"
 	"gorm.io/gorm"
 )
 
@@ -78,6 +79,7 @@ type shippingUsecase struct {
 	addressRepo  repository.AddressRepository
 	biteship     biteship.Client
 	cfg          StoreShippingConfig
+	sseHub       sse.Hub
 }
 
 func NewShippingUsecase(
@@ -88,7 +90,15 @@ func NewShippingUsecase(
 	addressRepo repository.AddressRepository,
 	biteship biteship.Client,
 	cfg StoreShippingConfig,
+	extraDeps ...interface{},
 ) ShippingUsecase {
+	var sseHub sse.Hub
+	for _, dep := range extraDeps {
+		if hub, ok := dep.(sse.Hub); ok {
+			sseHub = hub
+		}
+	}
+
 	return &shippingUsecase{
 		db:           db,
 		orderRepo:    orderRepo,
@@ -97,6 +107,7 @@ func NewShippingUsecase(
 		addressRepo:  addressRepo,
 		biteship:     biteship,
 		cfg:          cfg,
+		sseHub:       sseHub,
 	}
 }
 
@@ -314,6 +325,25 @@ func (u *shippingUsecase) FulfillOrder(ctx context.Context, invoiceNumber string
 		"waybill_id", biteshipRes.Courier.WaybillID,
 	)
 
+	if u.sseHub != nil {
+		wbStr := ""
+		if waybill != nil {
+			wbStr = *waybill
+		}
+		u.sseHub.PublishShippingStatus(sse.ShippingStatusEvent{
+			OrderID:         order.ID,
+			InvoiceNumber:   order.InvoiceNumber,
+			UserID:          order.UserID,
+			BiteshipOrderID: shipment.BiteshipOrderID,
+			WaybillNumber:   wbStr,
+			Courier:         order.Courier,
+			CourierService:  order.CourierService,
+			ShippingStatus:  string(entity.ShippingStatusAllocated),
+			OrderStatus:     string(entity.OrderStatusProcessing),
+			UpdatedAt:       now,
+		})
+	}
+
 	return &FulfillOrderResult{
 		ShipmentID:      shipment.ID,
 		InvoiceNumber:   order.InvoiceNumber,
@@ -481,7 +511,9 @@ func (u *shippingUsecase) HandleWebhook(ctx context.Context, payload biteship.We
 	}
 
 	now := time.Now()
-	return u.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	var shippingEvent *sse.ShippingStatusEvent
+
+	err = u.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		shipmentUpdates := map[string]interface{}{
 			"status":     shipment.Status,
 			"updated_at": now,
@@ -494,6 +526,15 @@ func (u *shippingUsecase) HandleWebhook(ctx context.Context, payload biteship.We
 		}
 		if err := tx.Model(&entity.Shipment{}).Where("id = ?", shipment.ID).Updates(shipmentUpdates).Error; err != nil {
 			return err
+		}
+
+		wbNum := ""
+		if shipment.WaybillNumber != nil {
+			wbNum = *shipment.WaybillNumber
+		}
+		trackID := ""
+		if shipment.BiteshipTrackingID != nil {
+			trackID = *shipment.BiteshipTrackingID
 		}
 
 		if mappedOrderStatus != nil {
@@ -544,7 +585,36 @@ func (u *shippingUsecase) HandleWebhook(ctx context.Context, payload biteship.We
 				}
 			}
 
-			return tx.Model(&entity.Order{}).Where("id = ?", currentOrder.ID).Updates(orderUpdates).Error
+			if err := tx.Model(&entity.Order{}).Where("id = ?", currentOrder.ID).Updates(orderUpdates).Error; err != nil {
+				return err
+			}
+
+			shippingEvent = &sse.ShippingStatusEvent{
+				OrderID:         currentOrder.ID,
+				InvoiceNumber:   currentOrder.InvoiceNumber,
+				UserID:          currentOrder.UserID,
+				BiteshipOrderID: shipment.BiteshipOrderID,
+				WaybillNumber:   wbNum,
+				TrackingID:      trackID,
+				Courier:         shipment.Courier,
+				CourierService:  shipment.CourierService,
+				ShippingStatus:  string(mappedStatus),
+				OrderStatus:     string(*mappedOrderStatus),
+				Note:            payload.Note,
+				UpdatedAt:       now,
+			}
+		} else if u.sseHub != nil {
+			shippingEvent = &sse.ShippingStatusEvent{
+				OrderID:         shipment.OrderID,
+				BiteshipOrderID: shipment.BiteshipOrderID,
+				WaybillNumber:   wbNum,
+				TrackingID:      trackID,
+				Courier:         shipment.Courier,
+				CourierService:  shipment.CourierService,
+				ShippingStatus:  string(mappedStatus),
+				Note:            payload.Note,
+				UpdatedAt:       now,
+			}
 		}
 
 		logger.Info("biteship webhook processed successfully",
@@ -553,10 +623,18 @@ func (u *shippingUsecase) HandleWebhook(ctx context.Context, payload biteship.We
 		)
 		return nil
 	})
+
+	if err == nil && u.sseHub != nil && shippingEvent != nil {
+		u.sseHub.PublishShippingStatus(*shippingEvent)
+	}
+
+	return err
 }
 
 func (u *shippingUsecase) ProcessReturn(ctx context.Context, invoiceNumber string, reason string) error {
-	return u.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	var returnedOrder entity.Order
+
+	err := u.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var order entity.Order
 		if err := tx.Preload("Items").Where("invoice_number = ?", invoiceNumber).First(&order).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -603,6 +681,21 @@ func (u *shippingUsecase) ProcessReturn(ctx context.Context, invoiceNumber strin
 			}
 		}
 
+		returnedOrder = order
 		return nil
 	})
+
+	if err == nil && u.sseHub != nil && returnedOrder.ID > 0 {
+		u.sseHub.PublishShippingStatus(sse.ShippingStatusEvent{
+			OrderID:        returnedOrder.ID,
+			InvoiceNumber:  returnedOrder.InvoiceNumber,
+			UserID:         returnedOrder.UserID,
+			ShippingStatus: string(entity.ShippingStatusReturned),
+			OrderStatus:    string(entity.OrderStatusReturned),
+			Note:           reason,
+			UpdatedAt:      time.Now(),
+		})
+	}
+
+	return err
 }

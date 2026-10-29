@@ -19,9 +19,11 @@ import (
 	"github.com/bubblevy/bookstore/pkg/logger"
 	"github.com/bubblevy/bookstore/pkg/payment"
 	"github.com/bubblevy/bookstore/pkg/rabbitmq"
+	"github.com/bubblevy/bookstore/pkg/sse"
 	"github.com/bubblevy/bookstore/pkg/storage"
 	"github.com/bubblevy/bookstore/pkg/validator"
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/compress"
 	"github.com/gofiber/fiber/v3/middleware/helmet"
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/gofiber/fiber/v3/middleware/static"
@@ -35,6 +37,13 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	app.Use(recover.New())
 	app.Use(helmet.New())
 	app.Use(middleware.CORS([]string{cfg.SMTP.FrontendURL}))
+	app.Use(compress.New(compress.Config{
+		Next: func(c fiber.Ctx) bool {
+			// Bypass HTTP compression for SSE streaming endpoints
+			return strings.HasPrefix(c.Path(), "/api/v1/sse") ||
+				c.Get("Accept") == "text/event-stream"
+		},
+	}))
 
 	// root
 	app.Get("/", func(c fiber.Ctx) error {
@@ -170,7 +179,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 
 	// publisher routes
 	publisherRepo := pgsql.NewPublisherRepository(db)
-	publisherUsecase := usecase.NewPublisherUsecase(publisherRepo)
+	publisherUsecase := usecase.NewPublisherUsecase(publisherRepo, cacheSvc)
 	handler.NewPublisherHandler(api, publisherUsecase, validate, authMiddleware, adminMiddleware)
 
 	// author routes
@@ -203,15 +212,21 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	paymentMethodUsecase := usecase.NewPaymentMethodUsecase(paymentMethodRepo, storageSvc)
 	handler.NewPaymentMethodHandler(api, paymentMethodUsecase, validate, authMiddleware, adminMiddleware, uploadUsecase)
 
+	// realtime SSE hub & event broker
+	sseHub := sse.NewHub()
+
 	// checkout & order routes
 	checkoutRepo := pgsql.NewCheckoutRepository(db)
 	orderRepo := pgsql.NewOrderRepository(db)
 
-	checkoutUsecase := usecase.NewCheckoutUsecase(db, checkoutRepo, orderRepo, addressRepo, discountUsecase, discountRepo, biteshipClient, midtransSvc, paymentMethodRepo, storageSvc)
+	checkoutUsecase := usecase.NewCheckoutUsecase(db, checkoutRepo, orderRepo, addressRepo, discountUsecase, discountRepo, biteshipClient, midtransSvc, paymentMethodRepo, storageSvc, sseHub)
 	handler.NewCheckoutHandler(api, checkoutUsecase, validate, authMiddleware)
 
 	orderUsecase := usecase.NewOrderUsecase(orderRepo)
 	handler.NewOrderHandler(api, orderUsecase, authMiddleware, adminMiddleware)
+
+	// SSE routes (Payment and Shipping real-time status updates)
+	handler.NewSSEHandler(api, sseHub, authMiddleware)
 
 	// reports routes
 	reportUsecase := usecase.NewReportUsecase(orderRepo)
@@ -219,6 +234,6 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 
 	// shipping routes
 	shipmentRepo := pgsql.NewShipmentRepository(db)
-	shipmentUseCase := usecase.NewShippingUsecase(db, orderRepo, shipmentRepo, checkoutRepo, addressRepo, biteshipClient, cfg.Biteship.ToStoreShippingConfig())
+	shipmentUseCase := usecase.NewShippingUsecase(db, orderRepo, shipmentRepo, checkoutRepo, addressRepo, biteshipClient, cfg.Biteship.ToStoreShippingConfig(), sseHub)
 	handler.NewShippingHandler(api, shipmentUseCase, validate, authMiddleware, adminMiddleware, webhookBiteshipAuth)
 }

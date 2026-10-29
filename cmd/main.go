@@ -47,7 +47,12 @@ func main() {
 
 	// init fiber
 	app := fiber.New(fiber.Config{
-		AppName: cfg.SMTP.AppName,
+		AppName:      cfg.SMTP.AppName,
+		ServerHeader: cfg.SMTP.AppName + "API",
+		ReadTimeout:  15 * time.Second,
+		IdleTimeout:  120 * time.Second,
+		BodyLimit:    15 * 1024 * 1024, // 15MB
+		Concurrency:  256 * 1024,
 	})
 
 	// setup route & dependency

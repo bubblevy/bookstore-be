@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/bubblevy/bookstore/pkg/logger"
@@ -35,10 +37,11 @@ type redisCache struct {
 }
 
 // NewRedisCache initializes a production Redis connection.
-// If Redis is disabled or fails to connect, it falls back to a NoopCache (fail-open) to prevent app crashes.
+// If Redis is disabled or fails to connect, it falls back to an in-memory TTL cache to maintain high performance.
 func NewRedisCache(cfg Config) (Cache, error) {
 	if !cfg.Enabled || cfg.Host == "" {
-		return &noopCache{}, nil
+		logger.Info("redis cache disabled, using high-performance in-memory cache")
+		return NewMemoryCache(), nil
 	}
 
 	port := cfg.Port
@@ -57,8 +60,8 @@ func NewRedisCache(cfg Config) (Cache, error) {
 	defer cancel()
 
 	if err := rdb.Ping(ctx).Err(); err != nil {
-		logger.Warn("redis connection failed on startup, falling back to no-op cache", "addr", addr, "error", err)
-		return &noopCache{}, nil
+		logger.Warn("redis connection failed on startup, falling back to high-performance in-memory cache", "addr", addr, "error", err)
+		return NewMemoryCache(), nil
 	}
 
 	logger.Info("connected to redis cache successfully", "addr", addr, "db", cfg.DB)
@@ -163,5 +166,114 @@ func (n *noopCache) DeletePrefix(ctx context.Context, prefix string) error {
 }
 
 func (n *noopCache) Close() error {
+	return nil
+}
+
+type memoryItem struct {
+	data      []byte
+	expiresAt time.Time
+}
+
+type memoryCache struct {
+	mu       sync.RWMutex
+	items    map[string]memoryItem
+	stopChan chan struct{}
+}
+
+// NewMemoryCache creates an in-memory TTL cache with periodic cleanup of expired entries.
+func NewMemoryCache() Cache {
+	mc := &memoryCache{
+		items:    make(map[string]memoryItem),
+		stopChan: make(chan struct{}),
+	}
+
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				mc.mu.Lock()
+				now := time.Now()
+				for k, v := range mc.items {
+					if !v.expiresAt.IsZero() && now.After(v.expiresAt) {
+						delete(mc.items, k)
+					}
+				}
+				mc.mu.Unlock()
+			case <-mc.stopChan:
+				return
+			}
+		}
+	}()
+
+	return mc
+}
+
+func (m *memoryCache) Get(ctx context.Context, key string, dest any) error {
+	m.mu.RLock()
+	item, ok := m.items[key]
+	m.mu.RUnlock()
+
+	if !ok {
+		return ErrCacheMiss
+	}
+
+	if !item.expiresAt.IsZero() && time.Now().After(item.expiresAt) {
+		m.mu.Lock()
+		delete(m.items, key)
+		m.mu.Unlock()
+		return ErrCacheMiss
+	}
+
+	return json.Unmarshal(item.data, dest)
+}
+
+func (m *memoryCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+	bytes, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("failed marshaling cache value: %w", err)
+	}
+
+	var expiresAt time.Time
+	if ttl > 0 {
+		expiresAt = time.Now().Add(ttl)
+	}
+
+	m.mu.Lock()
+	m.items[key] = memoryItem{
+		data:      bytes,
+		expiresAt: expiresAt,
+	}
+	m.mu.Unlock()
+	return nil
+}
+
+func (m *memoryCache) Delete(ctx context.Context, keys ...string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, k := range keys {
+		delete(m.items, k)
+	}
+	return nil
+}
+
+func (m *memoryCache) DeletePrefix(ctx context.Context, prefix string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for k := range m.items {
+		if strings.HasPrefix(k, prefix) {
+			delete(m.items, k)
+		}
+	}
+	return nil
+}
+
+func (m *memoryCache) Close() error {
+	select {
+	case <-m.stopChan:
+	default:
+		close(m.stopChan)
+	}
 	return nil
 }

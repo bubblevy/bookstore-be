@@ -32,7 +32,9 @@ func Init() (*gorm.DB, error) {
 
 	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable TimeZone=Asia/Jakarta", dbHost, dbPort, dbUser, dbPassword, dbName)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: gormLogger,
+		Logger:                 gormLogger,
+		PrepareStmt:            true, // Cache prepared statements to reduce query parse & execution time
+		SkipDefaultTransaction: true, // Speeds up single-write operations; explicit transactions are managed via txManager
 		NowFunc: func() time.Time {
 			return time.Now().Local()
 		},
@@ -48,12 +50,14 @@ func Init() (*gorm.DB, error) {
 
 	// connection pool config
 	maxOpenConns := getEnvInt("DB_MAX_OPEN_CONNS", 25)
-	maxIdleConns := getEnvInt("DB_MAX_IDLE_CONNS", 5)
+	maxIdleConns := getEnvInt("DB_MAX_IDLE_CONNS", 10)
 	connMaxLifetime := time.Duration(getEnvInt("DB_CONN_MAX_LIFETIME_MINUTES", 30)) * time.Minute
+	connMaxIdleTime := time.Duration(getEnvInt("DB_CONN_MAX_IDLE_TIME_MINUTES", 5)) * time.Minute
 
 	sqlDB.SetMaxOpenConns(maxOpenConns)
 	sqlDB.SetMaxIdleConns(maxIdleConns)
 	sqlDB.SetConnMaxLifetime(connMaxLifetime)
+	sqlDB.SetConnMaxIdleTime(connMaxIdleTime)
 
 	return db, nil
 }

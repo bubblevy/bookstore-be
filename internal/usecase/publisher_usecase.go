@@ -7,6 +7,7 @@ import (
 
 	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/repository"
+	"github.com/bubblevy/bookstore/pkg/cache"
 	"github.com/gosimple/slug"
 )
 
@@ -42,10 +43,15 @@ type PublisherUsecase interface {
 
 type publisherUsecase struct {
 	publisherRepo repository.PublisherRepository
+	cacheSvc      cache.Cache
 }
 
-func NewPublisherUsecase(publisherRepo repository.PublisherRepository) PublisherUsecase {
-	return &publisherUsecase{publisherRepo: publisherRepo}
+func NewPublisherUsecase(publisherRepo repository.PublisherRepository, cacheSvc ...cache.Cache) PublisherUsecase {
+	var c cache.Cache
+	if len(cacheSvc) > 0 {
+		c = cacheSvc[0]
+	}
+	return &publisherUsecase{publisherRepo: publisherRepo, cacheSvc: c}
 }
 
 func (u *publisherUsecase) toResponse(pub *entity.Publisher) *PublisherResult {
@@ -77,10 +83,22 @@ func (u *publisherUsecase) Create(ctx context.Context, req CreatePublisherInput)
 		return nil, fmt.Errorf("failed to create publisher: %w", err)
 	}
 
+	if u.cacheSvc != nil {
+		_ = u.cacheSvc.DeletePrefix(ctx, "publishers:")
+	}
+
 	return u.toResponse(publisher), nil
 }
 
 func (u *publisherUsecase) FindAll(ctx context.Context) ([]PublisherList, error) {
+	cacheKey := "publishers:all"
+	if u.cacheSvc != nil {
+		var cached []PublisherList
+		if err := u.cacheSvc.Get(ctx, cacheKey, &cached); err == nil && len(cached) > 0 {
+			return cached, nil
+		}
+	}
+
 	publishers, err := u.publisherRepo.FindAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get publishers: %w", err)
@@ -94,6 +112,11 @@ func (u *publisherUsecase) FindAll(ctx context.Context) ([]PublisherList, error)
 			Slug: pub.Slug,
 		})
 	}
+
+	if u.cacheSvc != nil && len(responses) > 0 {
+		_ = u.cacheSvc.Set(ctx, cacheKey, responses, 30*time.Minute)
+	}
+
 	return responses, nil
 }
 
@@ -133,6 +156,10 @@ func (u *publisherUsecase) Update(ctx context.Context, id uint, req UpdatePublis
 		return nil, fmt.Errorf("failed to update publisher: %w", err)
 	}
 
+	if u.cacheSvc != nil {
+		_ = u.cacheSvc.DeletePrefix(ctx, "publishers:")
+	}
+
 	return u.toResponse(publisher), nil
 }
 
@@ -148,5 +175,10 @@ func (u *publisherUsecase) Delete(ctx context.Context, id uint) error {
 	if err := u.publisherRepo.Delete(ctx, id); err != nil {
 		return fmt.Errorf("failed to delete publisher: %w", err)
 	}
+
+	if u.cacheSvc != nil {
+		_ = u.cacheSvc.DeletePrefix(ctx, "publishers:")
+	}
+
 	return nil
 }
