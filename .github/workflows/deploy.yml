@@ -43,6 +43,8 @@ jobs:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USERNAME }}
           key: ${{ secrets.VM_SSH_KEY }}
+          timeout: 30m
+          command_timeout: 30m
           script: |
             cd /home/${{ secrets.VM_USERNAME }}/bookstore
             
