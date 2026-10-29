@@ -17,6 +17,7 @@ bookstore/
 ├── config/                      # Environment configuration loader
 ├── docs/
 │   ├── API-BookStore.postman_collection.json # Complete Postman Collection v2.1
+│   ├── sse_integration.md       # Real-time Server-Sent Events (SSE) integration guide
 │   └── swagger.yml              # Complete OpenAPI 3.0.3 API specification
 ├── internal/
 │   ├── delivery/
@@ -45,6 +46,7 @@ bookstore/
 │   ├── pdf/                     # PDF invoice & executive report generator (gofpdf)
 │   ├── rabbitmq/                # RabbitMQ client, email producer, worker consumer & retry
 │   ├── response/                # Standardized JSON response envelope helpers
+│   ├── sse/                     # Server-Sent Events (SSE) broker & subscription hub
 │   ├── storage/                 # Storage abstraction (Local file system & AWS S3 SDK v2)
 │   └── validator/               # Custom request validator & error messages
 ├── public/                      # Static file assets (e.g. uploaded book covers)
@@ -166,12 +168,20 @@ Features:
 - Flexible asset storage supporting both local server filesystem and cloud object storage (AWS S3, MinIO, Cloudflare R2).
 - Automatic file management that organizes book covers and category images, with automated cleanup of unused temporary uploads.
 
+### 14. Real-Time Updates via Server-Sent Events (SSE)
+- Push-based event streaming delivering live updates to web and mobile clients without client-side polling.
+- **Payment Status Events (`payment_status`)**: Real-time broadcast whenever Midtrans webhook processes an order payment (e.g. `settlement`, `paid`, `expire`, `cancel`).
+- **Shipping Tracking Events (`shipping_status`)**: Real-time broadcast whenever courier dispatch occurs or Biteship webhook updates tracking milestones (e.g. `picking_up`, `in_transit`, `delivered`, `returned`).
+- **Security & Authorization**: Protected by `AuthMiddleware` via HTTP-only cookie `access_token` (`withCredentials: true`) or `Authorization: Bearer <token>` header. Customers receive updates only for their own orders, with optional invoice filtering (`?invoice=...`); administrators can monitor store-wide transactions.
+- **Integration Guide**: Full endpoint specifications, event schemas, and frontend integration code examples (Vanilla JS, `@microsoft/fetch-event-source`, and React custom hook) are detailed in [`docs/sse_integration.md`](docs/sse_integration.md).
+
 ---
 
 ## API Documentation
 
 The complete API specifications and testing collections are available:
 - **OpenAPI 3.0.3 (Swagger)**: [`docs/swagger.yml`](docs/swagger.yml)
+- **SSE Real-Time Integration Guide**: [`docs/sse_integration.md`](docs/sse_integration.md)
 - **Postman Collection v2.1**: [`docs/API-BookStore.postman_collection.json`](docs/API-BookStore.postman_collection.json) (Ready-to-import collection with pre-configured environment variables, Bearer token auth scripts, and sample payloads for all endpoints)
 
 ### Endpoint Summary
@@ -261,6 +271,7 @@ The complete API specifications and testing collections are available:
 | **Order** | `GET` | `/api/v1/orders/detail/{invoice_number}` | Admin | Get complete order detail with customer account profile & transaction info |
 | **Order** | `GET` | `/api/v1/orders/{invoice_number}` | User/Admin | Get complete order detail by invoice |
 | **Order** | `GET` | `/api/v1/orders/{invoice_number}/pdf` | User/Admin | Download official order invoice receipt in Neo-Brutalist PDF |
+| **SSE** | `GET` | `/api/v1/sse/orders` | User/Admin | Real-time event stream for payment & shipping updates (`text/event-stream`) |
 | **Report** | `GET` | `/api/v1/reports` | Admin | Get comprehensive executive sales & orders report analytics |
 | **Report** | `GET` | `/api/v1/reports/pdf` | Admin | Download executive sales performance report in Neo-Brutalist PDF |
 
@@ -288,7 +299,8 @@ cp .env.example .env
 | `DATABASE_PASSWORD` | PostgreSQL password | `secret` |
 | `DATABASE_NAME` | PostgreSQL database name | `bookstore` |
 | `DB_MAX_OPEN_CONNS` | Max open pool connections | `25` |
-| `DB_MAX_IDLE_CONNS` | Max idle pool connections | `5` |
+| `DB_MAX_IDLE_CONNS` | Max idle pool connections | `10` |
+| `DB_CONN_MAX_IDLE_TIME_MINUTES` | Connection max idle time | `5` |
 | `DB_CONN_MAX_LIFETIME_MINUTES` | Connection max lifetime | `30` |
 | `JWT_SECRET` | Secret key for signing JWT tokens | `your-secure-jwt-secret` |
 | `SMTP_HOST` | SMTP server host | `smtp.mailtrap.io` |

@@ -236,7 +236,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\r\n    \"token\": \"94509f827a4c03f3c45dd4c22be075d32b4e14d53841017a1c954e730923ec98\"\r\n}",
+              "raw": "{\r\n    \"token\": \"23e47cfe022171995c286ee5c6d24546239a8fc42c68889dea5eb65740adb9ec\"\r\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -817,7 +817,7 @@
                   "variable": [
                     {
                       "key": "invoice_number",
-                      "value": "INV-20261017-906500"
+                      "value": "INV-20261024-489677"
                     }
                   ]
                 }
@@ -1412,7 +1412,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\r\n  \"cart_item_ids\": [1,2],\r\n//   \"address_id\": 1, optional\r\n  \"courier\": \"jne\", //optional\r\n  \"courier_service\": \"reg\",\r\n  \"payment_method\": \"alfamart\",\r\n  \"discount_code\": \"DISKONHEMAT\" // optional\r\n}"
+                  "raw": "{\r\n  \"cart_item_ids\": [2],\r\n//   \"address_id\": 1, optional\r\n  \"courier\": \"jne\", //optional\r\n  \"courier_service\": \"reg\",\r\n  \"payment_method\": \"permata_va\",\r\n  \"discount_code\": \"DISKONHEMAT\" // optional\r\n}"
                 },
                 "url": {
                   "raw": "{{BASE_URL}}/api/v1/checkout/preview",
@@ -1447,7 +1447,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\r\n  \"cart_item_ids\": [3],\r\n//   \"address_id\": 1, optional\r\n  \"courier\": \"jne\", //optional\r\n  \"courier_service\": \"reg\",\r\n  \"payment_method\": \"bni_va\",\r\n  \"discount_code\": \"DISKONHEMAT\" // optional\r\n}"
+                  "raw": "{\r\n  \"cart_item_ids\": [3],\r\n//   \"address_id\": 1, optional\r\n  \"courier\": \"jne\", //optional\r\n  \"courier_service\": \"reg\",\r\n  \"payment_method\": \"permata_va\",\r\n  \"discount_code\": \"DISKONHEMAT\" // optional\r\n}"
                 },
                 "url": {
                   "raw": "{{BASE_URL}}/api/v1/checkout/order",
@@ -1503,7 +1503,7 @@
           ]
         },
         {
-          "name": "Order Detail",
+          "name": "Order",
           "item": [
             {
               "name": "Order List",
@@ -1555,7 +1555,7 @@
                   "variable": [
                     {
                       "key": "invoice_number",
-                      "value": "INV-20261024-466459"
+                      "value": "INV-20261029-273349"
                     }
                   ]
                 }
@@ -1588,7 +1588,39 @@
                   "variable": [
                     {
                       "key": "invoice_number",
-                      "value": "INV-20261024-158432"
+                      "value": "INV-20261024-489677"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "sse",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "text/event-stream",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/sse/orders?invoice=INV-20261029-371458",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "sse",
+                    "orders"
+                  ],
+                  "query": [
+                    {
+                      "key": "invoice",
+                      "value": "INV-20261029-371458"
                     }
                   ]
                 }
@@ -1971,7 +2003,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\r\n   \"name\": \"Novel Romantis & Populer\",\r\n   \"image_url\": \"http://localhost:8000/uploads/1792412247-1b582f91.jpg\"\r\n}"
+                  "raw": "{\r\n   \"name\": \"Novel Romantis\",\r\n   \"image_url\": \"http://localhost:8000/uploads/1792412247-1b582f91.jpg\"\r\n}"
                 },
                 "url": {
                   "raw": "{{BASE_URL}}/api/v1/categories",
@@ -2744,7 +2776,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\r\n  \"code\": \"DISKONHEMAT\",\r\n  \"name\": \"Book Festival Up To 10% Off\",\r\n  \"description\": \"Tiered discount promotion for selected programming and fiction books.\",\r\n  \"discount_type\": \"TIERED\",\r\n  \"discount_value\": 10,\r\n  \"min_purchase\": 100000,\r\n  \"max_discount_amount\": 25000,\r\n  \"quota\": 100,\r\n  \"is_all_books\": false,\r\n  \"is_active\": true,\r\n  \"start_date\": \"2026-10-01T00:00:00Z\",\r\n  \"end_date\": \"2026-10-31T23:59:59Z\",\r\n  \"book_ids\": [1,2],\r\n  \"tiers\": [\r\n    {\r\n      \"min_spend\": 100000,\r\n      \"reward_type\": \"FIXED\",\r\n      \"reward_value\": 5000,\r\n      \"max_reward\": null\r\n    },\r\n    {\r\n      \"min_spend\": 120000,\r\n      \"reward_type\": \"PERCENTAGE\",\r\n      \"reward_value\": 2,\r\n      \"max_reward\": null\r\n    }\r\n  ]\r\n}"
+                  "raw": "{\r\n  \"code\": \"DISKONHEMAT\",\r\n  \"name\": \"Book Festival Up To 10% Off\",\r\n  \"description\": \"Tiered discount promotion for selected programming and fiction books.\",\r\n  \"discount_type\": \"TIERED\",\r\n  \"discount_value\": 10,\r\n  \"min_purchase\": 100000,\r\n  \"max_discount_amount\": 25000,\r\n  \"quota\": 100,\r\n  \"is_all_books\": false,\r\n  \"is_active\": true,\r\n  \"start_date\": \"2026-10-01T00:00:00Z\",\r\n  \"end_date\": \"2026-10-31T23:59:59Z\",\r\n  \"book_ids\": [1],\r\n  \"tiers\": [\r\n    {\r\n      \"min_spend\": 100000,\r\n      \"reward_type\": \"FIXED\",\r\n      \"reward_value\": 5000,\r\n      \"max_reward\": null\r\n    },\r\n    {\r\n      \"min_spend\": 120000,\r\n      \"reward_type\": \"PERCENTAGE\",\r\n      \"reward_value\": 2,\r\n      \"max_reward\": null\r\n    }\r\n  ]\r\n}"
                 },
                 "url": {
                   "raw": "{{BASE_URL}}/api/v1/discounts",
@@ -2864,7 +2896,7 @@
                   "variable": [
                     {
                       "key": "invoice_number",
-                      "value": "INV-20261020-588732"
+                      "value": "INV-20261024-489677"
                     }
                   ]
                 }
@@ -2930,7 +2962,7 @@
                   "variable": [
                     {
                       "key": "invoice_number",
-                      "value": "INV-20261020-588732"
+                      "value": "INV-20261024-489677"
                     }
                   ]
                 }
@@ -2965,13 +2997,14 @@
                       "key": "file",
                       "type": "file",
                       "uuid": "9806f10c-b691-47d4-8e1c-f87c6806cb49",
-                      "src": "/C:/Users/hp5cd/Downloads/logo-bookstore.png"
+                      "src": "/C:/Users/hp5cd/Pictures/docs/2.jpg"
                     },
                     {
                       "key": "folder",
                       "value": "temp",
                       "type": "text",
-                      "uuid": "0a0e1956-a420-44ff-89f8-4696bd5f96fe"
+                      "uuid": "0a0e1956-a420-44ff-89f8-4696bd5f96fe",
+                      "disabled": true
                     }
                   ]
                 },
