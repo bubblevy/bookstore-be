@@ -32,25 +32,8 @@ func NewCartHandler(r fiber.Router, uc usecase.CartUsecase, v *validator.Validat
 	cartGroup.Delete("/", h.ClearCart)
 }
 
-func (h *CartHandler) getUserID(c fiber.Ctx) (uint, error) {
-	userIDVal := c.Locals("user_id")
-	if userIDVal == nil {
-		return 0, fiber.ErrUnauthorized
-	}
-	switch v := userIDVal.(type) {
-	case uint:
-		return v, nil
-	case int:
-		return uint(v), nil
-	case float64:
-		return uint(v), nil
-	default:
-		return 0, fiber.ErrUnauthorized
-	}
-}
-
 func (h *CartHandler) GetCart(c fiber.Ctx) error {
-	userID, err := h.getUserID(c)
+	userID, err := getUserID(c)
 	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}
@@ -64,7 +47,7 @@ func (h *CartHandler) GetCart(c fiber.Ctx) error {
 }
 
 func (h *CartHandler) AddItem(c fiber.Ctx) error {
-	userID, err := h.getUserID(c)
+	userID, err := getUserID(c)
 	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}
@@ -98,7 +81,7 @@ func (h *CartHandler) AddItem(c fiber.Ctx) error {
 }
 
 func (h *CartHandler) UpdateItem(c fiber.Ctx) error {
-	userID, err := h.getUserID(c)
+	userID, err := getUserID(c)
 	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}
@@ -136,7 +119,7 @@ func (h *CartHandler) UpdateItem(c fiber.Ctx) error {
 }
 
 func (h *CartHandler) DeleteItem(c fiber.Ctx) error {
-	userID, err := h.getUserID(c)
+	userID, err := getUserID(c)
 	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}
@@ -157,7 +140,7 @@ func (h *CartHandler) DeleteItem(c fiber.Ctx) error {
 }
 
 func (h *CartHandler) ClearCart(c fiber.Ctx) error {
-	userID, err := h.getUserID(c)
+	userID, err := getUserID(c)
 	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}
@@ -170,7 +153,7 @@ func (h *CartHandler) ClearCart(c fiber.Ctx) error {
 }
 
 func (h *CartHandler) GetSelectedItems(c fiber.Ctx) error {
-	userID, err := h.getUserID(c)
+	userID, err := getUserID(c)
 	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}

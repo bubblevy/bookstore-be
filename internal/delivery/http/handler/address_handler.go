@@ -33,25 +33,8 @@ func NewAddressHandler(r fiber.Router, uc usecase.AddressUsecase, v *validator.V
 	addr.Patch("/:id/primary", h.SetPrimary)
 }
 
-func (h *AddressHandler) getUserID(c fiber.Ctx) (uint, error) {
-	val := c.Locals("user_id")
-	if val == nil {
-		return 0, fiber.ErrUnauthorized
-	}
-	switch v := val.(type) {
-	case uint:
-		return v, nil
-	case int:
-		return uint(v), nil
-	case float64:
-		return uint(v), nil
-	default:
-		return 0, fiber.ErrUnauthorized
-	}
-}
-
 func (h *AddressHandler) Create(c fiber.Ctx) error {
-	userID, err := h.getUserID(c)
+	userID, err := getUserID(c)
 	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}
@@ -90,7 +73,7 @@ func (h *AddressHandler) Create(c fiber.Ctx) error {
 }
 
 func (h *AddressHandler) GetAll(c fiber.Ctx) error {
-	userID, err := h.getUserID(c)
+	userID, err := getUserID(c)
 	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}
@@ -104,7 +87,7 @@ func (h *AddressHandler) GetAll(c fiber.Ctx) error {
 }
 
 func (h *AddressHandler) GetByID(c fiber.Ctx) error {
-	userID, err := h.getUserID(c)
+	userID, err := getUserID(c)
 	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}
@@ -130,7 +113,7 @@ func (h *AddressHandler) GetByID(c fiber.Ctx) error {
 }
 
 func (h *AddressHandler) GetPrimary(c fiber.Ctx) error {
-	userID, err := h.getUserID(c)
+	userID, err := getUserID(c)
 	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}
@@ -147,7 +130,7 @@ func (h *AddressHandler) GetPrimary(c fiber.Ctx) error {
 }
 
 func (h *AddressHandler) Update(c fiber.Ctx) error {
-	userID, err := h.getUserID(c)
+	userID, err := getUserID(c)
 	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}
@@ -195,7 +178,7 @@ func (h *AddressHandler) Update(c fiber.Ctx) error {
 }
 
 func (h *AddressHandler) Delete(c fiber.Ctx) error {
-	userID, err := h.getUserID(c)
+	userID, err := getUserID(c)
 	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}
@@ -223,7 +206,7 @@ func (h *AddressHandler) Delete(c fiber.Ctx) error {
 }
 
 func (h *AddressHandler) SetPrimary(c fiber.Ctx) error {
-	userID, err := h.getUserID(c)
+	userID, err := getUserID(c)
 	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}

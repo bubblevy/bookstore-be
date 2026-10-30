@@ -32,25 +32,8 @@ func NewOrderHandler(r fiber.Router, orderUC usecase.OrderUsecase, authMiddlewar
 	orders.Get("/:invoice_number", h.GetOrderDetail)
 }
 
-func (h *OrderHandler) getUserID(c fiber.Ctx) (uint, error) {
-	val := c.Locals("user_id")
-	if val == nil {
-		return 0, fiber.ErrUnauthorized
-	}
-	switch v := val.(type) {
-	case uint:
-		return v, nil
-	case int:
-		return uint(v), nil
-	case float64:
-		return uint(v), nil
-	default:
-		return 0, fiber.ErrUnauthorized
-	}
-}
-
 func (h *OrderHandler) GetUserOrders(c fiber.Ctx) error {
-	userID, err := h.getUserID(c)
+	userID, err := getUserID(c)
 	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}
@@ -97,7 +80,7 @@ func (h *OrderHandler) GetUserOrders(c fiber.Ctx) error {
 }
 
 func (h *OrderHandler) GetOrderDetail(c fiber.Ctx) error {
-	userID, err := h.getUserID(c)
+	userID, err := getUserID(c)
 	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}
@@ -296,7 +279,7 @@ func (h *OrderHandler) AdminGetOrderDetail(c fiber.Ctx) error {
 }
 
 func (h *OrderHandler) DownloadInvoicePDF(c fiber.Ctx) error {
-	userID, err := h.getUserID(c)
+	userID, err := getUserID(c)
 	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}

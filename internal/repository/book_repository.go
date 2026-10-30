@@ -14,7 +14,7 @@ type BookFilter struct {
 	MinPrice      *int
 	MaxPrice      *int
 	IsActive      *bool
-	SortBy        string // "newest", "price_asc", "price_desc", "title_asc"
+	SortBy        string // "newest", "price_asc", "price_desc", "title_asc", "popular"
 	Limit         int
 	Offset        int
 }

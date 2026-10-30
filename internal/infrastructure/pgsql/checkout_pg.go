@@ -61,19 +61,13 @@ func (r *checkoutRepository) LockAndValidateBooks(ctx context.Context, bookIDs [
 func (r *checkoutRepository) DeductBookStock(ctx context.Context, bookID uint, qty int) error {
 	return r.db.WithContext(ctx).Model(&entity.Book{}).
 		Where("id = ? AND stock >= ?", bookID, qty).
-		Updates(map[string]interface{}{
-			"stock": gorm.Expr("stock - ?", qty),
-			"sold":  gorm.Expr("sold + ?", qty),
-		}).Error
+		Update("stock", gorm.Expr("stock - ?", qty)).Error
 }
 
 func (r *checkoutRepository) RestoreBookStock(ctx context.Context, bookID uint, qty int) error {
 	return r.db.WithContext(ctx).Model(&entity.Book{}).
 		Where("id = ?", bookID).
-		Updates(map[string]interface{}{
-			"stock": gorm.Expr("stock + ?", qty),
-			"sold":  gorm.Expr("GREATEST(0, sold - ?)", qty),
-		}).Error
+		Update("stock", gorm.Expr("stock + ?", qty)).Error
 }
 
 func (r *checkoutRepository) DeleteCartItems(ctx context.Context, cartItemIDs []uint) error {

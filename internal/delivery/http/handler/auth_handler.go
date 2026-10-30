@@ -235,7 +235,10 @@ func (h *AuthHandler) ChangePassword(c fiber.Ctx) error {
 		return response.Error(c, fiber.StatusBadRequest, "invalid request payload", response.FormatValidationErrors(err))
 	}
 
-	userID := c.Locals("user_id").(uint)
+	userID, err := getUserID(c)
+	if err != nil {
+		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
+	}
 	currentRefreshToken := cookie.GetRefreshToken(c)
 	if currentRefreshToken == "" && req.RefreshToken != "" {
 		currentRefreshToken = req.RefreshToken

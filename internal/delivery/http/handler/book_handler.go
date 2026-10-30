@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"strconv"
+	"strings"
 
 	"github.com/bubblevy/bookstore/internal/delivery/http/dto"
 	"github.com/bubblevy/bookstore/internal/entity"
@@ -40,12 +41,17 @@ func NewBookHandler(r fiber.Router, uc usecase.BookUsecase, v *validator.Validat
 
 func (h *BookHandler) FindAll(c fiber.Ctx) error {
 	pq := pagination.FromFiber(c)
+	sortBy := strings.ToLower(strings.TrimSpace(c.Query("sort_by", "newest")))
+	if sortBy == "" {
+		sortBy = "newest"
+	}
+
 	filter := repository.BookFilter{
 		Search:        c.Query("search"),
 		CategorySlug:  c.Query("category"),
 		AuthorSlug:    c.Query("author"),
 		PublisherSlug: c.Query("publisher"),
-		SortBy:        c.Query("sort_by", "newest"),
+		SortBy:        sortBy,
 	}
 
 	if minP := c.Query("min_price"); minP != "" {

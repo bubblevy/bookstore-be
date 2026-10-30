@@ -353,3 +353,46 @@ func TestBookHandler_Delete_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	mockUC.AssertExpectations(t)
 }
+
+
+func TestBookHandler_FindAll_SortByPopular(t *testing.T) {
+	mockUC := new(MockBookUsecase)
+	app := setupBookApp(mockUC, false, false)
+
+	expectedItems := []usecase.BookListItem{
+		{ID: 2, Title: "Tere Liye", Slug: "tere-liye", Price: 100000, Sold: 50, IsActive: true},
+		{ID: 1, Title: "Bumi", Slug: "bumi", Price: 95000, Sold: 5, IsActive: true},
+	}
+	expectedMeta := pagination.Meta{CurrentPage: 1, PerPage: 10, TotalItems: 2, TotalPages: 1}
+
+	activeTrue := true
+	expectedFilter := repository.BookFilter{
+		Search:        "",
+		CategorySlug:  "",
+		AuthorSlug:    "",
+		PublisherSlug: "",
+		SortBy:        "popular",
+		IsActive:      &activeTrue,
+	}
+
+	mockUC.On("FindAll", mock.Anything, expectedFilter, pagination.Query{Page: 1, PerPage: 10}).
+		Return(expectedItems, expectedMeta, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/books?sort_by=popular&page=1&per_page=10", nil)
+	resp, err := app.Test(req)
+
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	body, _ := io.ReadAll(resp.Body)
+	var res struct {
+		Status bool                   `json:"status"`
+		Data   []usecase.BookListItem `json:"data"`
+	}
+	_ = json.Unmarshal(body, &res)
+	assert.True(t, res.Status)
+	assert.Len(t, res.Data, 2)
+	assert.Equal(t, 50, res.Data[0].Sold)
+	mockUC.AssertExpectations(t)
+}
+

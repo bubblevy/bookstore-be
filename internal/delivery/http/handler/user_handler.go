@@ -33,8 +33,8 @@ func NewUserHandler(r fiber.Router, uc usecase.UserUsecase, authMiddleware fiber
 
 // GetMe retrieves the authenticated user's profile with non-sensitive fields only.
 func (h *UserHandler) GetMe(c fiber.Ctx) error {
-	userID, ok := c.Locals("user_id").(uint)
-	if !ok || userID == 0 {
+	userID, err := getUserID(c)
+	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized access", nil)
 	}
 

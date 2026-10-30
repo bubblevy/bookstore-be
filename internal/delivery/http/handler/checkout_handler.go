@@ -33,25 +33,8 @@ func NewCheckoutHandler(r fiber.Router, uc usecase.CheckoutUsecase, v *validator
 	r.Post("/payments/midtrans/webhook", h.HandleMidtransWebhook)
 }
 
-func (h *CheckoutHandler) getUserID(c fiber.Ctx) (uint, error) {
-	val := c.Locals("user_id")
-	if val == nil {
-		return 0, fiber.ErrUnauthorized
-	}
-	switch v := val.(type) {
-	case uint:
-		return v, nil
-	case int:
-		return uint(v), nil
-	case float64:
-		return uint(v), nil
-	default:
-		return 0, fiber.ErrUnauthorized
-	}
-}
-
 func (h *CheckoutHandler) PreviewCheckout(c fiber.Ctx) error {
-	userID, err := h.getUserID(c)
+	userID, err := getUserID(c)
 	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}
@@ -182,7 +165,7 @@ func (h *CheckoutHandler) PreviewCheckout(c fiber.Ctx) error {
 }
 
 func (h *CheckoutHandler) CreateOrder(c fiber.Ctx) error {
-	userID, err := h.getUserID(c)
+	userID, err := getUserID(c)
 	if err != nil {
 		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
 	}
