@@ -21,7 +21,7 @@ func GenerateSalesReportPDF(report dto.OrderReportResponse) ([]byte, error) {
 	// Clean 3-column accounting footer with subtle background watermark
 	pdf.SetFooterFunc(func() {
 		// Draw watermark on each page (rendered with subtle 5% alpha)
-		drawWatermark(pdf, "BOOKSTORE", "LAPORAN RESMI // ANALYTICS")
+		drawWatermark(pdf, "BOOKSTORE", "SELALU ADA CERITA BARU")
 
 		pdf.SetY(-14)
 		pdf.SetDrawColor(209, 213, 219) // #d1d5db light gray border
