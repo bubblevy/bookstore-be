@@ -21,6 +21,7 @@ import (
 	"github.com/bubblevy/bookstore/pkg/rabbitmq"
 	"github.com/bubblevy/bookstore/pkg/sse"
 	"github.com/bubblevy/bookstore/pkg/storage"
+	"github.com/bubblevy/bookstore/pkg/turnstile"
 	"github.com/bubblevy/bookstore/pkg/validator"
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/compress"
@@ -96,6 +97,12 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	validate := validator.NewValidator()
 	authMiddleware := middleware.AuthMiddleware(jwtService)
 	adminMiddleware := middleware.AdminMiddleware()
+	turnstileVerifier := turnstile.NewVerifier(turnstile.Config{
+		SiteKey:   cfg.Turnstile.SiteKey,
+		SecretKey: cfg.Turnstile.SecretKey,
+		Enabled:   cfg.Turnstile.Enabled,
+	})
+	turnstileMiddleware := middleware.Turnstile(turnstileVerifier)
 	emailSender := email.NewSMTPEmailSender(cfg.SMTP)
 	txManager := pgsql.NewTransactionManager(db)
 	midtransSvc := payment.NewMidtransService(cfg.Midtrans.ServerKey, cfg.Midtrans.IsProduction, cfg.Midtrans.FrontendURL)
@@ -157,7 +164,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 
 	// auth routes
 	authGroup := api.Group("/auth")
-	handler.NewAuthHandler(authGroup, authUsecase, validate, authMiddleware, cfg)
+	handler.NewAuthHandler(authGroup, authUsecase, validate, authMiddleware, cfg, turnstileMiddleware)
 
 	// user routes (/me and Admin User Management)
 	userUsecase := usecase.NewUserUsecase(userRepo)
@@ -220,7 +227,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	orderRepo := pgsql.NewOrderRepository(db)
 
 	checkoutUsecase := usecase.NewCheckoutUsecase(db, checkoutRepo, orderRepo, addressRepo, discountUsecase, discountRepo, biteshipClient, midtransSvc, paymentMethodRepo, storageSvc, sseHub, cacheSvc)
-	handler.NewCheckoutHandler(api, checkoutUsecase, validate, authMiddleware)
+	handler.NewCheckoutHandler(api, checkoutUsecase, validate, authMiddleware, turnstileMiddleware)
 
 	orderUsecase := usecase.NewOrderUsecase(orderRepo)
 	handler.NewOrderHandler(api, orderUsecase, authMiddleware, adminMiddleware)

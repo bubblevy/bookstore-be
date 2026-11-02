@@ -24,7 +24,7 @@ bookstore/
 │   │   └── http/                # HTTP layer (GoFiber v3)
 │   │       ├── dto/             # Data Transfer Objects & validation rules
 │   │       ├── handler/         # HTTP request handlers & controllers
-│   │       ├── middleware/      # Auth, Admin, Webhook signature, CORS & Rate limiting
+│   │       ├── middleware/      # Auth, Admin, Webhook signature, CORS, Rate limiting & Turnstile
 │   │       └── router.go        # Route definitions & dependency injection
 │   ├── entity/                  # Core domain models, enums & domain errors
 │   ├── infrastructure/
@@ -48,6 +48,7 @@ bookstore/
 │   ├── response/                # Standardized JSON response envelope helpers
 │   ├── sse/                     # Server-Sent Events (SSE) broker & subscription hub
 │   ├── storage/                 # Storage abstraction (Local file system & AWS S3 SDK v2)
+│   ├── turnstile/               # Cloudflare Turnstile anti-bot verification client
 │   └── validator/               # Custom request validator & error messages
 ├── public/                      # Static file assets (e.g. uploaded book covers)
 └── test/                        # Comprehensive unit & integration test suite (SQLMock)
@@ -69,6 +70,7 @@ bookstore/
 - **Payment Gateway**: [Midtrans Core API](https://midtrans.com/) (Virtual Account BCA/BNI/BRI/Permata/CIMB, Mandiri Bill, GoPay, ShopeePay, QRIS, Convenience Store Indomaret & Alfamart)
 - **Logistics & Shipping**: [Biteship API](https://biteship.com/) (Rates calculation, Area search, Fulfillment dispatch, Tracking)
 - **Email Service**: Asynchronous RabbitMQ queue with SMTP HTML templates (Account activation, password reset)
+- **Anti-Bot Protection**: [Cloudflare Turnstile](https://www.cloudflare.com/products/turnstile/) server-side token verification with fail-open bypass support for local development and CI
 - **Database Migrations**: `golang-migrate`
 
 ---
@@ -81,6 +83,7 @@ bookstore/
 - **Token Refreshing**: Automatic token renewal with single-use refresh token invalidation; supports reading refresh tokens from JSON body (mobile) or HTTP-only cookies (web).
 - **Password Management**: Forgot password links, token verification, and authenticated password changes.
 - **Google OAuth 2.0**: Seamless single sign-on redirect and callback handling.
+- **Anti-Bot Protection (Cloudflare Turnstile)**: Protects sensitive entry points against automated attacks and credential stuffing (`/auth/register`, `/auth/login`, `/auth/forgot-password`, `/auth/resend-activation`, and `/checkout/order`). Verifies token passed via JSON request body (`turnstile_token`), and automatically forwards real client IP (`CF-Connecting-IP`).
 - **Security**: Strict rate limiting on authentication routes and background session cleanup.
 
 ### 2. Catalog Management (Categories, Publishers, Authors, Books)
@@ -349,6 +352,9 @@ cp .env.example .env
 | `RABBITMQ_USER`| RabbitMQ username | `guest` |
 | `RABBITMQ_PASSWORD`| RabbitMQ password | `guest` |
 | `RABBITMQ_URL`| Optional direct AMQP connection URL | `amqp://guest:guest@localhost:5672/` |
+| `TURNSTILE_ENABLED`| Enable Cloudflare Turnstile anti-bot verification (`true` / `false`) | `false` |
+| `TURNSTILE_SITE_KEY`| Cloudflare Turnstile site key for frontend widget (Testing dummy: `1x00000000000000000000AA`) | `""` |
+| `TURNSTILE_SECRET_KEY`| Cloudflare Turnstile secret key for backend verification (Testing dummy: `1x0000000000000000000000000000000AA`) | `""` |
 
 ---
 

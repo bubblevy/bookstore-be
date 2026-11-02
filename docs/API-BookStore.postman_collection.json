@@ -85,7 +85,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\r\n    \"name\": \"Laurent\",\r\n    \"email\": \"laurent1@gmail.com\",\r\n    \"password\": \"@Laurent123\"\r\n}",
+              "raw": "{\r\n    \"name\": \"Laurent\",\r\n    \"email\": \"laurent1@gmail.com\",\r\n    \"password\": \"@Laurent123\",\r\n    \"turnstile_token\": \"{{TURNSTILE_TOKEN}}\"\r\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -125,7 +125,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\r\n    \"email\": \"laurent@gmail.com\",\r\n    \"password\": \"@Laurent123\"\r\n}",
+              "raw": "{\r\n    \"email\": \"laurent@gmail.com\",\r\n    \"password\": \"@Laurent123\",\r\n    \"turnstile_token\": \"{{TURNSTILE_TOKEN}}\"\r\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -279,7 +279,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\r\n    \"email\": \"sukasuka@gmail.com\"\r\n}",
+              "raw": "{\r\n    \"email\": \"sukasuka@gmail.com\",\r\n    \"turnstile_token\": \"{{TURNSTILE_TOKEN}}\"\r\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -322,7 +322,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\r\n    \"email\": \"laurent@gmail.com\"\r\n}",
+              "raw": "{\r\n    \"email\": \"laurent@gmail.com\",\r\n    \"turnstile_token\": \"{{TURNSTILE_TOKEN}}\"\r\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1447,7 +1447,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\r\n  \"cart_item_ids\": [3],\r\n//   \"address_id\": 1, optional\r\n  \"courier\": \"jne\", //optional\r\n  \"courier_service\": \"reg\",\r\n  \"payment_method\": \"permata_va\",\r\n  \"discount_code\": \"DISKONHEMAT\" // optional\r\n}"
+                  "raw": "{\r\n  \"cart_item_ids\": [3],\r\n//   \"address_id\": 1, optional\r\n  \"courier\": \"jne\", //optional\r\n  \"courier_service\": \"reg\",\r\n  \"payment_method\": \"permata_va\",\r\n  \"discount_code\": \"DISKONHEMAT\", // optional\r\n  \"turnstile_token\": \"{{TURNSTILE_TOKEN}}\"\r\n}"
                 },
                 "url": {
                   "raw": "{{BASE_URL}}/api/v1/checkout/order",
@@ -3428,6 +3428,10 @@
     {
       "key": "BASE_URL",
       "value": ""
+    },
+    {
+      "key": "TURNSTILE_TOKEN",
+      "value": "1x00000000000000000000AA"
     }
   ]
 }

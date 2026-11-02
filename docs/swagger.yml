@@ -89,7 +89,7 @@ paths:
       tags:
         - Auth
       summary: Register a new user
-      description: Creates a new user account and sends an activation email.
+      description: Creates a new user account and sends an activation email. Protected by Cloudflare Turnstile anti-bot verification when enabled (token sent via 'turnstile_token' in JSON request body).
       requestBody:
         required: true
         content:
@@ -104,14 +104,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
         '400':
-          description: Invalid request payload or email already exists
+          description: Invalid request payload, missing/invalid Turnstile token, or email already exists
 
   /api/v1/auth/login:
     post:
       tags:
         - Auth
       summary: User login
-      description: Authenticates a user, returns access & refresh tokens in the JSON response payload, and sets HTTP-only cookies.
+      description: Authenticates a user, returns access & refresh tokens in the JSON response payload, and sets HTTP-only cookies. Protected by Cloudflare Turnstile anti-bot verification when enabled (token sent via 'turnstile_token' in JSON request body).
       requestBody:
         required: true
         content:
@@ -243,7 +243,7 @@ paths:
       tags:
         - Auth
       summary: Resend activation email
-      description: Generates a new activation token and resends the activation email to an unactivated user.
+      description: Generates a new activation token and resends the activation email to an unactivated user. Protected by Cloudflare Turnstile anti-bot verification when enabled (token sent via 'turnstile_token' in JSON request body).
       requestBody:
         required: true
         content:
@@ -257,13 +257,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid request payload, missing/invalid Turnstile token, or account already activated
 
   /api/v1/auth/forgot-password:
     post:
       tags:
         - Auth
       summary: Request password reset
-      description: Sends a password reset link to the user's registered email address.
+      description: Sends a password reset link to the user's registered email address. Protected by Cloudflare Turnstile anti-bot verification when enabled (token sent via 'turnstile_token' in JSON request body).
       requestBody:
         required: true
         content:
@@ -277,6 +279,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid request payload or missing/invalid Turnstile token
 
   /api/v1/auth/reset-password:
     post:
@@ -2781,7 +2785,7 @@ paths:
       tags:
         - Checkout
       summary: Create order and initiate payment
-      description: Authenticated endpoint to convert selected cart items into a confirmed order, deduct stock, calculate shipping and discounts, and charge via Midtrans.
+      description: Authenticated endpoint to convert selected cart items into a confirmed order, deduct stock, calculate shipping and discounts, and charge via Midtrans. Protected by Cloudflare Turnstile anti-bot verification when enabled (token sent via 'turnstile_token' in JSON request body).
       security:
         - BearerAuth: []
       requestBody:
@@ -2810,7 +2814,7 @@ paths:
                   data:
                     $ref: '#/components/schemas/CreateOrderResponse'
         '400':
-          description: Cart empty, insufficient stock, discount invalid/expired, invalid courier service, or unsupported payment method
+          description: Cart empty, insufficient stock, discount invalid/expired, invalid courier service, unsupported payment method, or missing/invalid Turnstile token
         '401':
           description: Unauthorized request
         '404':
@@ -4848,6 +4852,10 @@ components:
           format: password
           description: "Must be at least 8 characters, with uppercase, lowercase, number, and special character."
           example: "StrongP@ssw0rd!"
+        turnstile_token:
+          type: string
+          description: "Cloudflare Turnstile token from client widget (required in request body when TURNSTILE_ENABLED is true)"
+          example: "0.abc123xyz..."
 
     LoginRequest:
       type: object
@@ -4863,6 +4871,10 @@ components:
           type: string
           format: password
           example: "StrongP@ssw0rd!"
+        turnstile_token:
+          type: string
+          description: "Cloudflare Turnstile token from client widget (required in request body when TURNSTILE_ENABLED is true)"
+          example: "0.abc123xyz..."
 
     RefreshTokenRequest:
       type: object
@@ -4914,6 +4926,10 @@ components:
           type: string
           format: email
           example: "john@example.com"
+        turnstile_token:
+          type: string
+          description: "Cloudflare Turnstile token from client widget (required in request body when TURNSTILE_ENABLED is true)"
+          example: "0.abc123xyz..."
 
     ForgotPasswordRequest:
       type: object
@@ -4924,6 +4940,10 @@ components:
           type: string
           format: email
           example: "john@example.com"
+        turnstile_token:
+          type: string
+          description: "Cloudflare Turnstile token from client widget (required in request body when TURNSTILE_ENABLED is true)"
+          example: "0.abc123xyz..."
 
     ResetPasswordRequest:
       type: object
@@ -5697,6 +5717,10 @@ components:
           type: string
           description: "Payment channel code (e.g. bca_va, bri_va, bni_va, permata_va, cimb_va, mandiri_bill, gopay, shopeepay, qris, indomaret, alfamart)"
           example: "bca_va"
+        turnstile_token:
+          type: string
+          description: "Cloudflare Turnstile token from client widget (required in request body when TURNSTILE_ENABLED is true)"
+          example: "0.abc123xyz..."
 
     PaymentInfoResponse:
       type: object

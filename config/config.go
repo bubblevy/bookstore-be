@@ -52,6 +52,12 @@ type MidtransConfig struct {
 	FrontendURL  string
 }
 
+type TurnstileConfig struct {
+	SiteKey   string
+	SecretKey string
+	Enabled   bool
+}
+
 type AppConfig struct {
 	BaseURL     string
 	Port        string
@@ -64,6 +70,7 @@ type AppConfig struct {
 	Storage     storage.Config
 	Redis       cache.Config
 	RabbitMQ    rabbitmq.Config
+	Turnstile   TurnstileConfig
 }
 
 func LoadConfig() AppConfig {
@@ -151,6 +158,11 @@ func LoadConfig() AppConfig {
 			User:     getEnv("RABBITMQ_USER", "guest"),
 			Password: getEnv("RABBITMQ_PASSWORD", "guest"),
 			Enabled:  getEnvBool("RABBITMQ_ENABLED", os.Getenv("RABBITMQ_URL") != "" || os.Getenv("RABBITMQ_HOST") != ""),
+		},
+		Turnstile: TurnstileConfig{
+			SiteKey:   os.Getenv("TURNSTILE_SITE_KEY"),
+			SecretKey: os.Getenv("TURNSTILE_SECRET_KEY"),
+			Enabled:   getEnvBool("TURNSTILE_ENABLED", false),
 		},
 	}
 

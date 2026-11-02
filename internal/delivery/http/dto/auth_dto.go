@@ -1,7 +1,8 @@
 package dto
 
 type ResendActivationRequest struct {
-	Email string `json:"email" validate:"required,email"`
+	Email          string `json:"email" validate:"required,email"`
+	TurnstileToken string `json:"turnstile_token,omitempty"`
 }
 
 type ActivateAccountRequest struct {
@@ -9,7 +10,8 @@ type ActivateAccountRequest struct {
 }
 
 type ForgotPasswordRequest struct {
-	Email string `json:"email" validate:"required,email"`
+	Email          string `json:"email" validate:"required,email"`
+	TurnstileToken string `json:"turnstile_token,omitempty"`
 }
 
 type ResetPasswordRequest struct {
@@ -26,14 +28,16 @@ type ChangePasswordRequest struct {
 }
 
 type RegisterRequest struct {
-	Name     string `json:"name" validate:"required,min=3"`
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required,strong_password"`
+	Name           string `json:"name" validate:"required,min=3"`
+	Email          string `json:"email" validate:"required,email"`
+	Password       string `json:"password" validate:"required,strong_password"`
+	TurnstileToken string `json:"turnstile_token,omitempty"`
 }
 
 type LoginRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required"`
+	Email          string `json:"email" validate:"required,email"`
+	Password       string `json:"password" validate:"required"`
+	TurnstileToken string `json:"turnstile_token,omitempty"`
 }
 
 type RefreshTokenRequest struct {

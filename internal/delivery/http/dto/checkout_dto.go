@@ -67,6 +67,7 @@ type CreateOrderRequest struct {
 	CourierService string  `json:"courier_service" validate:"required"`
 	DiscountCode   *string `json:"discount_code,omitempty"`
 	PaymentMethod  string  `json:"payment_method" validate:"required"`
+	TurnstileToken string  `json:"turnstile_token,omitempty"`
 }
 
 type PaymentInfoResponse struct {

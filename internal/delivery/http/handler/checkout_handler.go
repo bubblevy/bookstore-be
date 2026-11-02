@@ -19,15 +19,24 @@ type CheckoutHandler struct {
 	validate *validator.Validate
 }
 
-func NewCheckoutHandler(r fiber.Router, uc usecase.CheckoutUsecase, v *validator.Validate, authMiddleware fiber.Handler) {
+func NewCheckoutHandler(r fiber.Router, uc usecase.CheckoutUsecase, v *validator.Validate, authMiddleware fiber.Handler, turnstileMiddleware ...fiber.Handler) {
 	h := &CheckoutHandler{
 		usecase:  uc,
 		validate: v,
 	}
 
+	var tm fiber.Handler
+	if len(turnstileMiddleware) > 0 && turnstileMiddleware[0] != nil {
+		tm = turnstileMiddleware[0]
+	}
+
 	checkout := r.Group("/checkout", authMiddleware)
 	checkout.Post("/preview", h.PreviewCheckout)
-	checkout.Post("/order", h.CreateOrder)
+	if tm != nil {
+		checkout.Post("/order", tm, h.CreateOrder)
+	} else {
+		checkout.Post("/order", h.CreateOrder)
+	}
 	checkout.Get("/payment-methods", h.GetPaymentMethods)
 
 	r.Post("/payments/midtrans/webhook", h.HandleMidtransWebhook)

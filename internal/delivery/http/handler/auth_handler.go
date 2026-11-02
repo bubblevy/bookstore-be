@@ -26,7 +26,7 @@ type AuthHandler struct {
 	frontendURL    string
 }
 
-func NewAuthHandler(r fiber.Router, u usecase.AuthUsecase, v *validator.Validate, authMiddleware fiber.Handler, cfg config.AppConfig) {
+func NewAuthHandler(r fiber.Router, u usecase.AuthUsecase, v *validator.Validate, authMiddleware fiber.Handler, cfg config.AppConfig, turnstileMiddleware ...fiber.Handler) {
 	h := &AuthHandler{
 		u:              u,
 		validate:       v,
@@ -35,16 +35,29 @@ func NewAuthHandler(r fiber.Router, u usecase.AuthUsecase, v *validator.Validate
 		frontendURL:    cfg.SMTP.FrontendURL,
 	}
 
+	var tm fiber.Handler
+	if len(turnstileMiddleware) > 0 && turnstileMiddleware[0] != nil {
+		tm = turnstileMiddleware[0]
+	}
+
 	// routes
-	r.Post("/register", middleware.RateLimit(middleware.StandardRateLimit), h.Register)
-	r.Post("/login", middleware.RateLimit(middleware.StrictRateLimit), h.Login)
+	if tm != nil {
+		r.Post("/register", tm, middleware.RateLimit(middleware.StandardRateLimit), h.Register)
+		r.Post("/login", tm, middleware.RateLimit(middleware.StrictRateLimit), h.Login)
+		r.Post("/forgot-password", tm, middleware.RateLimit(middleware.StrictRateLimit), h.ForgotPassword)
+		r.Post("/resend-activation", tm, middleware.RateLimit(middleware.StandardRateLimit), h.ResendActivation)
+	} else {
+		r.Post("/register", middleware.RateLimit(middleware.StandardRateLimit), h.Register)
+		r.Post("/login", middleware.RateLimit(middleware.StrictRateLimit), h.Login)
+		r.Post("/forgot-password", middleware.RateLimit(middleware.StrictRateLimit), h.ForgotPassword)
+		r.Post("/resend-activation", middleware.RateLimit(middleware.StandardRateLimit), h.ResendActivation)
+	}
+
 	r.Post("/refresh-token", middleware.RateLimit(middleware.StandardRateLimit), h.RefreshToken)
-	r.Post("/forgot-password", middleware.RateLimit(middleware.StrictRateLimit), h.ForgotPassword)
 	r.Post("/reset-password", middleware.RateLimit(middleware.StrictRateLimit), h.ResetPassword)
 	r.Post("/change-password", authMiddleware, middleware.RateLimit(middleware.StrictRateLimit), h.ChangePassword)
 	r.Post("/logout", middleware.RateLimit(middleware.StandardRateLimit), h.Logout)
 	r.Delete("/logout", middleware.RateLimit(middleware.StandardRateLimit), h.Logout)
-	r.Post("/resend-activation", middleware.RateLimit(middleware.StandardRateLimit), h.ResendActivation)
 	r.Post("/activate-account", middleware.RateLimit(middleware.StandardRateLimit), h.ActivateAccount)
 	r.Get("/google/login", h.GoogleLogin)
 	r.Get("/google/callback", h.GoogleCallback)
