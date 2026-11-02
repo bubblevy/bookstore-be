@@ -11,6 +11,7 @@ import (
 	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/repository"
 	"github.com/bubblevy/bookstore/pkg/biteship"
+	"github.com/bubblevy/bookstore/pkg/cache"
 	"github.com/bubblevy/bookstore/pkg/logger"
 	"github.com/bubblevy/bookstore/pkg/sse"
 	"gorm.io/gorm"
@@ -80,6 +81,7 @@ type shippingUsecase struct {
 	biteship     biteship.Client
 	cfg          StoreShippingConfig
 	sseHub       sse.Hub
+	cacheSvc     cache.Cache
 }
 
 func NewShippingUsecase(
@@ -93,9 +95,13 @@ func NewShippingUsecase(
 	extraDeps ...interface{},
 ) ShippingUsecase {
 	var sseHub sse.Hub
+	var cacheSvc cache.Cache
 	for _, dep := range extraDeps {
-		if hub, ok := dep.(sse.Hub); ok {
-			sseHub = hub
+		switch v := dep.(type) {
+		case sse.Hub:
+			sseHub = v
+		case cache.Cache:
+			cacheSvc = v
 		}
 	}
 
@@ -108,6 +114,7 @@ func NewShippingUsecase(
 		biteship:     biteship,
 		cfg:          cfg,
 		sseHub:       sseHub,
+		cacheSvc:     cacheSvc,
 	}
 }
 
@@ -657,13 +664,17 @@ func (u *shippingUsecase) ProcessReturn(ctx context.Context, invoiceNumber strin
 			returnReason = "Package returned to warehouse"
 		}
 
-		if err := tx.Model(&entity.Order{}).Where("id = ?", order.ID).Updates(map[string]interface{}{
+		res := tx.Model(&entity.Order{}).Where("id = ? AND status IN (?, ?)", order.ID, entity.OrderStatusShipped, entity.OrderStatusCompleted).Updates(map[string]interface{}{
 			"status":        entity.OrderStatusReturned,
 			"returned_at":   now,
 			"return_reason": returnReason,
 			"updated_at":    now,
-		}).Error; err != nil {
-			return err
+		})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return entity.ErrOrderAlreadyReturned
 		}
 
 		if err := tx.Model(&entity.Shipment{}).Where("order_id = ?", order.ID).Updates(map[string]interface{}{
@@ -676,7 +687,10 @@ func (u *shippingUsecase) ProcessReturn(ctx context.Context, invoiceNumber strin
 		for _, item := range order.Items {
 			if err := tx.Model(&entity.Book{}).
 				Where("id = ?", item.BookID).
-				Update("stock", gorm.Expr("stock + ?", item.Quantity)).Error; err != nil {
+				Updates(map[string]interface{}{
+					"stock": gorm.Expr("stock + ?", item.Quantity),
+					"sold":  gorm.Expr("GREATEST(0, sold - ?)", item.Quantity),
+				}).Error; err != nil {
 				return fmt.Errorf("failed restocking book ID %d: %w", item.BookID, err)
 			}
 		}
@@ -685,16 +699,21 @@ func (u *shippingUsecase) ProcessReturn(ctx context.Context, invoiceNumber strin
 		return nil
 	})
 
-	if err == nil && u.sseHub != nil && returnedOrder.ID > 0 {
-		u.sseHub.PublishShippingStatus(sse.ShippingStatusEvent{
-			OrderID:        returnedOrder.ID,
-			InvoiceNumber:  returnedOrder.InvoiceNumber,
-			UserID:         returnedOrder.UserID,
-			ShippingStatus: string(entity.ShippingStatusReturned),
-			OrderStatus:    string(entity.OrderStatusReturned),
-			Note:           reason,
-			UpdatedAt:      time.Now(),
-		})
+	if err == nil {
+		if u.cacheSvc != nil {
+			_ = u.cacheSvc.DeletePrefix(ctx, "books:")
+		}
+		if u.sseHub != nil && returnedOrder.ID > 0 {
+			u.sseHub.PublishShippingStatus(sse.ShippingStatusEvent{
+				OrderID:        returnedOrder.ID,
+				InvoiceNumber:  returnedOrder.InvoiceNumber,
+				UserID:         returnedOrder.UserID,
+				ShippingStatus: string(entity.ShippingStatusReturned),
+				OrderStatus:    string(entity.OrderStatusReturned),
+				Note:           reason,
+				UpdatedAt:      time.Now(),
+			})
+		}
 	}
 
 	return err

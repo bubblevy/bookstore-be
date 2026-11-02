@@ -119,7 +119,8 @@ func (r *bookRepository) FindAll(ctx context.Context, filter repository.BookFilt
 		query = query.Order("books.created_at DESC")
 	}
 
-	err := query.Preload("Category").
+	err := query.Select("books.*").
+		Preload("Category").
 		Preload("Author").
 		Preload("Publisher").
 		Limit(filter.Limit).

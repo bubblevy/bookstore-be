@@ -219,7 +219,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	checkoutRepo := pgsql.NewCheckoutRepository(db)
 	orderRepo := pgsql.NewOrderRepository(db)
 
-	checkoutUsecase := usecase.NewCheckoutUsecase(db, checkoutRepo, orderRepo, addressRepo, discountUsecase, discountRepo, biteshipClient, midtransSvc, paymentMethodRepo, storageSvc, sseHub)
+	checkoutUsecase := usecase.NewCheckoutUsecase(db, checkoutRepo, orderRepo, addressRepo, discountUsecase, discountRepo, biteshipClient, midtransSvc, paymentMethodRepo, storageSvc, sseHub, cacheSvc)
 	handler.NewCheckoutHandler(api, checkoutUsecase, validate, authMiddleware)
 
 	orderUsecase := usecase.NewOrderUsecase(orderRepo)
@@ -234,6 +234,6 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 
 	// shipping routes
 	shipmentRepo := pgsql.NewShipmentRepository(db)
-	shipmentUseCase := usecase.NewShippingUsecase(db, orderRepo, shipmentRepo, checkoutRepo, addressRepo, biteshipClient, cfg.Biteship.ToStoreShippingConfig(), sseHub)
+	shipmentUseCase := usecase.NewShippingUsecase(db, orderRepo, shipmentRepo, checkoutRepo, addressRepo, biteshipClient, cfg.Biteship.ToStoreShippingConfig(), sseHub, cacheSvc)
 	handler.NewShippingHandler(api, shipmentUseCase, validate, authMiddleware, adminMiddleware, webhookBiteshipAuth)
 }

@@ -2352,7 +2352,9 @@ paths:
       tags:
         - Shipping
       summary: Search destination areas
-      description: Public endpoint to search domestic destination areas by keyword using Biteship Maps API (minimum 3 characters).
+      description: Authenticated endpoint to search domestic destination areas by keyword using Biteship Maps API (minimum 3 characters).
+      security:
+        - BearerAuth: []
       parameters:
         - in: query
           name: search
@@ -2385,6 +2387,8 @@ paths:
                       $ref: '#/components/schemas/AreaItem'
         '400':
           description: Search parameter must be at least 3 characters
+        '401':
+          description: Unauthorized
         '500':
           description: Failed to retrieve areas from Biteship
 
@@ -2393,7 +2397,9 @@ paths:
       tags:
         - Shipping
       summary: Get available couriers
-      description: Public endpoint to retrieve all supported courier partners and services provided by Biteship.
+      description: Authenticated endpoint to retrieve all supported courier partners and services provided by Biteship.
+      security:
+        - BearerAuth: []
       responses:
         '200':
           description: Couriers retrieved successfully

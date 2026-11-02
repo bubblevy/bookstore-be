@@ -33,9 +33,9 @@ func NewShippingHandler(
 		validate:        v,
 	}
 
-	// Public routes
-	r.Get("/shipping/areas", h.SearchAreas)
-	r.Get("/shipping/couriers", h.GetCouriers)
+	// Protected routes (requires login)
+	r.Get("/shipping/areas", authMiddleware, h.SearchAreas)
+	r.Get("/shipping/couriers", authMiddleware, h.GetCouriers)
 
 	// Pre-checkout dynamic rates calculation
 	r.Post("/shipping/rates", authMiddleware, h.GetShippingRates)

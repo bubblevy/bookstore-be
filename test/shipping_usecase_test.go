@@ -341,9 +341,9 @@ func TestShippingUsecase_ProcessReturn(t *testing.T) {
 		sqlMock.ExpectExec(`UPDATE "shipments" SET`).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
-		// 4. Restock Book (mencakup auto-update "updated_at" dan soft-delete check GORM)
-		sqlMock.ExpectExec(`UPDATE "books" SET "stock"=stock \+ \$1.*WHERE id = \$3`).
-			WithArgs(2, AnyTime{}, 30).
+		// 4. Restock Book (mencakup auto-update "updated_at", decrement "sold", dan soft-delete check GORM)
+		sqlMock.ExpectExec(`UPDATE "books" SET .*WHERE id = \$4`).
+			WithArgs(2, 2, AnyTime{}, 30).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		sqlMock.ExpectCommit()

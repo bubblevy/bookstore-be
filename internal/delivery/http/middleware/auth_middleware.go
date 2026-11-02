@@ -59,6 +59,7 @@ func AuthMiddleware(jwtService j.JWTService) fiber.Handler {
 		c.Locals("user_id", userID)
 		c.Locals("user_email", email)
 		c.Locals("user_role", role)
+		c.Locals("is_admin", role == "admin")
 
 		return c.Next()
 	}

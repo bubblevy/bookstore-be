@@ -13,6 +13,7 @@ import (
 	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/repository"
 	"github.com/bubblevy/bookstore/pkg/biteship"
+	"github.com/bubblevy/bookstore/pkg/cache"
 	"github.com/bubblevy/bookstore/pkg/logger"
 	"github.com/bubblevy/bookstore/pkg/payment"
 	"github.com/bubblevy/bookstore/pkg/sse"
@@ -110,6 +111,7 @@ type checkoutUsecase struct {
 	paymentMethodRepo repository.PaymentMethodRepository
 	storageSvc        storage.StorageService
 	sseHub            sse.Hub
+	cacheSvc          cache.Cache
 }
 
 func NewCheckoutUsecase(
@@ -126,6 +128,7 @@ func NewCheckoutUsecase(
 	var pmRepo repository.PaymentMethodRepository
 	var storageSvc storage.StorageService
 	var sseHub sse.Hub
+	var cacheSvc cache.Cache
 
 	for _, dep := range extraDeps {
 		switch v := dep.(type) {
@@ -135,6 +138,8 @@ func NewCheckoutUsecase(
 			storageSvc = v
 		case sse.Hub:
 			sseHub = v
+		case cache.Cache:
+			cacheSvc = v
 		}
 	}
 
@@ -150,6 +155,7 @@ func NewCheckoutUsecase(
 		paymentMethodRepo: pmRepo,
 		storageSvc:        storageSvc,
 		sseHub:            sseHub,
+		cacheSvc:          cacheSvc,
 	}
 }
 
@@ -524,6 +530,11 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 		return nil, err
 	}
 
+	// Invalidate books cache so sold count and stock are immediately reflected across catalog and details
+	if u.cacheSvc != nil {
+		_ = u.cacheSvc.DeletePrefix(ctx, "books:")
+	}
+
 	// External payment gateway charge
 	chargeRes, err := u.midtransSvc.Charge(ctx, invoiceNumber, int64(order.TotalAmount), input.PaymentMethod)
 	if err != nil {
@@ -538,6 +549,9 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 			}
 			return nil
 		})
+		if u.cacheSvc != nil {
+			_ = u.cacheSvc.DeletePrefix(ctx, "books:")
+		}
 		return nil, entity.ErrMidtransChargeFailed
 	}
 
@@ -695,6 +709,9 @@ func (u *checkoutUsecase) HandleMidtransWebhook(ctx context.Context, input Midtr
 			logger.Info("midtrans webhook cancelling order - rolling back inventory stock", "order_id", order.InvoiceNumber)
 			for _, item := range order.Items {
 				_ = txCheckoutRepo.RestoreBookStock(ctx, item.BookID, item.Quantity)
+			}
+			if u.cacheSvc != nil {
+				_ = u.cacheSvc.DeletePrefix(ctx, "books:")
 			}
 		}
 

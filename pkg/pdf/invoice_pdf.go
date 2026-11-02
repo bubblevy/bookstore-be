@@ -332,19 +332,23 @@ func GenerateInvoicePDF(order *entity.Order) ([]byte, error) {
 	pdf.SetTextColor(75, 85, 99)
 	if order.Payment != nil && order.Payment.VANumber != nil {
 		pdf.CellFormat(180, 4.0, "Nomor Virtual Account (VA): "+*order.Payment.VANumber, "", 0, "L", false, 0, "")
-	} else if order.Payment != nil && (order.Payment.PaymentCode != nil || order.Payment.BillKey != nil) {
-		label := "Kode Pembayaran / Bill Key: "
-		code := ""
-		if order.Payment.PaymentCode != nil && *order.Payment.PaymentCode != "" {
-			code = *order.Payment.PaymentCode
-		} else if order.Payment.BillKey != nil {
-			code = *order.Payment.BillKey
-		}
+	} else if order.Payment != nil && (order.Payment.PaymentCode != nil || order.Payment.BillKey != nil || order.Payment.BillerCode != nil) {
+		hasBillerCode := order.Payment.BillerCode != nil && strings.TrimSpace(*order.Payment.BillerCode) != ""
+		hasBillKey := order.Payment.BillKey != nil && strings.TrimSpace(*order.Payment.BillKey) != ""
 
-		if order.Payment.PaymentType == "cstore" {
-			label = "Kode Pembayaran: "
+		if hasBillerCode && hasBillKey {
+			pdf.CellFormat(180, 4.0, fmt.Sprintf("Kode Perusahaan (Biller Code): %s   |   Kode Pembayaran (Bill Key): %s", strings.TrimSpace(*order.Payment.BillerCode), strings.TrimSpace(*order.Payment.BillKey)), "", 0, "L", false, 0, "")
+		} else if order.Payment.PaymentCode != nil && strings.TrimSpace(*order.Payment.PaymentCode) != "" {
+			label := "Kode Pembayaran / Bill Key: "
+			if order.Payment.PaymentType == "cstore" {
+				label = "Kode Pembayaran: "
+			}
+			pdf.CellFormat(180, 4.0, label+strings.TrimSpace(*order.Payment.PaymentCode), "", 0, "L", false, 0, "")
+		} else if hasBillKey {
+			pdf.CellFormat(180, 4.0, "Kode Pembayaran (Bill Key): "+strings.TrimSpace(*order.Payment.BillKey), "", 0, "L", false, 0, "")
+		} else if hasBillerCode {
+			pdf.CellFormat(180, 4.0, "Kode Perusahaan (Biller Code): "+strings.TrimSpace(*order.Payment.BillerCode), "", 0, "L", false, 0, "")
 		}
-		pdf.CellFormat(180, 4.0, label+code, "", 0, "L", false, 0, "")
 	} else if (order.Payment != nil && order.Payment.DeeplinkURL != nil && *order.Payment.DeeplinkURL != "") || (order.Payment != nil && order.Payment.QRURL != nil && *order.Payment.QRURL != "") {
 		payURL := ""
 		if order.Payment.DeeplinkURL != nil && *order.Payment.DeeplinkURL != "" {

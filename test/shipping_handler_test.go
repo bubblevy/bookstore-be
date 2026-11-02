@@ -108,9 +108,20 @@ func setupShippingApp(mockUC *MockShippingUsecase, authenticated bool, isAdmin b
 }
 
 func TestShippingHandler_SearchAreas(t *testing.T) {
-	t.Run("success search returns 200", func(t *testing.T) {
+	t.Run("unauthorized when not logged in returns 401", func(t *testing.T) {
 		mockUC := new(MockShippingUsecase)
 		app := setupShippingApp(mockUC, false, false)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/shipping/areas?search=jakarta", nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+
+	t.Run("success search returns 200", func(t *testing.T) {
+		mockUC := new(MockShippingUsecase)
+		app := setupShippingApp(mockUC, true, false)
 
 		areas := []biteship.AreaItem{
 			{
@@ -134,7 +145,7 @@ func TestShippingHandler_SearchAreas(t *testing.T) {
 
 	t.Run("query length less than 3 returns 400", func(t *testing.T) {
 		mockUC := new(MockShippingUsecase)
-		app := setupShippingApp(mockUC, false, false)
+		app := setupShippingApp(mockUC, true, false)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/shipping/areas?search=jk", nil)
 		resp, err := app.Test(req)
@@ -145,9 +156,20 @@ func TestShippingHandler_SearchAreas(t *testing.T) {
 }
 
 func TestShippingHandler_GetCouriers(t *testing.T) {
-	t.Run("success get couriers returns 200", func(t *testing.T) {
+	t.Run("unauthorized when not logged in returns 401", func(t *testing.T) {
 		mockUC := new(MockShippingUsecase)
 		app := setupShippingApp(mockUC, false, false)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/shipping/couriers", nil)
+		resp, err := app.Test(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+
+	t.Run("success get couriers returns 200", func(t *testing.T) {
+		mockUC := new(MockShippingUsecase)
+		app := setupShippingApp(mockUC, true, false)
 
 		couriers := []biteship.CourierDetail{
 			{

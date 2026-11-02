@@ -252,8 +252,8 @@ The complete API specifications and testing collections are available:
 | **Address** | `PUT` | `/api/v1/addresses/{id}` | User | Update address details |
 | **Address** | `DELETE` | `/api/v1/addresses/{id}` | User | Soft delete an address |
 | **Address** | `PATCH` | `/api/v1/addresses/{id}/primary` | User | Set an address as primary |
-| **Shipping** | `GET` | `/api/v1/shipping/areas` | Public | Search destination areas by keyword (Biteship) |
-| **Shipping** | `GET` | `/api/v1/shipping/couriers` | Public | List available courier partners |
+| **Shipping** | `GET` | `/api/v1/shipping/areas` | User | Search destination areas by keyword (Biteship) |
+| **Shipping** | `GET` | `/api/v1/shipping/couriers` | User | List available courier partners |
 | **Shipping** | `POST` | `/api/v1/shipping/rates` | User | Calculate dynamic courier shipping rates |
 | **Shipping** | `POST` | `/api/v1/shipping/webhook` | Webhook | Handle real-time tracking webhook |
 | **Shipping** | `GET` | `/api/v1/orders/{invoice_number}/tracking` | User/Admin | Track order delivery status & history |

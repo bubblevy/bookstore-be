@@ -121,3 +121,52 @@ func TestGenerateSamplePDFs(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(artifactDir, "sample_report.pdf"), reportBytes, 0644)
 	_ = os.WriteFile(filepath.Join(artifactDir, "sample_invoice.pdf"), invoiceBytes, 0644)
 }
+
+func TestGenerateInvoicePDF_MandiriBill(t *testing.T) {
+	billerCode := "70012"
+	billKey := "9900000001"
+	order := &entity.Order{
+		ID:               2,
+		InvoiceNumber:    "INV-20261102-000202",
+		Status:           entity.OrderStatusWaitingPayment,
+		ItemsSubtotal:    150000,
+		ShippingCost:     15000,
+		TotalAmount:      165000,
+		Courier:          "jne",
+		CourierService:   "REG",
+		TotalWeightGrams: 300,
+		RecipientName:    "Dewi Lestari",
+		RecipientPhone:   "081122334455",
+		RecipientAddress: "Jl. Melati No. 10",
+		CityName:         "Bandung",
+		ProvinceName:     "Jawa Barat",
+		PostalCode:       "40115",
+		PaymentDeadline:  time.Now().Add(24 * time.Hour),
+		Items: []entity.OrderItem{
+			{
+				BookID:      1,
+				Title:       "Filosofi Kopi",
+				Price:       150000,
+				Quantity:    1,
+				WeightGrams: 300,
+				Subtotal:    150000,
+			},
+		},
+		Payment: &entity.Payment{
+			PaymentType: "echannel",
+			BillerCode:  &billerCode,
+			BillKey:     &billKey,
+			Status:      entity.PaymentStatusPending,
+		},
+		CreatedAt: time.Now(),
+	}
+
+	pdfBytes, err := pdf.GenerateInvoicePDF(order)
+	if err != nil {
+		t.Fatalf("failed generating invoice PDF for mandiri bill: %v", err)
+	}
+	if len(pdfBytes) == 0 {
+		t.Fatalf("expected non-empty pdf bytes")
+	}
+}
+
