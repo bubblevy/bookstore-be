@@ -79,7 +79,7 @@ bookstore/
 
 ### 1. Authentication & Account Management
 - **Registration**: Email verification workflow with activation tokens.
-- **Login / Logout**: Issues Access and Refresh tokens in the JSON response body (`access_token`, `refresh_token`, `token_type: "Bearer"`) for mobile applications (Flutter/React Native/iOS/Android), while simultaneously setting secure HTTP-only cookies for web clients.
+- **Login / Logout**: Issues Access and Refresh tokens in the JSON response body (`access_token`, `refresh_token`) for mobile applications (Flutter/React Native/iOS/Android), while simultaneously setting secure HTTP-only cookies for web clients.
 - **Token Refreshing**: Automatic token renewal with single-use refresh token invalidation; supports reading refresh tokens from JSON body (mobile) or HTTP-only cookies (web).
 - **Password Management**: Forgot password links, token verification, and authenticated password changes.
 - **Google OAuth 2.0**: Seamless single sign-on redirect and callback handling.
