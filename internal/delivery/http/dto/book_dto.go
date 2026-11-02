@@ -12,7 +12,7 @@ type CreateBookRequest struct {
 	DiscountPercentage *int     `json:"discount_percentage" validate:"omitempty,gte=0,lte=100"`
 	WeightGrams        int      `json:"weight_grams" validate:"required,gt=0"`
 	Pages              int      `json:"pages" validate:"required,gt=0"`
-	PublicationYear    int      `json:"publication_year" validate:"required,gte=1000,lte=2100"`
+	PublicationDate    string   `json:"publication_date" validate:"required,datetime=2006-01-02"`
 	Language           string   `json:"language" validate:"required,min=2,max=50"`
 	Length             float64  `json:"length" validate:"required,gt=0"`
 	Width              float64  `json:"width" validate:"required,gt=0"`
@@ -35,7 +35,7 @@ type UpdateBookRequest struct {
 	DiscountPercentage *int     `json:"discount_percentage" validate:"omitempty,gte=0,lte=100"`
 	WeightGrams        int      `json:"weight_grams" validate:"required,gt=0"`
 	Pages              int      `json:"pages" validate:"required,gt=0"`
-	PublicationYear    int      `json:"publication_year" validate:"required,gte=1000,lte=2100"`
+	PublicationDate    string   `json:"publication_date" validate:"required,datetime=2006-01-02"`
 	Language           string   `json:"language" validate:"required,min=2,max=50"`
 	Length             float64  `json:"length" validate:"required,gt=0"`
 	Width              float64  `json:"width" validate:"required,gt=0"`

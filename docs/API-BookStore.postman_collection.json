@@ -2566,7 +2566,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\r\n  \"category_id\": 1,\r\n  \"author_id\": 1,\r\n  \"publisher_id\": 1,\r\n  \"title\": \"Resep Masakan\",\r\n  \"isbn\": \"9780135157059\",\r\n  \"synopsis\": \"Your journey to mastery in software development.\",\r\n  \"price\": 150000,\r\n  \"discount_percentage\": 10,\r\n  \"weight_grams\": 450,\r\n  \"pages\": 352,\r\n  \"publication_year\": 2019,\r\n  \"language\": \"Indonesia\",\r\n  \"length\": 20,\r\n  \"width\": 13.5,\r\n  \"height\": 2,\r\n  \"condition\": \"100% Baru & Segel Penerbit\",\r\n  \"stock\": 40,\r\n  \"cover_image\": \"http://localhost:8000/uploads/1792412310-22b3a284.jpg\",\r\n  \"is_active\": true\r\n}"
+                  "raw": "{\r\n  \"category_id\": 1,\r\n  \"author_id\": 1,\r\n  \"publisher_id\": 1,\r\n  \"title\": \"Resep Masakan\",\r\n  \"isbn\": \"9780135157059\",\r\n  \"synopsis\": \"Your journey to mastery in software development.\",\r\n  \"price\": 150000,\r\n  \"discount_percentage\": 10,\r\n  \"weight_grams\": 450,\r\n  \"pages\": 352,\r\n  \"publication_date\": 2026-08-15,\r\n  \"language\": \"Indonesia\",\r\n  \"length\": 20,\r\n  \"width\": 13.5,\r\n  \"height\": 2,\r\n  \"condition\": \"100% Baru & Segel Penerbit\",\r\n  \"stock\": 40,\r\n  \"cover_image\": \"http://localhost:8000/uploads/1792412310-22b3a284.jpg\",\r\n  \"is_active\": true\r\n}"
                 },
                 "url": {
                   "raw": "{{BASE_URL}}/api/v1/books",
@@ -2600,7 +2600,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\r\n  \"category_id\": 1,\r\n  \"author_id\": 1,\r\n  \"publisher_id\": 1,\r\n  \"title\": \"The Pragmatic Programmer\",\r\n  \"isbn\": \"9780135957059\",\r\n  \"synopsis\": \"Your journey to mastery in software development.\",\r\n  \"price\": 100000,\r\n  \"discount_percentage\": 0,\r\n  \"weight_grams\": 450,\r\n  \"pages\": 352,\r\n  \"publication_year\": 2019,\r\n  \"language\": \"Indonesia\",\r\n  \"length\": 20,\r\n  \"width\": 13.5,\r\n  \"height\": 2,\r\n  \"condition\": \"100% Baru & Segel Penerbit\",\r\n  \"stock\": 40,\r\n  \"cover_image\": \"https://example.com/static/covers/pragmatic-programmer.jpg\",\r\n  \"is_active\": true\r\n}"
+                  "raw": "{\r\n  \"category_id\": 1,\r\n  \"author_id\": 1,\r\n  \"publisher_id\": 1,\r\n  \"title\": \"The Pragmatic Programmer\",\r\n  \"isbn\": \"9780135957059\",\r\n  \"synopsis\": \"Your journey to mastery in software development.\",\r\n  \"price\": 100000,\r\n  \"discount_percentage\": 0,\r\n  \"weight_grams\": 450,\r\n  \"pages\": 352,\r\n  \"publication_date\": 2026-08-15,\r\n  \"language\": \"Indonesia\",\r\n  \"length\": 20,\r\n  \"width\": 13.5,\r\n  \"height\": 2,\r\n  \"condition\": \"100% Baru & Segel Penerbit\",\r\n  \"stock\": 40,\r\n  \"cover_image\": \"https://example.com/static/covers/pragmatic-programmer.jpg\",\r\n  \"is_active\": true\r\n}"
                 },
                 "url": {
                   "raw": "{{BASE_URL}}/api/v1/books/:id",

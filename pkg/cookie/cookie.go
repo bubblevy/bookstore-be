@@ -20,6 +20,13 @@ func isProduction() bool {
 	return os.Getenv("APP_ENV") == "production"
 }
 
+func sameSiteMode() string {
+	if isProduction() {
+		return fiber.CookieSameSiteNoneMode
+	}
+	return fiber.CookieSameSiteLaxMode
+}
+
 func SetAccessToken(c fiber.Ctx, token string) {
 	c.Cookie(&fiber.Cookie{
 		Name:     AccessTokenName,
@@ -27,7 +34,7 @@ func SetAccessToken(c fiber.Ctx, token string) {
 		Expires:  time.Now().Add(AccessTokenExpiry),
 		HTTPOnly: true,
 		Secure:   isProduction(),
-		SameSite: fiber.CookieSameSiteLaxMode,
+		SameSite: sameSiteMode(),
 		Path:     RootPath,
 	})
 }
@@ -39,7 +46,7 @@ func SetRefreshToken(c fiber.Ctx, token string) {
 		Expires:  time.Now().Add(RefreshTokenExpiry),
 		HTTPOnly: true,
 		Secure:   isProduction(),
-		SameSite: fiber.CookieSameSiteLaxMode,
+		SameSite: sameSiteMode(),
 		Path:     RefreshPath,
 	})
 }
@@ -74,7 +81,7 @@ func SetOAuthState(c fiber.Ctx, state string) {
 		Expires:  time.Now().Add(5 * time.Minute),
 		HTTPOnly: true,
 		Secure:   isProduction(),
-		SameSite: fiber.CookieSameSiteLaxMode,
+		SameSite: sameSiteMode(),
 		Path:     RootPath,
 	})
 }
@@ -87,7 +94,7 @@ func ClearOAuthState(c fiber.Ctx) {
 		Expires:  time.Now().Add(-1 * time.Hour),
 		HTTPOnly: true,
 		Secure:   isProduction(),
-		SameSite: fiber.CookieSameSiteLaxMode,
+		SameSite: sameSiteMode(),
 		Path:     RootPath,
 	})
 }

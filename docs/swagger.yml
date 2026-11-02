@@ -3811,7 +3811,7 @@ components:
         - price
         - weight_grams
         - pages
-        - publication_year
+        - publication_date
         - language
         - length
         - width
@@ -3876,12 +3876,11 @@ components:
           minimum: 1
           description: "Total number of pages (required, minimum 1)."
           example: 352
-        publication_year:
-          type: integer
-          minimum: 1000
-          maximum: 2100
-          description: "Year of publication between 1000 and 2100 (required)."
-          example: 2019
+        publication_date:
+          type: string
+          format: date
+          description: "Full publication date (YYYY-MM-DD) including day, month, and year (required)."
+          example: "2026-08-15"
         language:
           type: string
           minLength: 2
@@ -3940,7 +3939,7 @@ components:
         - price
         - weight_grams
         - pages
-        - publication_year
+        - publication_date
         - language
         - length
         - width
@@ -4005,12 +4004,11 @@ components:
           minimum: 1
           description: "Total number of pages (required, minimum 1)."
           example: 352
-        publication_year:
-          type: integer
-          minimum: 1000
-          maximum: 2100
-          description: "Year of publication between 1000 and 2100 (required)."
-          example: 2024
+        publication_date:
+          type: string
+          format: date
+          description: "Full publication date (YYYY-MM-DD) including day, month, and year (required)."
+          example: "2026-05-15"
         language:
           type: string
           minLength: 2
@@ -4153,10 +4151,11 @@ components:
           type: integer
           nullable: true
           example: 535
-        publication_year:
-          type: integer
+        publication_date:
+          type: string
+          format: date
           nullable: true
-          example: 2011
+          example: "2026-06-25"
         language:
           type: string
           example: "Indonesia"

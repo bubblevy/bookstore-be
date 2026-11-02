@@ -2,6 +2,7 @@ package entity
 
 import (
 	"errors"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -31,7 +32,7 @@ type Book struct {
 	DiscountPercentage *int     `gorm:"type:int" json:"discount_percentage,omitempty"`
 	WeightGrams        int      `gorm:"not null" json:"weight_grams"`
 	Pages              *int     `json:"pages,omitempty"`
-	PublicationYear    *int     `gorm:"type:smallint" json:"publication_year,omitempty"`
+	PublicationDate    *time.Time `gorm:"type:date" json:"publication_date,omitempty"`
 	Language           string   `gorm:"type:varchar(50);not null;default:'Indonesia'" json:"language"`
 	Length             float64  `gorm:"type:numeric(6,2);not null;default:0" json:"length"`
 	Width              float64  `gorm:"type:numeric(6,2);not null;default:0" json:"width"`

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/bubblevy/bookstore/internal/delivery/http/dto"
 	"github.com/bubblevy/bookstore/internal/entity"
@@ -113,6 +114,17 @@ func (h *BookHandler) FindBySlug(c fiber.Ctx) error {
 	return response.Success(c, fiber.StatusOK, "book retrieved successfully", res)
 }
 
+func parsePublicationDate(dateStr string) *time.Time {
+	trimmed := strings.TrimSpace(dateStr)
+	if trimmed == "" {
+		return nil
+	}
+	if t, err := time.Parse("2006-01-02", trimmed); err == nil {
+		return &t
+	}
+	return nil
+}
+
 func (h *BookHandler) Create(c fiber.Ctx) error {
 	var req dto.CreateBookRequest
 	if err := c.Bind().Body(&req); err != nil {
@@ -128,6 +140,8 @@ func (h *BookHandler) Create(c fiber.Ctx) error {
 		stockVal = *req.Stock
 	}
 
+	pubDate := parsePublicationDate(req.PublicationDate)
+
 	input := usecase.CreateBookInput{
 		CategoryID:         req.CategoryID,
 		AuthorID:           req.AuthorID,
@@ -140,7 +154,7 @@ func (h *BookHandler) Create(c fiber.Ctx) error {
 		DiscountPercentage: req.DiscountPercentage,
 		WeightGrams:        req.WeightGrams,
 		Pages:              &req.Pages,
-		PublicationYear:    &req.PublicationYear,
+		PublicationDate:    pubDate,
 		Language:           req.Language,
 		Length:             req.Length,
 		Width:              req.Width,
@@ -190,6 +204,8 @@ func (h *BookHandler) Update(c fiber.Ctx) error {
 		updateStockVal = *req.Stock
 	}
 
+	pubDate := parsePublicationDate(req.PublicationDate)
+
 	input := usecase.UpdateBookInput{
 		CategoryID:         req.CategoryID,
 		AuthorID:           req.AuthorID,
@@ -202,7 +218,7 @@ func (h *BookHandler) Update(c fiber.Ctx) error {
 		DiscountPercentage: req.DiscountPercentage,
 		WeightGrams:        req.WeightGrams,
 		Pages:              &req.Pages,
-		PublicationYear:    &req.PublicationYear,
+		PublicationDate:    pubDate,
 		Language:           req.Language,
 		Length:             req.Length,
 		Width:              req.Width,

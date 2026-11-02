@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -588,7 +589,7 @@ func TestAuthHandler_GoogleCallback_Success(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, fiber.StatusSeeOther, resp.StatusCode) // Ganti dari http.StatusFound (302) ke 303
 
-	expectedRedirect := fmt.Sprintf("%s/dashboard", cfg.SMTP.FrontendURL)
+	expectedRedirect := fmt.Sprintf("%s/dashboard?access_token=%s&refresh_token=%s", cfg.SMTP.FrontendURL, url.QueryEscape(mockResult.AccessToken), url.QueryEscape(mockResult.RefreshToken))
 	assert.Equal(t, expectedRedirect, resp.Header.Get("Location"))
 	mockUC.AssertExpectations(t)
 }

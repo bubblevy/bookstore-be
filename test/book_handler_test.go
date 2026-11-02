@@ -182,7 +182,7 @@ func TestBookHandler_Create_Success(t *testing.T) {
 			input.ISBN != nil && *input.ISBN == "9789799731234" &&
 			input.Synopsis != nil && *input.Synopsis == "Sebuah novel karya Pramoedya Ananta Toer." &&
 			input.Pages != nil && *input.Pages == 535 &&
-			input.PublicationYear != nil && *input.PublicationYear == 2005 &&
+			input.PublicationDate != nil && input.PublicationDate.Format("2006-01-02") == "2005-01-01" &&
 			input.Stock == 25 &&
 			input.CoverImage != nil && *input.CoverImage == "https://example.com/cover.jpg" &&
 			input.Language == "Indonesia" &&
@@ -204,7 +204,7 @@ func TestBookHandler_Create_Success(t *testing.T) {
 		"original_price": 150000,
 		"weight_grams": 450,
 		"pages": 535,
-		"publication_year": 2005,
+		"publication_date": "2005-01-01",
 		"stock": 25,
 		"cover_image": "https://example.com/cover.jpg",
 		"language": "Indonesia",
@@ -259,7 +259,7 @@ func TestBookHandler_Create_AutoDiscountFromPercentageOnly(t *testing.T) {
 		"discount_percentage": 20,
 		"weight_grams": 450,
 		"pages": 535,
-		"publication_year": 2005,
+		"publication_date": "2005-01-01",
 		"stock": 15,
 		"cover_image": "https://example.com/cover.jpg",
 		"language": "Indonesia",
@@ -282,7 +282,7 @@ func TestBookHandler_Create_ValidationError_MissingRequiredFields(t *testing.T) 
 	mockUC := new(MockBookUsecase)
 	app := setupBookApp(mockUC, true, true)
 
-	// Missing stock, cover_image, pages, publication_year, synopsis, isbn
+	// Missing stock, cover_image, pages, publication_date, synopsis, isbn
 	payload := `{
 		"category_id": 1,
 		"author_id": 2,
@@ -321,7 +321,7 @@ func TestBookHandler_Create_SlugConflict(t *testing.T) {
 		"price": 135000,
 		"weight_grams": 450,
 		"pages": 535,
-		"publication_year": 2005,
+		"publication_date": "2005-01-01",
 		"stock": 10,
 		"cover_image": "https://example.com/cover.jpg",
 		"language": "Indonesia",

@@ -28,7 +28,7 @@ type CreateBookInput struct {
 	DiscountPercentage *int
 	WeightGrams        int
 	Pages              *int
-	PublicationYear    *int
+	PublicationDate    *time.Time
 	Language           string
 	Length             float64
 	Width              float64
@@ -51,7 +51,7 @@ type UpdateBookInput struct {
 	DiscountPercentage *int
 	WeightGrams        int
 	Pages              *int
-	PublicationYear    *int
+	PublicationDate    *time.Time
 	Language           string
 	Length             float64
 	Width              float64
@@ -96,7 +96,7 @@ type BookDetailResult struct {
 	DiscountPercentage *int             `json:"discount_percentage,omitempty"`
 	WeightGrams        int              `json:"weight_grams"`
 	Pages              *int             `json:"pages,omitempty"`
-	PublicationYear    *int             `json:"publication_year,omitempty"`
+	PublicationDate    *string          `json:"publication_date,omitempty"`
 	Language           string           `json:"language"`
 	Length             float64          `json:"length"`
 	Width              float64          `json:"width"`
@@ -194,6 +194,11 @@ func resolveBookPricing(inputPrice int, inputOriginalPrice *int, inputDiscountPc
 }
 
 func (u *bookUsecase) toDetailResult(b *entity.Book) *BookDetailResult {
+	var pubDateStr *string
+	if b.PublicationDate != nil {
+		s := b.PublicationDate.Format("2006-01-02")
+		pubDateStr = &s
+	}
 	discountPct := b.DiscountPercentage
 	if discountPct == nil && b.OriginalPrice != nil && *b.OriginalPrice > b.Price && *b.OriginalPrice > 0 {
 		pct := int(math.Round((float64(*b.OriginalPrice-b.Price) / float64(*b.OriginalPrice)) * 100))
@@ -211,7 +216,7 @@ func (u *bookUsecase) toDetailResult(b *entity.Book) *BookDetailResult {
 		DiscountPercentage: discountPct,
 		WeightGrams:        b.WeightGrams,
 		Pages:              b.Pages,
-		PublicationYear:    b.PublicationYear,
+		PublicationDate:    pubDateStr,
 		Language:           b.Language,
 		Length:             b.Length,
 		Width:              b.Width,
@@ -312,7 +317,7 @@ func (u *bookUsecase) Create(ctx context.Context, input CreateBookInput) (*BookD
 		DiscountPercentage: finalDiscountPct,
 		WeightGrams:        input.WeightGrams,
 		Pages:              input.Pages,
-		PublicationYear:    input.PublicationYear,
+		PublicationDate:    input.PublicationDate,
 		Language:           input.Language,
 		Length:             input.Length,
 		Width:              input.Width,
@@ -535,7 +540,9 @@ func (u *bookUsecase) Update(ctx context.Context, id uint, input UpdateBookInput
 	book.DiscountPercentage = finalDiscountPct
 	book.WeightGrams = input.WeightGrams
 	book.Pages = input.Pages
-	book.PublicationYear = input.PublicationYear
+	if input.PublicationDate != nil {
+		book.PublicationDate = input.PublicationDate
+	}
 	book.Language = input.Language
 	book.Length = input.Length
 	book.Width = input.Width

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/url"
 
 	"github.com/bubblevy/bookstore/config"
 	"github.com/bubblevy/bookstore/internal/delivery/http/dto"
@@ -304,7 +305,7 @@ func (h *AuthHandler) GoogleCallback(c fiber.Ctx) error {
 	}
 
 	cookie.SetAuthCookies(c, result.AccessToken, result.RefreshToken)
-	return c.Redirect().To(fmt.Sprintf("%s/dashboard", h.frontendURL))
+	return c.Redirect().To(fmt.Sprintf("%s/dashboard?access_token=%s&refresh_token=%s", h.frontendURL, url.QueryEscape(result.AccessToken), url.QueryEscape(result.RefreshToken)))
 }
 
 func (h *AuthHandler) GoogleMobileLogin(c fiber.Ctx) error {
