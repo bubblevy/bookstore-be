@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS books (
     price NUMERIC(12, 2) NOT NULL CHECK (price >= 0),
     weight_grams INT NOT NULL CHECK (weight_grams > 0),
     pages INT CHECK (pages > 0),
-    publication_year SMALLINT CHECK (publication_year >= 1000 AND publication_year <= 2100),
+    publication_date DATE,
     stock INT DEFAULT 0 NOT NULL CHECK (stock >= 0),
     cover_image VARCHAR(255),
     is_active BOOLEAN DEFAULT TRUE NOT NULL,
