@@ -18,6 +18,7 @@ import (
 	"github.com/bubblevy/bookstore/pkg/payment"
 	"github.com/bubblevy/bookstore/pkg/sse"
 	"github.com/bubblevy/bookstore/pkg/storage"
+	"github.com/midtrans/midtrans-go"
 	"gorm.io/gorm"
 )
 
@@ -112,6 +113,7 @@ type checkoutUsecase struct {
 	storageSvc        storage.StorageService
 	sseHub            sse.Hub
 	cacheSvc          cache.Cache
+	userRepo          repository.UserRepository
 }
 
 func NewCheckoutUsecase(
@@ -129,6 +131,7 @@ func NewCheckoutUsecase(
 	var storageSvc storage.StorageService
 	var sseHub sse.Hub
 	var cacheSvc cache.Cache
+	var userRepo repository.UserRepository
 
 	for _, dep := range extraDeps {
 		switch v := dep.(type) {
@@ -140,6 +143,8 @@ func NewCheckoutUsecase(
 			sseHub = v
 		case cache.Cache:
 			cacheSvc = v
+		case repository.UserRepository:
+			userRepo = v
 		}
 	}
 
@@ -156,6 +161,7 @@ func NewCheckoutUsecase(
 		storageSvc:        storageSvc,
 		sseHub:            sseHub,
 		cacheSvc:          cacheSvc,
+		userRepo:          userRepo,
 	}
 }
 
@@ -536,7 +542,107 @@ func (u *checkoutUsecase) CreateOrder(ctx context.Context, userID uint, input Cr
 	}
 
 	// External payment gateway charge
-	chargeRes, err := u.midtransSvc.Charge(ctx, invoiceNumber, int64(order.TotalAmount), input.PaymentMethod)
+	// Prepare Customer Details, Shipping Details, and Item Details for Midtrans
+	var userEmail, userName string
+	if u.userRepo != nil {
+		if uRecord, err := u.userRepo.FindByID(ctx, userID); err == nil && uRecord != nil {
+			userEmail = uRecord.Email
+			userName = uRecord.Name
+		}
+	}
+
+	custFName, custLName := splitFullName(userName)
+	if custFName == "" || custFName == "Customer" {
+		if preview.Address != nil && preview.Address.ReceiverName != "" {
+			custFName, custLName = splitFullName(preview.Address.ReceiverName)
+		}
+	}
+
+	var customerDetails *midtrans.CustomerDetails
+	if preview.Address != nil {
+		shipFName, shipLName := splitFullName(preview.Address.ReceiverName)
+		addr := &midtrans.CustomerAddress{
+			FName:       shipFName,
+			LName:       shipLName,
+			Phone:       preview.Address.Phone,
+			Address:     preview.Address.AddressLine,
+			City:        preview.Address.CityName,
+			Postcode:    preview.Address.PostalCode,
+			CountryCode: "IDN",
+		}
+
+		customerDetails = &midtrans.CustomerDetails{
+			FName:    custFName,
+			LName:    custLName,
+			Email:    userEmail,
+			Phone:    preview.Address.Phone,
+			BillAddr: addr,
+			ShipAddr: addr,
+		}
+	}
+
+	// Prepare Item Details (Books + Shipping + Admin Fee - Discount)
+	var midtransItems []midtrans.ItemDetails
+	for _, item := range preview.Items {
+		midtransItems = append(midtransItems, midtrans.ItemDetails{
+			ID:    fmt.Sprintf("BOOK-%d", item.BookID),
+			Name:  truncateMidtransString(item.Title, 50),
+			Price: int64(item.Price),
+			Qty:   int32(item.Quantity),
+		})
+	}
+
+	if preview.ShippingCost > 0 {
+		ongkirName := fmt.Sprintf("Ongkir (%s %s)", input.Courier, input.CourierService)
+		midtransItems = append(midtransItems, midtrans.ItemDetails{
+			ID:    "SHIPPING",
+			Name:  truncateMidtransString(ongkirName, 50),
+			Price: int64(preview.ShippingCost),
+			Qty:   1,
+		})
+	}
+
+	if preview.AdminFee > 0 {
+		midtransItems = append(midtransItems, midtrans.ItemDetails{
+			ID:    "ADMIN_FEE",
+			Name:  "Biaya Layanan",
+			Price: int64(preview.AdminFee),
+			Qty:   1,
+		})
+	}
+
+	if preview.DiscountAmount > 0 {
+		discName := "Diskon"
+		if input.DiscountCode != nil && *input.DiscountCode != "" {
+			discName = fmt.Sprintf("Diskon (%s)", *input.DiscountCode)
+		}
+		midtransItems = append(midtransItems, midtrans.ItemDetails{
+			ID:    "DISCOUNT",
+			Name:  truncateMidtransString(discName, 50),
+			Price: -int64(preview.DiscountAmount),
+			Qty:   1,
+		})
+	}
+
+	var sumItems int64
+	for _, it := range midtransItems {
+		sumItems += it.Price * int64(it.Qty)
+	}
+
+	var finalItems *[]midtrans.ItemDetails
+	if sumItems == int64(order.TotalAmount) {
+		finalItems = &midtransItems
+	} else {
+		logger.Warn("midtrans item details sum mismatch with gross amount, omitting item details",
+			"items_sum", sumItems, "total_amount", order.TotalAmount)
+	}
+
+	chargeDetails := &payment.ChargeDetails{
+		CustomerDetails: customerDetails,
+		ItemsDetails:    finalItems,
+	}
+
+	chargeRes, err := u.midtransSvc.Charge(ctx, invoiceNumber, int64(order.TotalAmount), input.PaymentMethod, chargeDetails)
 	if err != nil {
 		logger.Error("create order failed - midtrans charge error", "invoice", invoiceNumber, "error", err)
 		// Rollback order and restore book stock so user can retry without stock being held or cart being deleted
@@ -730,7 +836,10 @@ func (u *checkoutUsecase) HandleMidtransWebhook(ctx context.Context, input Midtr
 		}
 
 		if targetOrderStatus != "" {
-			_ = txOrderRepo.UpdateOrderStatus(ctx, order.ID, targetOrderStatus)
+			if err := txOrderRepo.UpdateOrderStatus(ctx, order.ID, targetOrderStatus); err != nil {
+				logger.Error("midtrans webhook failed - update order status error", "order_id", order.InvoiceNumber, "error", err)
+				return err
+			}
 		}
 		logger.Info("midtrans webhook processed successfully",
 			"order_id", order.InvoiceNumber,
@@ -767,6 +876,28 @@ func (u *checkoutUsecase) HandleMidtransWebhook(ctx context.Context, input Midtr
 	}
 
 	return err
+}
+
+func splitFullName(fullName string) (string, string) {
+	parts := strings.Fields(strings.TrimSpace(fullName))
+	if len(parts) == 0 {
+		return "Customer", ""
+	}
+	if len(parts) == 1 {
+		return parts[0], ""
+	}
+	return parts[0], strings.Join(parts[1:], " ")
+}
+
+func truncateMidtransString(s string, maxLen int) string {
+	r := []rune(s)
+	if len(r) <= maxLen {
+		return s
+	}
+	if maxLen > 3 {
+		return string(r[:maxLen-3]) + "..."
+	}
+	return string(r[:maxLen])
 }
 
 func nilIfEmpty(s string) *string {

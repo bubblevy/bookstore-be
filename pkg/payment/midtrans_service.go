@@ -30,8 +30,13 @@ type ChargeResponse struct {
 	RawResponse   string
 }
 
+type ChargeDetails struct {
+	CustomerDetails *midtrans.CustomerDetails
+	ItemsDetails    *[]midtrans.ItemDetails
+}
+
 type MidtransService interface {
-	Charge(ctx context.Context, invoiceNumber string, grossAmount int64, paymentMethod string) (*ChargeResponse, error)
+	Charge(ctx context.Context, invoiceNumber string, grossAmount int64, paymentMethod string, details ...*ChargeDetails) (*ChargeResponse, error)
 	VerifyNotification(orderID, statusCode, grossAmount, signatureKey string) bool
 }
 
@@ -84,7 +89,7 @@ func IsSupportedPaymentMethod(paymentMethod string) bool {
 	return SupportedPaymentMethods[strings.ToLower(strings.TrimSpace(paymentMethod))]
 }
 
-func (s *midtransService) Charge(ctx context.Context, invoiceNumber string, grossAmount int64, paymentMethod string) (*ChargeResponse, error) {
+func (s *midtransService) Charge(ctx context.Context, invoiceNumber string, grossAmount int64, paymentMethod string, details ...*ChargeDetails) (*ChargeResponse, error) {
 	req := &coreapi.ChargeReq{
 		TransactionDetails: midtrans.TransactionDetails{
 			OrderID:  invoiceNumber,
@@ -94,6 +99,15 @@ func (s *midtransService) Charge(ctx context.Context, invoiceNumber string, gros
 			ExpiryDuration: 3,
 			Unit:           "hour",
 		},
+	}
+
+	if len(details) > 0 && details[0] != nil {
+		if details[0].CustomerDetails != nil {
+			req.CustomerDetails = details[0].CustomerDetails
+		}
+		if details[0].ItemsDetails != nil && len(*details[0].ItemsDetails) > 0 {
+			req.Items = details[0].ItemsDetails
+		}
 	}
 
 	methodLower := strings.ToLower(strings.TrimSpace(paymentMethod))

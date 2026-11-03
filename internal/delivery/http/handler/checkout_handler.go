@@ -274,7 +274,7 @@ func (h *CheckoutHandler) HandleMidtransWebhook(c fiber.Ctx) error {
 	}
 
 	if err := h.usecase.HandleMidtransWebhook(c.Context(), input); err != nil {
-		if err.Error() == "invalid midtrans webhook signature" {
+		if errors.Is(err, entity.ErrInvalidWebhookSignature) || err.Error() == "invalid midtrans webhook signature" || err.Error() == "invalid payment webhook signature" {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 				"status":  "error",
 				"message": err.Error(),

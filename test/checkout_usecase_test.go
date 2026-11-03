@@ -385,8 +385,13 @@ type MockMidtransServiceForCheckout struct {
 	mock.Mock
 }
 
-func (m *MockMidtransServiceForCheckout) Charge(ctx context.Context, orderID string, grossAmount int64, paymentType string) (*payment.ChargeResponse, error) {
-	args := m.Called(ctx, orderID, grossAmount, paymentType)
+func (m *MockMidtransServiceForCheckout) Charge(ctx context.Context, orderID string, grossAmount int64, paymentType string, details ...*payment.ChargeDetails) (*payment.ChargeResponse, error) {
+	var args mock.Arguments
+	if len(details) > 0 {
+		args = m.Called(ctx, orderID, grossAmount, paymentType, details[0])
+	} else {
+		args = m.Called(ctx, orderID, grossAmount, paymentType)
+	}
 	if res := args.Get(0); res != nil {
 		return res.(*payment.ChargeResponse), args.Error(1)
 	}
@@ -955,7 +960,7 @@ func TestCheckoutUsecase_CreateOrder(t *testing.T) {
 			Bank:          bank,
 			VANumber:      va,
 		}
-		mockMidtrans.On("Charge", mock.Anything, mock.Anything, int64(225000), "bca_va").Return(mockCharge, nil).Once()
+		mockMidtrans.On("Charge", mock.Anything, mock.Anything, int64(225000), "bca_va", mock.Anything).Return(mockCharge, nil).Once()
 		mockOrderRepo.On("CreatePayment", mock.Anything, mock.MatchedBy(func(p *entity.Payment) bool {
 			return p.PaymentType == "bank_transfer" &&
 				p.Status == entity.PaymentStatusPending &&
@@ -1123,7 +1128,7 @@ func TestCheckoutUsecase_CreateOrder(t *testing.T) {
 			QRURL:         qrURL,
 			DeeplinkURL:   deeplinkURL,
 		}
-		mockMidtrans.On("Charge", mock.Anything, mock.Anything, int64(120840), "shopeepay").Return(mockCharge, nil).Once()
+		mockMidtrans.On("Charge", mock.Anything, mock.Anything, int64(120840), "shopeepay", mock.Anything).Return(mockCharge, nil).Once()
 		mockCheckoutRepo.On("DeleteCartItems", mock.Anything, []uint{cartItemID}).Return(nil).Once()
 		mockOrderRepo.On("CreatePayment", mock.Anything, mock.MatchedBy(func(p *entity.Payment) bool {
 			return p.PaymentType == "shopeepay" &&
@@ -1198,7 +1203,7 @@ func TestCheckoutUsecase_CreateOrder(t *testing.T) {
 		mockOrderRepo.On("CreateOrder", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 		sqlMock.ExpectCommit()
 
-		mockMidtrans.On("Charge", mock.Anything, mock.Anything, int64(225000), "bca_va").
+		mockMidtrans.On("Charge", mock.Anything, mock.Anything, int64(225000), "bca_va", mock.Anything).
 			Return(nil, errors.New("midtrans connection timeout")).Once()
 
 		sqlMock.ExpectBegin()

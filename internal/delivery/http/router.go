@@ -226,7 +226,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	checkoutRepo := pgsql.NewCheckoutRepository(db)
 	orderRepo := pgsql.NewOrderRepository(db)
 
-	checkoutUsecase := usecase.NewCheckoutUsecase(db, checkoutRepo, orderRepo, addressRepo, discountUsecase, discountRepo, biteshipClient, midtransSvc, paymentMethodRepo, storageSvc, sseHub, cacheSvc)
+	checkoutUsecase := usecase.NewCheckoutUsecase(db, checkoutRepo, orderRepo, addressRepo, discountUsecase, discountRepo, biteshipClient, midtransSvc, paymentMethodRepo, storageSvc, sseHub, cacheSvc, userRepo)
 	handler.NewCheckoutHandler(api, checkoutUsecase, validate, authMiddleware, turnstileMiddleware)
 
 	orderUsecase := usecase.NewOrderUsecase(orderRepo)
