@@ -344,7 +344,7 @@ func GenerateSalesReportPDF(report dto.OrderReportResponse) ([]byte, error) {
 		// Top Books Footer
 		pdf.SetFillColor(243, 244, 246)
 		pdf.SetFont("Arial", "B", 7.5)
-		pdf.CellFormat(wRank+wTitle+wQtySold, 6.0, "TOTAL PENDAPATAN BUKU TERLARIS ", "1", 0, "R", true, 0, "")
+		pdf.CellFormat(wRank+wTitle+wQtySold, 6.0, "TOTAL PENDAPATAN ", "1", 0, "R", true, 0, "")
 		pdf.SetFont("Arial", "B", 8.5)
 		pdf.CellFormat(wRevenue, 6.0, FormatRupiah(totalTopRevenue)+" ", "1", 1, "R", true, 0, "")
 	}
