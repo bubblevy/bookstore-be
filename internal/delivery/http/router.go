@@ -97,6 +97,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	validate := validator.NewValidator()
 	authMiddleware := middleware.AuthMiddleware(jwtService)
 	adminMiddleware := middleware.AdminMiddleware()
+	softAuthMiddleware := middleware.AuthMiddleware(jwtService, true)
 	turnstileVerifier := turnstile.NewVerifier(turnstile.Config{
 		SiteKey:   cfg.Turnstile.SiteKey,
 		SecretKey: cfg.Turnstile.SecretKey,
@@ -197,7 +198,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	// book routes
 	bookRepo := pgsql.NewBookRepository(db)
 	bookUsecase := usecase.NewBookUsecaseWithCache(bookRepo, categoryRepo, authorRepo, publisherRepo, storageSvc, cacheSvc)
-	handler.NewBookHandler(api, bookUsecase, validate, authMiddleware, adminMiddleware)
+	handler.NewBookHandler(api, bookUsecase, validate, authMiddleware, adminMiddleware, softAuthMiddleware)
 
 	// discount routes
 	discountRepo := pgsql.NewDiscountRepository(db)

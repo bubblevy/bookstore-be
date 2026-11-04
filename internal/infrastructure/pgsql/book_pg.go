@@ -8,6 +8,7 @@ import (
 	"github.com/bubblevy/bookstore/internal/entity"
 	"github.com/bubblevy/bookstore/internal/repository"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type bookRepository struct {
@@ -132,7 +133,7 @@ func (r *bookRepository) FindAll(ctx context.Context, filter repository.BookFilt
 
 func (r *bookRepository) Update(ctx context.Context, book *entity.Book) error {
 	db := extractDB(ctx, r.db)
-	return db.Save(book).Error
+	return db.Omit(clause.Associations).Save(book).Error
 }
 
 func (r *bookRepository) Delete(ctx context.Context, id uint) error {

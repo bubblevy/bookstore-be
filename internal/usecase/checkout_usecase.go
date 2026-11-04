@@ -347,7 +347,11 @@ func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, inpu
 	calcFee := func(feeType string, flatAmount int, percent float64) int {
 		if feeType == "percentage" {
 			if baseAmount > 0 {
-				return int(math.Round(float64(baseAmount) * percent))
+				rate := percent
+				if rate >= 1.0 {
+					rate = rate / 100.0
+				}
+				return int(math.Round(float64(baseAmount) * rate))
 			}
 			return 0
 		}
@@ -405,7 +409,11 @@ func (u *checkoutUsecase) PreviewCheckout(ctx context.Context, userID uint, inpu
 
 		if pm != nil {
 			if pm.FeeType == "percentage" {
-				adminFee = int(math.Round(float64(baseAmount) * pm.FeePercent))
+				rate := pm.FeePercent
+				if rate >= 1.0 {
+					rate = rate / 100.0
+				}
+				adminFee = int(math.Round(float64(baseAmount) * rate))
 			} else {
 				adminFee = pm.FeeAmount
 			}
@@ -916,7 +924,11 @@ func (u *checkoutUsecase) GetPaymentMethods(ctx context.Context, amount int) (*d
 	calcFee := func(feeType string, flatAmount int, percent float64) int {
 		if feeType == "percentage" {
 			if amount > 0 {
-				return int(math.Round(float64(amount) * percent))
+				rate := percent
+				if rate >= 1.0 {
+					rate = rate / 100.0
+				}
+				return int(math.Round(float64(amount) * rate))
 			}
 			return 0
 		}

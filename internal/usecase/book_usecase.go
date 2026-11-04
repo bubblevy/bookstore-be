@@ -382,6 +382,8 @@ func (u *bookUsecase) buildBookListCacheKey(filter repository.BookFilter, pq pag
 	if filter.IsActive != nil {
 		sb.WriteString(":act=")
 		sb.WriteString(strconv.FormatBool(*filter.IsActive))
+	} else {
+		sb.WriteString(":act=all")
 	}
 	if filter.SortBy != "" {
 		sb.WriteString(":sort=")
@@ -560,6 +562,10 @@ func (u *bookUsecase) Update(ctx context.Context, id uint, input UpdateBookInput
 		book.IsActive = *input.IsActive
 	}
 
+	book.Category = *category
+	book.Author = *author
+	book.Publisher = *publisher
+
 	if err := u.bookRepo.Update(ctx, book); err != nil {
 		return nil, fmt.Errorf("failed to update book: %w", err)
 	}
@@ -572,10 +578,6 @@ func (u *bookUsecase) Update(ctx context.Context, id uint, input UpdateBookInput
 	if u.storageSvc != nil && oldCover != nil && *oldCover != "" && (newCover == nil || *newCover != *oldCover) {
 		_ = u.storageSvc.Delete(ctx, *oldCover)
 	}
-
-	book.Category = *category
-	book.Author = *author
-	book.Publisher = *publisher
 
 	return u.toDetailResult(book), nil
 }

@@ -57,7 +57,11 @@ func (u *paymentMethodUsecase) GetAll(ctx context.Context, onlyActive bool, amou
 	calcFee := func(feeType string, flatAmount int, percent float64) int {
 		if feeType == "percentage" {
 			if amount > 0 {
-				return int(math.Round(float64(amount) * percent))
+				rate := percent
+				if rate >= 1.0 {
+					rate = rate / 100.0
+				}
+				return int(math.Round(float64(amount) * rate))
 			}
 			return 0
 		}
@@ -160,7 +164,11 @@ func (u *paymentMethodUsecase) Update(ctx context.Context, id uint, req dto.Upda
 		pm.FeeAmount = *req.FeeAmount
 	}
 	if req.FeePercent != nil {
-		pm.FeePercent = *req.FeePercent
+		val := *req.FeePercent
+		if val >= 1.0 {
+			val = val / 100.0
+		}
+		pm.FeePercent = val
 	}
 
 	oldImage := pm.Image

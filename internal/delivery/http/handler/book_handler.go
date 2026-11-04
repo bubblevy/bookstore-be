@@ -21,7 +21,7 @@ type BookHandler struct {
 	validate *validator.Validate
 }
 
-func NewBookHandler(r fiber.Router, uc usecase.BookUsecase, v *validator.Validate, authMiddleware fiber.Handler, adminMiddleware fiber.Handler) {
+func NewBookHandler(r fiber.Router, uc usecase.BookUsecase, v *validator.Validate, authMiddleware fiber.Handler, adminMiddleware fiber.Handler, optionalAuth ...fiber.Handler) {
 	h := &BookHandler{
 		usecase:  uc,
 		validate: v,
@@ -29,9 +29,19 @@ func NewBookHandler(r fiber.Router, uc usecase.BookUsecase, v *validator.Validat
 
 	books := r.Group("/books")
 
-	// Public Endpoints
-	books.Get("/", h.FindAll)
-	books.Get("/:slug", h.FindBySlug)
+	var optAuth fiber.Handler
+	if len(optionalAuth) > 0 && optionalAuth[0] != nil {
+		optAuth = optionalAuth[0]
+	}
+
+	// Public Endpoints (with optional auth for admin privileges)
+	if optAuth != nil {
+		books.Get("/", optAuth, h.FindAll)
+		books.Get("/:slug", optAuth, h.FindBySlug)
+	} else {
+		books.Get("/", h.FindAll)
+		books.Get("/:slug", h.FindBySlug)
+	}
 
 	// Admin Protected Endpoints
 	adminRoutes := books.Group("", authMiddleware, adminMiddleware)
