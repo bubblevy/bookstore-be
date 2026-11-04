@@ -313,7 +313,7 @@ func GenerateSalesReportPDF(report dto.OrderReportResponse) ([]byte, error) {
 		pdf.CellFormat(wRank, 5.5, "NO", "1", 0, "C", true, 0, "")
 		pdf.CellFormat(wTitle, 5.5, " JUDUL BUKU", "1", 0, "L", true, 0, "")
 		pdf.CellFormat(wQtySold, 5.5, "JUMLAH TERJUAL", "1", 0, "C", true, 0, "")
-		pdf.CellFormat(wRevenue, 5.5, "TOTAL PENDAPATAN ", "1", 1, "R", true, 0, "")
+		pdf.CellFormat(wRevenue, 5.5, "SUBTOTAL ", "1", 1, "R", true, 0, "")
 
 		totalTopRevenue := 0
 
