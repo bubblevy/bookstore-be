@@ -42,6 +42,8 @@ type Book struct {
 	Sold               int      `gorm:"not null;default:0" json:"sold"`
 	CoverImage         *string  `gorm:"type:varchar(255)" json:"cover_image,omitempty"`
 	IsActive           bool     `gorm:"not null;default:true" json:"is_active"`
+	AverageRating      float64  `gorm:"type:numeric(3,2);not null;default:0.00" json:"average_rating"`
+	TotalReviews       int      `gorm:"not null;default:0" json:"total_reviews"`
 
 	// Belongs-To Relations
 	Category  Category  `gorm:"foreignKey:CategoryID;constraint:OnDelete:RESTRICT;" json:"category,omitempty"`

@@ -178,6 +178,14 @@ Features:
 - **Security & Authorization**: Protected by `AuthMiddleware` via HTTP-only cookie `access_token` (`withCredentials: true`) or `Authorization: Bearer <token>` header. Customers receive updates only for their own orders, with optional invoice filtering (`?invoice=...`); administrators can monitor store-wide transactions.
 - **Integration Guide**: Full endpoint specifications, event schemas, and frontend integration code examples (Vanilla JS, `@microsoft/fetch-event-source`, and React custom hook) are detailed in [`docs/sse_integration.md`](docs/sse_integration.md).
 
+### 15. Product Rating & Reviews
+- **Verified Purchase Enforcement**: Customers can only review books they have actually purchased after their order reaches `completed` status (via Biteship courier `delivered` webhook or manual receipt confirmation).
+- **7-Day Rating Window**: Review submissions and modifications are strictly restricted to within 7 days from the package delivery date (`completed_at`).
+- **Rating Breakdown & Summary (`GET /api/v1/books/{slug}/reviews`)**: Public breakdown including weighted average rating (`average_rating`), total review counts, 1-to-5 star breakdown distribution, reviews with comments count, and star/comment filter queries (`?rating=5&has_comment=true`).
+- **Automated Name Masking**: Customer names are automatically masked with partial censoring (e.g. `Budi Santoso` $\rightarrow$ `B****i S****o`) in all public API responses for customer privacy.
+- **Admin Moderation & Official Seller Replies**: Administrators can soft-moderate reviews (`is_hidden` with reason) to exclude offensive or spam ulasan from public visibility and recalculate book score metrics, as well as post official seller replies.
+- **Cached Rating Metrics**: Books maintain aggregated `average_rating` and `total_reviews` columns directly on the database table, continuously synchronized and invalidated against Redis cache for sub-millisecond catalog listing latency.
+
 ---
 
 ## API Documentation
@@ -274,6 +282,16 @@ The complete API specifications and testing collections are available:
 | **Order** | `GET` | `/api/v1/orders/detail/{invoice_number}` | Admin | Get complete order detail with customer account profile & transaction info |
 | **Order** | `GET` | `/api/v1/orders/{invoice_number}` | User/Admin | Get complete order detail by invoice |
 | **Order** | `GET` | `/api/v1/orders/{invoice_number}/pdf` | User/Admin | Download official order invoice receipt in Neo-Brutalist PDF |
+| **Order** | `POST` | `/api/v1/orders/{invoice_number}/confirm-received` | User | Confirm package delivered & mark order completed |
+| **Review** | `GET` | `/api/v1/books/{slug}/reviews` | Public | Get book reviews summary, breakdown & paginated list |
+| **Review** | `GET` | `/api/v1/orders/{invoice_number}/review-eligibility` | User | Check order review eligibility & remaining days within 7-day delivery window |
+| **Review** | `POST` | `/api/v1/orders/{invoice_number}/reviews` | User | Submit verified rating & review for books in completed order |
+| **Review** | `PUT` | `/api/v1/reviews/{id}` | User | Edit submitted review within 7 days of delivery |
+| **Review** | `GET` | `/api/v1/reviews/my` | User | List user's submitted reviews |
+| **Review** | `GET` | `/api/v1/admin/reviews` | Admin | List all reviews with rating, book, search, and visibility filters |
+| **Review** | `PATCH` | `/api/v1/admin/reviews/{id}/visibility` | Admin | Moderate review visibility (hide/unhide with reason) |
+| **Review** | `POST` | `/api/v1/admin/reviews/{id}/reply` | Admin | Add official seller reply to review |
+| **Review** | `DELETE` | `/api/v1/admin/reviews/{id}` | Admin | Permanently delete review & recalculate book rating |
 | **SSE** | `GET` | `/api/v1/sse/orders` | User/Admin | Real-time event stream for payment & shipping updates (`text/event-stream`) |
 | **Report** | `GET` | `/api/v1/reports` | Admin | Get comprehensive executive sales & orders report analytics |
 | **Report** | `GET` | `/api/v1/reports/pdf` | Admin | Download executive sales performance report in Neo-Brutalist PDF |

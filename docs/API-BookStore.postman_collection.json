@@ -1145,6 +1145,61 @@
                 }
               },
               "response": []
+            },
+            {
+              "name": "Get Book Reviews",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/books/:slug/reviews?page=1&per_page=10&rating&has_comment&sort_by=newest",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "books",
+                    ":slug",
+                    "reviews"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "per_page",
+                      "value": "10"
+                    },
+                    {
+                      "key": "rating",
+                      "value": null
+                    },
+                    {
+                      "key": "has_comment",
+                      "value": null
+                    },
+                    {
+                      "key": "sort_by",
+                      "value": "newest"
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "slug",
+                      "value": "the-pragmatic-programmer"
+                    }
+                  ]
+                }
+              },
+              "response": []
             }
           ]
         },
@@ -1621,6 +1676,196 @@
                     {
                       "key": "invoice",
                       "value": "INV-20261029-371458"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Confirm Order Received",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/orders/:invoice_number/confirm-received",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "orders",
+                    ":invoice_number",
+                    "confirm-received"
+                  ],
+                  "variable": [
+                    {
+                      "key": "invoice_number",
+                      "value": "INV-20261024-489677"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Check Review Eligibility",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/orders/:invoice_number/review-eligibility",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "orders",
+                    ":invoice_number",
+                    "review-eligibility"
+                  ],
+                  "variable": [
+                    {
+                      "key": "invoice_number",
+                      "value": "INV-20261024-489677"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Submit Order Reviews",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reviews\": [\n    {\n      \"book_id\": 1,\n      \"rating\": 5,\n      \"comment\": \"Buku sangat bagus dan original!\"\n    }\n  ]\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/orders/:invoice_number/reviews",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "orders",
+                    ":invoice_number",
+                    "reviews"
+                  ],
+                  "variable": [
+                    {
+                      "key": "invoice_number",
+                      "value": "INV-20261024-489677"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Review",
+          "item": [
+            {
+              "name": "My Reviews",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/reviews/my?page=1&per_page=10",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "reviews",
+                    "my"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "per_page",
+                      "value": "10"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Review",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"rating\": 5,\n  \"comment\": \"Ulasan buku diperbarui\"\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/reviews/:id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "reviews",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "1"
                     }
                   ]
                 }
@@ -2546,6 +2791,61 @@
               "response": []
             },
             {
+              "name": "Get Book Reviews",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/books/:slug/reviews?page=1&per_page=10&rating&has_comment&sort_by=newest",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "books",
+                    ":slug",
+                    "reviews"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "per_page",
+                      "value": "10"
+                    },
+                    {
+                      "key": "rating",
+                      "value": null
+                    },
+                    {
+                      "key": "has_comment",
+                      "value": null
+                    },
+                    {
+                      "key": "sort_by",
+                      "value": "newest"
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "slug",
+                      "value": "the-pragmatic-programmer"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
               "name": "Create",
               "request": {
                 "auth": {
@@ -3383,6 +3683,186 @@
                     "api",
                     "v1",
                     "payment-methods",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Review",
+          "item": [
+            {
+              "name": "List Reviews",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/admin/reviews?page=1&per_page=10&book_id&rating&is_hidden&search&sort_by=newest",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "reviews"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "per_page",
+                      "value": "10"
+                    },
+                    {
+                      "key": "book_id",
+                      "value": null
+                    },
+                    {
+                      "key": "rating",
+                      "value": null
+                    },
+                    {
+                      "key": "is_hidden",
+                      "value": null
+                    },
+                    {
+                      "key": "search",
+                      "value": null
+                    },
+                    {
+                      "key": "sort_by",
+                      "value": "newest"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Moderate Review Visibility",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"is_hidden\": true,\n  \"reason\": \"Spam review\"\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/admin/reviews/:id/visibility",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "reviews",
+                    ":id",
+                    "visibility"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Reply Review",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reply\": \"Terima kasih atas ulasannya kak!\"\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/admin/reviews/:id/reply",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "reviews",
+                    ":id",
+                    "reply"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "1"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Review",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/admin/reviews/:id",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "reviews",
                     ":id"
                   ],
                   "variable": [

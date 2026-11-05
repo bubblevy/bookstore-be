@@ -558,6 +558,9 @@ func (u *shippingUsecase) HandleWebhook(ctx context.Context, payload biteship.We
 				"status":     *mappedOrderStatus,
 				"updated_at": now,
 			}
+			if *mappedOrderStatus == entity.OrderStatusCompleted && currentOrder.CompletedAt == nil {
+				orderUpdates["completed_at"] = now
+			}
 			if waybillID != "" && (currentOrder.ShippingTrackingNumber == nil || *currentOrder.ShippingTrackingNumber == "") {
 				orderUpdates["shipping_tracking_number"] = waybillID
 			}
