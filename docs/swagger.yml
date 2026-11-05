@@ -1347,6 +1347,49 @@ paths:
       responses:
         '200':
           description: Book reviews retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "book reviews retrieved successfully"
+                  data:
+                    $ref: '#/components/schemas/BookReviewsSummaryResponse'
+              example:
+                code: 200
+                status: true
+                message: "book reviews retrieved successfully"
+                data:
+                  breakdown:
+                    average_rating: 4.85
+                    total_reviews: 120
+                    star_5_count: 95
+                    star_4_count: 20
+                    star_3_count: 3
+                    star_2_count: 1
+                    star_1_count: 1
+                    with_comment_count: 88
+                  reviews:
+                    - id: 15
+                      rating: 5
+                      comment: "Buku original, kertas bagus, dan pengiriman super cepat!"
+                      user_name: "B****i S****o"
+                      seller_reply: "Terima kasih banyak sudah berbelanja di toko kami kak!"
+                      seller_reply_at: "2026-11-05T14:30:00+07:00"
+                      created_at: "2026-11-05T10:15:00+07:00"
+                  meta:
+                    page: 1
+                    per_page: 10
+                    total_items: 120
+                    total_pages: 12
         '404':
           description: Book not found
         '500':
@@ -3186,6 +3229,41 @@ paths:
       responses:
         '200':
           description: Order confirmed as received successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "order confirmed as received successfully"
+                  data:
+                    type: object
+                    properties:
+                      invoice_number:
+                        type: string
+                        example: "INV-20261105-001"
+                      status:
+                        type: string
+                        example: "completed"
+                      completed_at:
+                        type: string
+                        format: date-time
+                        example: "2026-11-05T12:00:00+07:00"
+              example:
+                code: 200
+                status: true
+                message: "order confirmed as received successfully"
+                data:
+                  invoice_number: "INV-20261105-001"
+                  status: "completed"
+                  completed_at: "2026-11-05T12:00:00+07:00"
         '400':
           description: Order is not in shipped status
         '401':
@@ -3213,6 +3291,46 @@ paths:
       responses:
         '200':
           description: Review eligibility retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "order review eligibility retrieved successfully"
+                  data:
+                    $ref: '#/components/schemas/OrderReviewEligibilityResponse'
+              example:
+                code: 200
+                status: true
+                message: "order review eligibility retrieved successfully"
+                data:
+                  order_id: 42
+                  invoice_number: "INV-20261105-001"
+                  order_status: "completed"
+                  is_eligible: true
+                  delivered_at: "2026-11-04T12:00:00+07:00"
+                  review_deadline: "2026-11-11T12:00:00+07:00"
+                  remaining_days: 6
+                  remaining_hours: 142
+                  is_expired: false
+                  items:
+                    - book_id: 10
+                      title: "Bumi Manusia"
+                      cover_image: "covers/bumi-manusia.jpg"
+                      price: 85000
+                      is_reviewed: false
+                      review_id: null
+                      rating: null
+                      comment: null
+                      created_at: null
         '401':
           description: Unauthorized request
         '404':
@@ -3267,6 +3385,42 @@ paths:
       responses:
         '201':
           description: Reviews submitted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 201
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "reviews submitted successfully"
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CustomerReviewItemResponse'
+              example:
+                code: 201
+                status: true
+                message: "reviews submitted successfully"
+                data:
+                  - id: 15
+                    book_id: 10
+                    book_title: "Bumi Manusia"
+                    book_slug: "bumi-manusia"
+                    book_cover: "covers/bumi-manusia.jpg"
+                    order_id: 42
+                    invoice_number: "INV-20261105-001"
+                    rating: 5
+                    comment: "Buku original dan pengiriman cepat!"
+                    seller_reply: null
+                    seller_reply_at: null
+                    created_at: "2026-11-05T10:15:00+07:00"
+                    can_edit: true
         '400':
           description: Validation error, expired review period, or invalid rating
         '401':
@@ -3298,6 +3452,49 @@ paths:
       responses:
         '200':
           description: User reviews retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "user reviews retrieved successfully"
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CustomerReviewItemResponse'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+              example:
+                code: 200
+                status: true
+                message: "user reviews retrieved successfully"
+                data:
+                  - id: 15
+                    book_id: 10
+                    book_title: "Bumi Manusia"
+                    book_slug: "bumi-manusia"
+                    book_cover: "covers/bumi-manusia.jpg"
+                    order_id: 42
+                    invoice_number: "INV-20261105-001"
+                    rating: 5
+                    comment: "Buku original dan pengiriman cepat!"
+                    seller_reply: "Terima kasih banyak atas pesanannya kak!"
+                    seller_reply_at: "2026-11-05T14:30:00+07:00"
+                    created_at: "2026-11-05T10:15:00+07:00"
+                    can_edit: true
+                meta:
+                  page: 1
+                  per_page: 10
+                  total_items: 1
+                  total_pages: 1
         '401':
           description: Unauthorized request
         '500':
@@ -3339,6 +3536,40 @@ paths:
       responses:
         '200':
           description: Review updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "review updated successfully"
+                  data:
+                    $ref: '#/components/schemas/CustomerReviewItemResponse'
+              example:
+                code: 200
+                status: true
+                message: "review updated successfully"
+                data:
+                  id: 15
+                  book_id: 10
+                  book_title: "Bumi Manusia"
+                  book_slug: "bumi-manusia"
+                  book_cover: "covers/bumi-manusia.jpg"
+                  order_id: 42
+                  invoice_number: "INV-20261105-001"
+                  rating: 5
+                  comment: "Updated review comment"
+                  seller_reply: null
+                  seller_reply_at: null
+                  created_at: "2026-11-05T10:15:00+07:00"
+                  can_edit: true
         '400':
           description: Rating period expired or validation error
         '403':
@@ -3398,6 +3629,53 @@ paths:
       responses:
         '200':
           description: Admin reviews retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "admin reviews retrieved successfully"
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminReviewItemResponse'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+              example:
+                code: 200
+                status: true
+                message: "admin reviews retrieved successfully"
+                data:
+                  - id: 15
+                    book_id: 10
+                    book_title: "Bumi Manusia"
+                    book_cover: "covers/bumi-manusia.jpg"
+                    order_id: 42
+                    invoice_number: "INV-20261105-001"
+                    user_id: 7
+                    user_name: "Budi Santoso"
+                    user_email: "budi.santoso@gmail.com"
+                    rating: 5
+                    comment: "Buku original dan pengiriman cepat!"
+                    is_hidden: false
+                    hidden_reason: null
+                    seller_reply: "Terima kasih kak!"
+                    seller_reply_at: "2026-11-05T14:30:00+07:00"
+                    created_at: "2026-11-05T10:15:00+07:00"
+                    updated_at: "2026-11-05T10:15:00+07:00"
+                meta:
+                  page: 1
+                  per_page: 10
+                  total_items: 1
+                  total_pages: 1
         '401':
           description: Unauthorized request
         '403':
@@ -3439,6 +3717,29 @@ paths:
       responses:
         '200':
           description: Review visibility updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "review visibility updated successfully"
+                  data:
+                    type: object
+                    nullable: true
+                    example: null
+              example:
+                code: 200
+                status: true
+                message: "review visibility updated successfully"
+                data: null
         '401':
           description: Unauthorized request
         '403':
@@ -3479,6 +3780,29 @@ paths:
       responses:
         '200':
           description: Seller reply added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "seller reply added successfully"
+                  data:
+                    type: object
+                    nullable: true
+                    example: null
+              example:
+                code: 200
+                status: true
+                message: "seller reply added successfully"
+                data: null
         '401':
           description: Unauthorized request
         '403':
@@ -3506,6 +3830,29 @@ paths:
       responses:
         '200':
           description: Review deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  status:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "review deleted successfully"
+                  data:
+                    type: object
+                    nullable: true
+                    example: null
+              example:
+                code: 200
+                status: true
+                message: "review deleted successfully"
+                data: null
         '401':
           description: Unauthorized request
         '403':
@@ -6970,3 +7317,271 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PaymentMethodGroupResponse'
+
+    # =========================================================================
+    # REVIEWS
+    # =========================================================================
+    BookReviewItemResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 15
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 5
+        comment:
+          type: string
+          nullable: true
+          example: "Buku original, kertas bagus, dan pengiriman super cepat!"
+        user_name:
+          type: string
+          example: "B****i S****o"
+        seller_reply:
+          type: string
+          nullable: true
+          example: "Terima kasih banyak sudah berbelanja di toko kami kak!"
+        seller_reply_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-11-05T14:30:00+07:00"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-11-05T10:15:00+07:00"
+
+    BookReviewBreakdownResponse:
+      type: object
+      properties:
+        average_rating:
+          type: number
+          format: float
+          example: 4.85
+        total_reviews:
+          type: integer
+          example: 120
+        star_5_count:
+          type: integer
+          example: 95
+        star_4_count:
+          type: integer
+          example: 20
+        star_3_count:
+          type: integer
+          example: 3
+        star_2_count:
+          type: integer
+          example: 1
+        star_1_count:
+          type: integer
+          example: 1
+        with_comment_count:
+          type: integer
+          example: 88
+
+    BookReviewsSummaryResponse:
+      type: object
+      properties:
+        breakdown:
+          $ref: '#/components/schemas/BookReviewBreakdownResponse'
+        reviews:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookReviewItemResponse'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    OrderReviewItemEligibility:
+      type: object
+      properties:
+        book_id:
+          type: integer
+          example: 10
+        title:
+          type: string
+          example: "Bumi Manusia"
+        cover_image:
+          type: string
+          nullable: true
+          example: "covers/bumi-manusia.jpg"
+        price:
+          type: integer
+          example: 85000
+        is_reviewed:
+          type: boolean
+          example: false
+        review_id:
+          type: integer
+          nullable: true
+          example: null
+        rating:
+          type: integer
+          nullable: true
+          example: null
+        comment:
+          type: string
+          nullable: true
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+
+    OrderReviewEligibilityResponse:
+      type: object
+      properties:
+        order_id:
+          type: integer
+          example: 42
+        invoice_number:
+          type: string
+          example: "INV-20261105-001"
+        order_status:
+          type: string
+          example: "completed"
+        is_eligible:
+          type: boolean
+          example: true
+        delivered_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-11-04T12:00:00+07:00"
+        review_deadline:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-11-11T12:00:00+07:00"
+        remaining_days:
+          type: integer
+          example: 6
+        remaining_hours:
+          type: integer
+          example: 142
+        is_expired:
+          type: boolean
+          example: false
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderReviewItemEligibility'
+
+    CustomerReviewItemResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 15
+        book_id:
+          type: integer
+          example: 10
+        book_title:
+          type: string
+          example: "Bumi Manusia"
+        book_slug:
+          type: string
+          example: "bumi-manusia"
+        book_cover:
+          type: string
+          nullable: true
+          example: "covers/bumi-manusia.jpg"
+        order_id:
+          type: integer
+          example: 42
+        invoice_number:
+          type: string
+          example: "INV-20261105-001"
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 5
+        comment:
+          type: string
+          nullable: true
+          example: "Buku original dan pengiriman cepat!"
+        seller_reply:
+          type: string
+          nullable: true
+          example: "Terima kasih banyak atas pesanannya kak!"
+        seller_reply_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-11-05T14:30:00+07:00"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-11-05T10:15:00+07:00"
+        can_edit:
+          type: boolean
+          example: true
+
+    AdminReviewItemResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 15
+        book_id:
+          type: integer
+          example: 10
+        book_title:
+          type: string
+          example: "Bumi Manusia"
+        book_cover:
+          type: string
+          nullable: true
+          example: "covers/bumi-manusia.jpg"
+        order_id:
+          type: integer
+          example: 42
+        invoice_number:
+          type: string
+          example: "INV-20261105-001"
+        user_id:
+          type: integer
+          example: 7
+        user_name:
+          type: string
+          example: "Budi Santoso"
+        user_email:
+          type: string
+          example: "budi.santoso@gmail.com"
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 5
+        comment:
+          type: string
+          nullable: true
+          example: "Buku original dan pengiriman cepat!"
+        is_hidden:
+          type: boolean
+          example: false
+        hidden_reason:
+          type: string
+          nullable: true
+          example: null
+        seller_reply:
+          type: string
+          nullable: true
+          example: "Terima kasih kak!"
+        seller_reply_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-11-05T14:30:00+07:00"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-11-05T10:15:00+07:00"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-11-05T10:15:00+07:00"
