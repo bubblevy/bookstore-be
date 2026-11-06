@@ -80,6 +80,8 @@ type BookListItem struct {
 	WeightGrams        int              `json:"weight_grams"`
 	CoverImage         *string          `json:"cover_image,omitempty"`
 	IsActive           bool             `json:"is_active"`
+	AverageRating      float64          `json:"average_rating"`
+	TotalReviews       int              `json:"total_reviews"`
 	Category           BookRelationItem `json:"category"`
 	Author             BookRelationItem `json:"author"`
 	Publisher          BookRelationItem `json:"publisher"`
@@ -106,6 +108,8 @@ type BookDetailResult struct {
 	Sold               int              `json:"sold"`
 	CoverImage         *string          `json:"cover_image,omitempty"`
 	IsActive           bool             `json:"is_active"`
+	AverageRating      float64          `json:"average_rating"`
+	TotalReviews       int              `json:"total_reviews"`
 	Category           BookRelationItem `json:"category"`
 	Author             BookRelationItem `json:"author"`
 	Publisher          BookRelationItem `json:"publisher"`
@@ -226,6 +230,8 @@ func (u *bookUsecase) toDetailResult(b *entity.Book) *BookDetailResult {
 		Sold:               b.Sold,
 		CoverImage:         b.CoverImage,
 		IsActive:           b.IsActive,
+		AverageRating:      b.AverageRating,
+		TotalReviews:       b.TotalReviews,
 		Category: BookRelationItem{
 			ID:   b.Category.ID,
 			Name: b.Category.Name,
@@ -429,6 +435,8 @@ func (u *bookUsecase) FindAll(ctx context.Context, filter repository.BookFilter,
 			WeightGrams:        b.WeightGrams,
 			CoverImage:         b.CoverImage,
 			IsActive:           b.IsActive,
+			AverageRating:      b.AverageRating,
+			TotalReviews:       b.TotalReviews,
 			Category: BookRelationItem{
 				ID:   b.Category.ID,
 				Name: b.Category.Name,

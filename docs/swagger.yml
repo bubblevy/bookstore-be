@@ -4852,6 +4852,13 @@ components:
         is_active:
           type: boolean
           example: true
+        average_rating:
+          type: number
+          format: double
+          example: 4.85
+        total_reviews:
+          type: integer
+          example: 12
         category:
           $ref: '#/components/schemas/BookRelationItem'
         author:
@@ -4933,6 +4940,13 @@ components:
         is_active:
           type: boolean
           example: true
+        average_rating:
+          type: number
+          format: double
+          example: 4.85
+        total_reviews:
+          type: integer
+          example: 12
         category:
           $ref: '#/components/schemas/BookRelationItem'
         author:
