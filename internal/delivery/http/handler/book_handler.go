@@ -44,10 +44,9 @@ func NewBookHandler(r fiber.Router, uc usecase.BookUsecase, v *validator.Validat
 	}
 
 	// Admin Protected Endpoints
-	adminRoutes := books.Group("", authMiddleware, adminMiddleware)
-	adminRoutes.Post("/", h.Create)
-	adminRoutes.Put("/:id", h.Update)
-	adminRoutes.Delete("/:id", h.Delete)
+	books.Post("/", authMiddleware, adminMiddleware, h.Create)
+	books.Put("/:id", authMiddleware, adminMiddleware, h.Update)
+	books.Delete("/:id", authMiddleware, adminMiddleware, h.Delete)
 }
 
 func (h *BookHandler) FindAll(c fiber.Ctx) error {

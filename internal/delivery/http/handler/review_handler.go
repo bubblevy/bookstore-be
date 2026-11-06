@@ -34,8 +34,7 @@ func NewReviewHandler(
 	}
 
 	// public endpoint
-	books := r.Group("/books")
-	books.Get("/:slug/reviews", h.GetBookReviews)
+	r.Get("/books/:slug/reviews", h.GetBookReviews)
 
 	// customer review
 	orders := r.Group("/orders", authMiddleware)
