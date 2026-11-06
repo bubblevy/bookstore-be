@@ -30,6 +30,7 @@ func NewOrderHandler(r fiber.Router, orderUC usecase.OrderUsecase, authMiddlewar
 	orders.Get("/", h.GetUserOrders)
 	orders.Get("/:invoice_number/pdf", h.DownloadInvoicePDF)
 	orders.Get("/:invoice_number", h.GetOrderDetail)
+	orders.Post("/:invoice_number/confirm-received", h.ConfirmOrderReceived)
 }
 
 func (h *OrderHandler) GetUserOrders(c fiber.Ctx) error {
@@ -135,6 +136,7 @@ func (h *OrderHandler) GetOrderDetail(c fiber.Ctx) error {
 		CancellationReason: order.CancellationReason,
 		ReturnedAt:         order.ReturnedAt,
 		ReturnReason:       order.ReturnReason,
+		CompletedAt:        order.CompletedAt,
 		CreatedAt:          order.CreatedAt,
 		Recipient: dto.OrderRecipientResponse{
 			Name:        order.RecipientName,
@@ -303,4 +305,39 @@ func (h *OrderHandler) DownloadInvoicePDF(c fiber.Ctx) error {
 	c.Set("Content-Type", "application/pdf")
 	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
 	return c.Send(pdfBytes)
+}
+
+func (h *OrderHandler) ConfirmOrderReceived(c fiber.Ctx) error {
+	userID, err := getUserID(c)
+	if err != nil {
+		return response.Error(c, fiber.StatusUnauthorized, "unauthorized", nil)
+	}
+
+	rawInvoice := c.Params("invoice_number")
+	invoiceNumber, err := url.QueryUnescape(rawInvoice)
+	if err != nil {
+		invoiceNumber = rawInvoice
+	}
+	invoiceNumber = strings.TrimSpace(invoiceNumber)
+
+	if invoiceNumber == "" {
+		return response.Error(c, fiber.StatusBadRequest, "invoice number is required", nil)
+	}
+
+	order, err := h.orderUsecase.ConfirmOrderReceived(c.Context(), userID, invoiceNumber)
+	if err != nil {
+		if errors.Is(err, entity.ErrOrderNotFound) {
+			return response.Error(c, fiber.StatusNotFound, "order not found", nil)
+		}
+		if errors.Is(err, entity.ErrOrderCannotBeCompleted) {
+			return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
+		}
+		return response.Error(c, fiber.StatusInternalServerError, err.Error(), nil)
+	}
+
+	return response.Success(c, fiber.StatusOK, "order confirmed as received successfully", fiber.Map{
+		"invoice_number": order.InvoiceNumber,
+		"status":         order.Status,
+		"completed_at":   order.CompletedAt,
+	})
 }

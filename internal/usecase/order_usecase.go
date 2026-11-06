@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/bubblevy/bookstore/internal/delivery/http/dto"
 	"github.com/bubblevy/bookstore/internal/entity"
@@ -17,6 +18,7 @@ type OrderUsecase interface {
 	AdminFindAllOrders(ctx context.Context, filter repository.AdminOrderFilter, pq pagination.Query) ([]dto.AdminOrderListItemResponse, pagination.Meta, error)
 	AdminGetOrderDetail(ctx context.Context, invoiceNumber string) (*dto.AdminOrderDetailResponse, error)
 	GetOrderInvoicePDF(ctx context.Context, userID uint, invoiceNumber string, isAdmin bool) ([]byte, string, error)
+	ConfirmOrderReceived(ctx context.Context, userID uint, invoiceNumber string) (*entity.Order, error)
 }
 
 type orderUsecase struct {
@@ -200,6 +202,7 @@ func (u *orderUsecase) AdminGetOrderDetail(ctx context.Context, invoiceNumber st
 		CancellationReason: order.CancellationReason,
 		ReturnedAt:         order.ReturnedAt,
 		ReturnReason:       order.ReturnReason,
+		CompletedAt:        order.CompletedAt,
 		CreatedAt:          order.CreatedAt,
 		Recipient: dto.OrderRecipientResponse{
 			Name:        order.RecipientName,
@@ -252,4 +255,29 @@ func (u *orderUsecase) GetOrderInvoicePDF(ctx context.Context, userID uint, invo
 
 	filename := fmt.Sprintf("invoice-%s.pdf", order.InvoiceNumber)
 	return pdfBytes, filename, nil
+}
+
+func (u *orderUsecase) ConfirmOrderReceived(ctx context.Context, userID uint, invoiceNumber string) (*entity.Order, error) {
+	order, err := u.orderRepo.FindOrderDetailByInvoice(ctx, userID, invoiceNumber)
+	if err != nil {
+		return nil, entity.ErrOrderNotFound
+	}
+
+	if order.Status == entity.OrderStatusCompleted {
+		return order, nil
+	}
+
+	if order.Status != entity.OrderStatusShipped {
+		return nil, entity.ErrOrderCannotBeCompleted
+	}
+
+	now := time.Now()
+	if err := u.orderRepo.MarkAsCompleted(ctx, order.ID, now); err != nil {
+		return nil, fmt.Errorf("failed completing order: %w", err)
+	}
+
+	order.Status = entity.OrderStatusCompleted
+	order.CompletedAt = &now
+	order.UpdatedAt = now
+	return order, nil
 }

@@ -26,6 +26,8 @@ var (
 	ErrOrderAlreadyFulfilled   = errors.New("order shipment has already been processed")
 	ErrOrderInvalidReturnState = errors.New("only shipped or completed orders can be returned")
 	ErrOrderAlreadyReturned    = errors.New("order is already marked as returned")
+	ErrOrderAlreadyCompleted   = errors.New("order is already completed")
+	ErrOrderCannotBeCompleted  = errors.New("only shipped orders can be marked as completed")
 )
 
 type Order struct {
@@ -59,6 +61,7 @@ type Order struct {
 	CancellationReason     *string     `gorm:"type:text" json:"cancellation_reason,omitempty"`
 	ReturnedAt             *time.Time  `json:"returned_at,omitempty"`
 	ReturnReason           *string     `gorm:"type:text" json:"return_reason,omitempty"`
+	CompletedAt            *time.Time  `json:"completed_at,omitempty"`
 	CreatedAt              time.Time   `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
 	UpdatedAt              time.Time   `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
 	Items                  []OrderItem `gorm:"foreignKey:OrderID;constraint:OnDelete:CASCADE" json:"items"`

@@ -244,4 +244,9 @@ func SetupRoutes(app *fiber.App, db *gorm.DB, cfg config.AppConfig) {
 	shipmentRepo := pgsql.NewShipmentRepository(db)
 	shipmentUseCase := usecase.NewShippingUsecase(db, orderRepo, shipmentRepo, checkoutRepo, addressRepo, biteshipClient, cfg.Biteship.ToStoreShippingConfig(), sseHub, cacheSvc)
 	handler.NewShippingHandler(api, shipmentUseCase, validate, authMiddleware, adminMiddleware, webhookBiteshipAuth)
+
+	// reviews routes
+	reviewRepo := pgsql.NewReviewRepository(db)
+	reviewUsecase := usecase.NewReviewUsecase(reviewRepo, orderRepo, bookRepo, txManager, cacheSvc)
+	handler.NewReviewHandler(api, reviewUsecase, validate, authMiddleware, adminMiddleware)
 }

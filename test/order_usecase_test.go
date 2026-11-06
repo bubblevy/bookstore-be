@@ -80,6 +80,10 @@ func (m *MockOrderRepoForOrderUC) UpdateOrderPaymentDeadline(ctx context.Context
 	return m.Called(ctx, orderID, deadline).Error(0)
 }
 
+func (m *MockOrderRepoForOrderUC) MarkAsCompleted(ctx context.Context, orderID uint, completedAt time.Time) error {
+	return m.Called(ctx, orderID, completedAt).Error(0)
+}
+
 func (m *MockOrderRepoForOrderUC) MarkAsReturned(ctx context.Context, orderID uint, reason string) error {
 	return m.Called(ctx, orderID, reason).Error(0)
 }

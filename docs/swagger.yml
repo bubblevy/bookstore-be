@@ -41,6 +41,8 @@ tags:
     description: Image and asset upload management for book covers and categories
   - name: Payment Method
     description: Payment method catalog, instructions, fee configurations, and maintenance toggling
+  - name: Review
+    description: Product rating and reviews management (rating breakdown, verified purchase rating, moderation, and seller replies)
 
 
 paths:
@@ -1300,6 +1302,56 @@ paths:
         '500':
           description: Internal server error
 
+  /api/v1/books/{slug}/reviews:
+    get:
+      tags:
+        - Review
+      summary: Get book reviews summary and list
+      description: Public endpoint to retrieve verified product reviews with 1-to-5 star breakdown distribution, average rating, reviews with comments count, and paginated review items with automatically masked usernames.
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+          description: Book slug (e.g., bumi-manusia)
+        - in: query
+          name: rating
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+          description: Filter by star rating (1 to 5)
+        - in: query
+          name: has_comment
+          schema:
+            type: boolean
+          description: Filter only reviews with written comments
+        - in: query
+          name: sort_by
+          schema:
+            type: string
+            enum: [newest, oldest, highest_rating, lowest_rating]
+            default: newest
+          description: Review sort order
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: per_page
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Book reviews retrieved successfully
+        '404':
+          description: Book not found
+        '500':
+          description: Internal server error
+
   /api/v1/books/{id}:
     put:
       tags:
@@ -1826,7 +1878,7 @@ paths:
       tags:
         - Cart
       summary: Calculate and preview selected cart items (Selective Checkout)
-      description: Calculates subtotal price, total quantity, and shipping weight for a selected subset of items (Shopee style checkout preview). Verifies that all selected items exist in the user's cart, books are active, and stock is sufficient.
+      description: Calculates subtotal price, total quantity, and shipping weight for a selected subset of items. Verifies that all selected items exist in the user's cart, books are active, and stock is sufficient.
       security:
         - BearerAuth: []
       requestBody:
@@ -3113,6 +3165,353 @@ paths:
           description: Forbidden (Access denied to this order invoice)
         '404':
           description: Order not found
+        '500':
+          description: Internal server error
+
+  /api/v1/orders/{invoice_number}/confirm-received:
+    post:
+      tags:
+        - Order
+      summary: Confirm order delivery receipt
+      description: Customer action to confirm that shipped package has been received in hand. Updates status to completed and records completed_at.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: invoice_number
+          required: true
+          schema:
+            type: string
+          description: Unique invoice number
+      responses:
+        '200':
+          description: Order confirmed as received successfully
+        '400':
+          description: Order is not in shipped status
+        '401':
+          description: Unauthorized request
+        '404':
+          description: Order not found
+        '500':
+          description: Internal server error
+
+  /api/v1/orders/{invoice_number}/review-eligibility:
+    get:
+      tags:
+        - Review
+      summary: Check order review eligibility and deadline
+      description: Checks whether an order is eligible for review (must be completed and within 7 days from delivery), remaining days/hours, and review status of each book.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: invoice_number
+          required: true
+          schema:
+            type: string
+          description: Unique invoice number
+      responses:
+        '200':
+          description: Review eligibility retrieved successfully
+        '401':
+          description: Unauthorized request
+        '404':
+          description: Order not found
+        '500':
+          description: Internal server error
+
+  /api/v1/orders/{invoice_number}/reviews:
+    post:
+      tags:
+        - Review
+      summary: Submit product ratings and reviews
+      description: Submit verified ratings (1 to 5) and written comments for books in a completed order. Allowed only within 7 days from delivery date.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: invoice_number
+          required: true
+          schema:
+            type: string
+          description: Unique invoice number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reviews
+              properties:
+                reviews:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - book_id
+                      - rating
+                    properties:
+                      book_id:
+                        type: integer
+                        example: 1
+                      rating:
+                        type: integer
+                        minimum: 1
+                        maximum: 5
+                        example: 5
+                      comment:
+                        type: string
+                        maxLength: 1000
+                        example: "Buku sangat bagus dan original!"
+      responses:
+        '201':
+          description: Reviews submitted successfully
+        '400':
+          description: Validation error, expired review period, or invalid rating
+        '401':
+          description: Unauthorized request
+        '404':
+          description: Order not found
+        '500':
+          description: Internal server error
+
+  /api/v1/reviews/my:
+    get:
+      tags:
+        - Review
+      summary: List authenticated user's submitted reviews
+      description: Retrieves paginated review history submitted by the currently authenticated customer, including edit eligibility status (can_edit).
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: per_page
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: User reviews retrieved successfully
+        '401':
+          description: Unauthorized request
+        '500':
+          description: Internal server error
+
+  /api/v1/reviews/{id}:
+    put:
+      tags:
+        - Review
+      summary: Edit submitted review
+      description: Customer can update rating and comment for their own review within the 7-day delivery eligibility window.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Review ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - rating
+              properties:
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                  example: 5
+                comment:
+                  type: string
+                  maxLength: 1000
+                  example: "Updated review comment"
+      responses:
+        '200':
+          description: Review updated successfully
+        '400':
+          description: Rating period expired or validation error
+        '403':
+          description: Forbidden (Not review owner)
+        '404':
+          description: Review not found
+        '500':
+          description: Internal server error
+
+  /api/v1/admin/reviews:
+    get:
+      tags:
+        - Review
+      summary: List all reviews (Admin only)
+      description: Admin endpoint to list and search all reviews system-wide with filtering by book, rating, visibility status, and keyword search.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: book_id
+          schema:
+            type: integer
+          description: Filter by book ID
+        - in: query
+          name: rating
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+          description: Filter by star rating
+        - in: query
+          name: is_hidden
+          schema:
+            type: boolean
+          description: Filter by visibility moderation status
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Search in comment, book title, customer name, or invoice number
+        - in: query
+          name: sort_by
+          schema:
+            type: string
+            enum: [newest, oldest, highest_rating, lowest_rating]
+            default: newest
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: per_page
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Admin reviews retrieved successfully
+        '401':
+          description: Unauthorized request
+        '403':
+          description: Forbidden (Admin access required)
+        '500':
+          description: Internal server error
+
+  /api/v1/admin/reviews/{id}/visibility:
+    patch:
+      tags:
+        - Review
+      summary: Moderate review visibility (Admin only)
+      description: Hide or unhide a review with a moderation reason. Hidden reviews are omitted from public product pages and excluded from book rating score calculations.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Review ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - is_hidden
+              properties:
+                is_hidden:
+                  type: boolean
+                  example: true
+                reason:
+                  type: string
+                  maxLength: 255
+                  example: "Contains offensive language or spam"
+      responses:
+        '200':
+          description: Review visibility updated successfully
+        '401':
+          description: Unauthorized request
+        '403':
+          description: Forbidden (Admin access required)
+        '404':
+          description: Review not found
+        '500':
+          description: Internal server error
+
+  /api/v1/admin/reviews/{id}/reply:
+    post:
+      tags:
+        - Review
+      summary: Add official seller reply (Admin only)
+      description: Post an official store reply to customer review.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Review ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reply
+              properties:
+                reply:
+                  type: string
+                  maxLength: 1000
+                  example: "Terima kasih banyak atas pesanannya kak!"
+      responses:
+        '200':
+          description: Seller reply added successfully
+        '401':
+          description: Unauthorized request
+        '403':
+          description: Forbidden (Admin access required)
+        '404':
+          description: Review not found
+        '500':
+          description: Internal server error
+
+  /api/v1/admin/reviews/{id}:
+    delete:
+      tags:
+        - Review
+      summary: Permanently delete a review (Admin only)
+      description: Hard delete review and automatically recalculate book rating score and total review count.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Review ID
+      responses:
+        '200':
+          description: Review deleted successfully
+        '401':
+          description: Unauthorized request
+        '403':
+          description: Forbidden (Admin access required)
+        '404':
+          description: Review not found
         '500':
           description: Internal server error
 

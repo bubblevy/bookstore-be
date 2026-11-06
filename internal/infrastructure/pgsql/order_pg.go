@@ -103,6 +103,17 @@ func (r *orderRepository) MarkAsReturned(ctx context.Context, orderID uint, reas
 		}).Error
 }
 
+func (r *orderRepository) MarkAsCompleted(ctx context.Context, orderID uint, completedAt time.Time) error {
+	now := time.Now()
+	return r.db.WithContext(ctx).Model(&entity.Order{}).
+		Where("id = ?", orderID).
+		Updates(map[string]interface{}{
+			"status":       entity.OrderStatusCompleted,
+			"completed_at": completedAt,
+			"updated_at":   now,
+		}).Error
+}
+
 func (r *orderRepository) FindByID(ctx context.Context, id uint) (*entity.Order, error) {
 	var order entity.Order
 	err := r.db.WithContext(ctx).

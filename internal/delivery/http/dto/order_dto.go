@@ -78,6 +78,7 @@ type OrderDetailResponse struct {
 	CancellationReason *string                `json:"cancellation_reason,omitempty"`
 	ReturnedAt         *time.Time             `json:"returned_at,omitempty"`
 	ReturnReason       *string                `json:"return_reason,omitempty"`
+	CompletedAt        *time.Time             `json:"completed_at,omitempty"`
 	CreatedAt          time.Time              `json:"created_at"`
 	Recipient          OrderRecipientResponse `json:"recipient"`
 	Shipping           OrderShippingResponse  `json:"shipping"`
@@ -114,6 +115,7 @@ type AdminOrderDetailResponse struct {
 	CancellationReason *string                `json:"cancellation_reason,omitempty"`
 	ReturnedAt         *time.Time             `json:"returned_at,omitempty"`
 	ReturnReason       *string                `json:"return_reason,omitempty"`
+	CompletedAt        *time.Time             `json:"completed_at,omitempty"`
 	CreatedAt          time.Time              `json:"created_at"`
 	Recipient          OrderRecipientResponse `json:"recipient"`
 	Shipping           OrderShippingResponse  `json:"shipping"`

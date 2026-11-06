@@ -54,6 +54,14 @@ func (m *MockOrderUsecase) AdminGetOrderDetail(ctx context.Context, invoiceNumbe
 	return nil, args.Error(1)
 }
 
+func (m *MockOrderUsecase) ConfirmOrderReceived(ctx context.Context, userID uint, invoiceNumber string) (*entity.Order, error) {
+	args := m.Called(ctx, userID, invoiceNumber)
+	if res := args.Get(0); res != nil {
+		return res.(*entity.Order), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
 func (m *MockOrderUsecase) GetOrderInvoicePDF(ctx context.Context, userID uint, invoiceNumber string, isAdmin bool) ([]byte, string, error) {
 	args := m.Called(ctx, userID, invoiceNumber, isAdmin)
 	if res := args.Get(0); res != nil {
