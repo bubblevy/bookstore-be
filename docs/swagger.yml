@@ -6697,6 +6697,11 @@ components:
           type: string
           description: "Internal tracking URL"
           example: "/orders/INV-20261017-0001/tracking"
+        order_note:
+          type: string
+          nullable: true
+          description: "Shipping instructions or delivery note recorded for the courier package (optional)."
+          example: "Fragile / Jangan dibanting, titipkan di pos sekuriti"
 
     OrderPaymentResponse:
       type: object
@@ -6938,6 +6943,14 @@ components:
           example: "paid"
         customer:
           $ref: '#/components/schemas/AdminCustomerResponse'
+        courier:
+          type: string
+          description: "Selected shipping courier provider code (e.g. jne, sicepat, pos)"
+          example: "jne"
+        courier_service:
+          type: string
+          description: "Selected courier delivery service code (e.g. reg, best, standard)"
+          example: "reg"
         total_amount:
           type: integer
           example: 258000

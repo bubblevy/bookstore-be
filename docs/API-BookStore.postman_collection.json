@@ -3179,8 +3179,22 @@
                     "key": "Accept",
                     "value": "application/json",
                     "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
                   }
                 ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"order_note\": \"Fragile / Jangan dibanting, titipkan di pos sekuriti\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
                 "url": {
                   "raw": "{{BASE_URL}}/api/v1/orders/:invoice_number/fulfill",
                   "host": [
@@ -3212,8 +3226,22 @@
                     "key": "Accept",
                     "value": "application/json",
                     "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
                   }
                 ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"reason\": \"Paket rusak saat pengiriman / penerima menolak\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
                 "url": {
                   "raw": "{{BASE_URL}}/api/v1/orders/:invoice_number/return",
                   "host": [

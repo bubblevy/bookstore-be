@@ -279,6 +279,36 @@ func TestShippingHandler_FulfillOrder(t *testing.T) {
 		mockUC.AssertExpectations(t)
 	})
 
+	t.Run("admin success fulfill order with order note returns 200", func(t *testing.T) {
+		mockUC := new(MockShippingUsecase)
+		app := setupShippingApp(mockUC, true, true)
+
+		waybill := "SOCAG001"
+		trackURL := "/orders/" + invoice + "/tracking"
+		fulfillRes := &usecase.FulfillOrderResult{
+			ShipmentID:      1,
+			InvoiceNumber:   invoice,
+			BiteshipOrderID: "bite-12345",
+			WaybillNumber:   &waybill,
+			Status:          entity.ShippingStatusAllocated,
+			Courier:         "jne",
+			CourierService:  "reg",
+			TrackingURL:     &trackURL,
+		}
+
+		note := "Fragile / Jangan dibanting"
+		mockUC.On("FulfillOrder", mock.Anything, invoice, note).Return(fulfillRes, nil).Once()
+
+		reqBody := []byte(`{"order_note":"` + note + `"}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/orders/"+invoice+"/fulfill", bytes.NewReader(reqBody))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		mockUC.AssertExpectations(t)
+	})
+
 	t.Run("non-admin returns 403 Forbidden", func(t *testing.T) {
 		mockUC := new(MockShippingUsecase)
 		app := setupShippingApp(mockUC, true, false)

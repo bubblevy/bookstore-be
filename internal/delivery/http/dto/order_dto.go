@@ -95,14 +95,16 @@ type AdminCustomerResponse struct {
 }
 
 type AdminOrderListItemResponse struct {
-	ID            uint                  `json:"id"`
-	InvoiceNumber string                `json:"invoice_number"`
-	Status        string                `json:"status"`
-	Customer      AdminCustomerResponse `json:"customer"`
-	TotalAmount   int                   `json:"total_amount"`
-	TotalQuantity int                   `json:"total_quantity"`
-	PaymentMethod *string               `json:"payment_method,omitempty"`
-	CreatedAt     time.Time             `json:"created_at"`
+	ID             uint                  `json:"id"`
+	InvoiceNumber  string                `json:"invoice_number"`
+	Status         string                `json:"status"`
+	Customer       AdminCustomerResponse `json:"customer"`
+	Courier        string                `json:"courier"`
+	CourierService string                `json:"courier_service"`
+	TotalAmount    int                   `json:"total_amount"`
+	TotalQuantity  int                   `json:"total_quantity"`
+	PaymentMethod  *string               `json:"payment_method,omitempty"`
+	CreatedAt      time.Time             `json:"created_at"`
 }
 
 type AdminOrderDetailResponse struct {

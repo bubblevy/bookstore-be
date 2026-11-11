@@ -164,6 +164,7 @@ func TestOrderHandler_GetOrderDetail(t *testing.T) {
 
 		bank := "bca"
 		va := "123456789"
+		shippingNote := "Fragile / Jangan dibanting"
 		order := &entity.Order{
 			ID:             101,
 			UserID:         userID,
@@ -189,7 +190,8 @@ func TestOrderHandler_GetOrderDetail(t *testing.T) {
 				},
 			},
 			Shipment: &entity.Shipment{
-				Status: entity.ShippingStatusAllocated,
+				Status:    entity.ShippingStatusAllocated,
+				OrderNote: &shippingNote,
 			},
 		}
 
@@ -206,6 +208,7 @@ func TestOrderHandler_GetOrderDetail(t *testing.T) {
 		}
 		_ = json.NewDecoder(resp.Body).Decode(&body)
 		assert.NotNil(t, body.Data.Payment)
+		assert.Equal(t, &shippingNote, body.Data.Shipping.OrderNote)
 		assert.Len(t, body.Data.Payment.Instructions, 1)
 		assert.Equal(t, "ATM BCA", body.Data.Payment.Instructions[0].Title)
 		mockUC.AssertExpectations(t)
@@ -236,10 +239,12 @@ func TestOrderHandler_AdminFindAllOrders(t *testing.T) {
 
 		items := []dto.AdminOrderListItemResponse{
 			{
-				ID:            1,
-				InvoiceNumber: "INV-20261021-000101",
-				Status:        "paid",
-				TotalAmount:   150000,
+				ID:             1,
+				InvoiceNumber:  "INV-20261021-000101",
+				Status:         "paid",
+				Courier:        "jne",
+				CourierService: "reg",
+				TotalAmount:    150000,
 				Customer: dto.AdminCustomerResponse{
 					ID:    1,
 					Name:  "Test User",
@@ -258,6 +263,14 @@ func TestOrderHandler_AdminFindAllOrders(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var body struct {
+			Data []dto.AdminOrderListItemResponse `json:"data"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&body)
+		assert.Len(t, body.Data, 1)
+		assert.Equal(t, "jne", body.Data[0].Courier)
+		assert.Equal(t, "reg", body.Data[0].CourierService)
 		mockUC.AssertExpectations(t)
 	})
 }

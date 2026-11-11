@@ -87,6 +87,8 @@ func (u *orderUsecase) AdminFindAllOrders(ctx context.Context, filter repository
 				Name:  custName,
 				Email: custEmail,
 			},
+			Courier:        o.Courier,
+			CourierService: o.CourierService,
 			TotalAmount:   o.TotalAmount,
 			TotalQuantity: totalQty,
 			PaymentMethod: paymentMethod,

@@ -178,12 +178,14 @@ func TestOrderUsecase_AdminFindAllOrders(t *testing.T) {
 
 		orders := []entity.Order{
 			{
-				ID:            1,
-				UserID:        10,
-				InvoiceNumber: "INV-20261021-000101",
-				Status:        entity.OrderStatusPaid,
-				TotalAmount:   200000,
-				RecipientName: "John Doe",
+				ID:             1,
+				UserID:         10,
+				InvoiceNumber:  "INV-20261021-000101",
+				Status:         entity.OrderStatusPaid,
+				Courier:        "jne",
+				CourierService: "reg",
+				TotalAmount:    200000,
+				RecipientName:  "John Doe",
 				User: &entity.User{
 					Name:  "John Doe",
 					Email: "john@example.com",
@@ -210,6 +212,8 @@ func TestOrderUsecase_AdminFindAllOrders(t *testing.T) {
 		assert.Len(t, items, 1)
 		assert.Equal(t, "INV-20261021-000101", items[0].InvoiceNumber)
 		assert.Equal(t, "John Doe", items[0].Customer.Name)
+		assert.Equal(t, "jne", items[0].Courier)
+		assert.Equal(t, "reg", items[0].CourierService)
 		assert.Equal(t, 2, items[0].TotalQuantity)
 		assert.Equal(t, 200000, items[0].TotalAmount)
 		assert.Equal(t, 1, meta.TotalPages)
@@ -276,13 +280,16 @@ func TestOrderUsecase_AdminGetOrderDetail(t *testing.T) {
 		mockRepo := new(MockOrderRepoForOrderUC)
 		uc := usecase.NewOrderUsecase(mockRepo)
 
+		note := "Fragile / Jangan dibanting"
 		order := &entity.Order{
-			ID:            1,
-			UserID:        10,
-			InvoiceNumber: invoice,
-			Status:        entity.OrderStatusPaid,
-			TotalAmount:   200000,
-			RecipientName: "John Doe",
+			ID:             1,
+			UserID:         10,
+			InvoiceNumber:  invoice,
+			Status:         entity.OrderStatusPaid,
+			TotalAmount:    200000,
+			RecipientName:  "John Doe",
+			Courier:        "jne",
+			CourierService: "reg",
 			User: &entity.User{
 				Name:  "John Doe",
 				Email: "john@example.com",
@@ -296,6 +303,10 @@ func TestOrderUsecase_AdminGetOrderDetail(t *testing.T) {
 					WeightGrams: 300,
 					Subtotal:    200000,
 				},
+			},
+			Shipment: &entity.Shipment{
+				Status:    entity.ShippingStatusAllocated,
+				OrderNote: &note,
 			},
 			Payment: &entity.Payment{
 				PaymentType: "bank_transfer",
@@ -319,6 +330,7 @@ func TestOrderUsecase_AdminGetOrderDetail(t *testing.T) {
 		assert.Equal(t, invoice, res.InvoiceNumber)
 		assert.Equal(t, "John Doe", res.Customer.Name)
 		assert.Equal(t, "john@example.com", res.Customer.Email)
+		assert.Equal(t, &note, res.Shipping.OrderNote)
 		assert.Equal(t, 200000, res.Pricing.TotalAmount)
 		assert.Len(t, res.Items, 1)
 		assert.NotNil(t, res.Payment)
