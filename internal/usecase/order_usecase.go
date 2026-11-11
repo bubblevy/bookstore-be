@@ -128,8 +128,10 @@ func (u *orderUsecase) AdminGetOrderDetail(ctx context.Context, invoiceNumber st
 
 	internalTrackingURL := fmt.Sprintf("/orders/%s/tracking", order.InvoiceNumber)
 	shippingStatus := "pending"
+	var shippingNote *string
 	if order.Shipment != nil {
 		shippingStatus = string(order.Shipment.Status)
+		shippingNote = order.Shipment.OrderNote
 	}
 
 	var paymentResp *dto.OrderPaymentResponse
@@ -220,6 +222,7 @@ func (u *orderUsecase) AdminGetOrderDetail(ctx context.Context, invoiceNumber st
 			TrackingNumber: order.ShippingTrackingNumber,
 			Status:         shippingStatus,
 			TrackingURL:    internalTrackingURL,
+			OrderNote:      shippingNote,
 		},
 		Payment: paymentResp,
 		Items:   itemsResp,

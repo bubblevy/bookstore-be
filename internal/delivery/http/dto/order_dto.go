@@ -31,6 +31,7 @@ type OrderShippingResponse struct {
 	TrackingNumber *string `json:"tracking_number,omitempty"`
 	Status         string  `json:"status"`
 	TrackingURL    string  `json:"tracking_url"`
+	OrderNote      *string `json:"order_note,omitempty"`
 }
 
 type OrderPaymentResponse struct {

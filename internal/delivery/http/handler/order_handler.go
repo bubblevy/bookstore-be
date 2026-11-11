@@ -122,8 +122,10 @@ func (h *OrderHandler) GetOrderDetail(c fiber.Ctx) error {
 	internalTrackingURL := fmt.Sprintf("/orders/%s/tracking", order.InvoiceNumber)
 
 	shippingStatus := "pending"
+	var shippingNote *string
 	if order.Shipment != nil {
 		shippingStatus = string(order.Shipment.Status)
+		shippingNote = order.Shipment.OrderNote
 	}
 
 	detail := dto.OrderDetailResponse{
@@ -154,6 +156,7 @@ func (h *OrderHandler) GetOrderDetail(c fiber.Ctx) error {
 			TrackingNumber: order.ShippingTrackingNumber,
 			Status:         shippingStatus,
 			TrackingURL:    internalTrackingURL,
+			OrderNote:      shippingNote,
 		},
 		Pricing: dto.OrderPricingResponse{
 			ItemsSubtotal:  order.ItemsSubtotal,
